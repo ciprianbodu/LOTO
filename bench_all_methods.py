@@ -170,26 +170,58 @@ def resolve_bench_paths(
 
 
 def resolve_bench_target(environ=None, ui_state_file=None) -> tuple[int, str]:
-    """Ținta deciziei (3 sau 4) și de unde vine.
+    """Ținta deciziei (3..6) și de unde vine.
 
     `LOTO_BENCH_TARGET` (pus de UI la Re-Bench) are prioritate. Fără ea, ținta
     salvată de UI în `.ui_state.json`: ACTUALIZARI.bat și verifica_mediu.py
     recomandă `bench_all_methods.py` din linia de comandă, iar implicitul 3
-    scria decizia pe 3+ cu 4+ selectat în UI. Fără niciuna, 3."""
+    scria decizia pe 3+ cu 4+ selectat în UI. Fără niciuna, 5+."""
     from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
 
     env = os.environ if environ is None else environ
     raw = env.get("LOTO_BENCH_TARGET")
     if raw is not None and str(raw).strip():
-        return clamp_bench_hit_target(raw), "LOTO_BENCH_TARGET"
+        return clamp_bench_hit_target(raw, default=5), "LOTO_BENCH_TARGET"
     path = Path(UI_STATE_FILE if ui_state_file is None else ui_state_file)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = None
     if isinstance(data, dict) and data.get("bench_hit_target") is not None:
-        return clamp_bench_hit_target(data["bench_hit_target"]), path.name
-    return 3, "implicit"
+        if data.get("bench_target_revision") != 1:
+            return 5, "migrare țintă principală 5+"
+        return clamp_bench_hit_target(data["bench_hit_target"], default=5), path.name
+    return 5, "implicit"
+
+
+def render_priority_pool_decisions(console, cfg, report):
+    """Show actual selected methods, distinct from legacy mean-hit telemetry."""
+    from rich.table import Table
+
+    table = Table(title="Auto-Pilot: ținta în pool, prioritate de la 7 numere")
+    for title in ("Joc", "Pool", "Metodă aleasă", "Țintă", "Rată 5+", "Rată 6+"):
+        table.add_column(title)
+    for game_key, game in cfg.get("games", {}).items():
+        measured = report.get("games", {}).get(game_key, {})
+        for key, entry in game.get("auto_pilot_per_pool", {}).items():
+            if not key.startswith("k") or not key[1:].isdigit() or int(key[1:]) < 7:
+                continue
+            method = entry.get("scorer", "frequency")
+            stats = measured.get("per_method", {}).get(method, {}).get("per_pool", {}).get(key, {})
+            rates = []
+            for target in (5, 6):
+                value = stats.get(f"rate_{target}plus_real")
+                if target > int(measured.get("draw_n", 6)) or value is None:
+                    rates.append("—")
+                else:
+                    rates.append(f"{100 * float(value):.5g}%")
+            status = " · fallback" if entry.get("low_confidence") or entry.get("rate_col_mismatch") else ""
+            table.add_row(
+                measured.get("label", game_key), key[1:], method + status,
+                str(entry.get("target_label", "—")), *rates,
+            )
+    console.print(table)
+    console.print("[dim]Rate retrospective în pool; hiturile LR sunt evaluate separat. Urna 2 rămâne top-1.[/dim]")
 
 
 def write_bench_decision(
@@ -458,6 +490,19 @@ def main() -> int:
                 else f"pool_range = {g.base_k}..{g.base_k + g.pool_extra}"
             )
         )
+        if not g.is_single_pick:
+            from covering.lr_schemes import lr_schemes
+
+            lr_game = {"loto_6_49": "6/49", "loto_5_40": "5/40", "joker_urna1": "joker"}.get(g.key)
+            priority = g.priority_pool_sizes
+            if priority:
+                console.print(
+                    f"    Prioritate predicții pool: {priority[0]}..{priority[-1]}; "
+                    "rate 5+ și 6+ măsurate separat."
+                )
+            if lr_game:
+                lr_sizes = sorted({s.n for s in lr_schemes(lr_game) if s.n in priority})
+                console.print("    Pooluri cu scheme LR disponibile: " + ", ".join(map(str, lr_sizes)))
     console.print()
 
     # Progress bar over folds
@@ -688,7 +733,8 @@ def main() -> int:
     from rich.panel import Panel
 
     lines = [
-        "[bold]INTEGRARE FINALĂ — câștigător per pool per joc (NO-BL  |  +BL  |  BEST)[/bold]\n"
+        "[bold]TELEMETRIE — medie de hituri per pool (NO-BL | +BL | BEST)[/bold]\n"
+        "[dim]Acest tabel compară mediile; alegerea Auto-Pilot folosește rata țintei în pool.[/dim]"
     ]
     for gk, gd in report["games"].items():
         lines.append(f"\n[bold magenta]{gd['label']}[/bold magenta]")
@@ -724,7 +770,7 @@ def main() -> int:
     _panel_title = (
         "[bold]câștigător per pool (NU s-a scris best_methods.json)[/bold]"
         if _skip_decision or _decision_failed
-        else "[bold]best_methods.json[/bold]"
+        else "[bold]Medii de hituri — diagnostic separat de decizia Auto-Pilot[/bold]"
     )
     console.print(
         Panel(
@@ -733,6 +779,10 @@ def main() -> int:
             border_style="yellow" if _skip_decision or _decision_failed else "green",
         )
     )
+    if not _skip_decision and not _decision_failed:
+        render_priority_pool_decisions(
+            console, json.loads(Path(decision_file).read_text(encoding="utf-8")), report
+        )
 
     console.print()
     console.print(f"[dim]Saved:[/dim]")

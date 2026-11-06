@@ -87,6 +87,18 @@ class GameDef:
     def base_k(self) -> int:
         return int(self.pick_n or self.draw_n)
 
+    @property
+    def priority_pool_sizes(self) -> tuple[int, ...]:
+        """Pools to emphasize in the report, without dropping legacy fold sizes.
+
+        Main-number pools start at seven; the separate single-pick urn keeps
+        its own top-1 objective. This does not assert availability of an LR
+        scheme for every size in the benchmark domain.
+        """
+        if self.is_single_pick:
+            return ()
+        return tuple(range(max(7, self.base_k), self.base_k + self.pool_extra + 1))
+
 
 def _list_istoric_dirs() -> list[Path]:
     """Look in canonical locations for the istoric folder."""
@@ -381,6 +393,12 @@ class FoldResult:
     rates_4plus_per_pool: dict[str, float] = field(default_factory=dict)
     rate_3plus: float = 0.0  # rata extragerilor cu >=3 numere ghicite (regula 3+)
     rates_3plus_per_pool: dict[str, float] = field(default_factory=dict)
+    # Separate tail events, measured on the pool against every drawn number.
+    # None means not evaluated, including older serialized FoldResult objects.
+    rate_5plus: float | None = None
+    rates_5plus_per_pool: dict[str, float] = field(default_factory=dict)
+    rate_6plus: float | None = None
+    rates_6plus_per_pool: dict[str, float] = field(default_factory=dict)
     # Urna 2 e single-pick (1/20): metrică proprie, exactă, de top-1. Se scrie
     # și pentru celelalte jocuri ca telemetrie uniformă, dar doar decizia cu
     # draw_n=1 o consumă.
@@ -442,6 +460,8 @@ def _evaluate_fold(
         hits_per_pool_bl={f"k{k}": 0.0 for k in pool_sizes},
         rates_4plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         rates_3plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
+        rates_5plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
+        rates_6plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         rates_1plus_per_pool={f"k{k}": 0.0 for k in pool_sizes},
         tiebreak_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
@@ -472,6 +492,8 @@ def _evaluate_fold(
             k: 0 for k in pool_sizes
         }  # nr. extrageri cu >=3 numere ghicite
         per_pool_1plus = {k: 0 for k in pool_sizes}  # top-1 exact pentru Urna 2
+        per_pool_5plus = {k: 0 for k in pool_sizes}
+        per_pool_6plus = {k: 0 for k in pool_sizes}
         per_pool_tie = {
             k: 0 for k in pool_sizes
         }  # blocuri cu taietura top-K in grup de egalitate
@@ -546,6 +568,10 @@ def _evaluate_fold(
                         per_pool_4plus[k] += 1
                     if h >= 3:  # regula 3+ (prag alternativ, configurabil)
                         per_pool_3plus[k] += 1
+                    if h >= 5:
+                        per_pool_5plus[k] += 1
+                    if h >= 6:
+                        per_pool_6plus[k] += 1
                     if h >= 1:
                         per_pool_1plus[k] += 1
                     if h > per_pool_max[k]:
@@ -573,12 +599,16 @@ def _evaluate_fold(
             fr.hits_per_pool_bl[f"k{k}"] = per_pool_bl_totals[k] / max(n_eval, 1)
             fr.rates_4plus_per_pool[f"k{k}"] = per_pool_4plus[k] / max(n_eval, 1)
             fr.rates_3plus_per_pool[f"k{k}"] = per_pool_3plus[k] / max(n_eval, 1)
+            fr.rates_5plus_per_pool[f"k{k}"] = per_pool_5plus[k] / max(n_eval, 1)
+            fr.rates_6plus_per_pool[f"k{k}"] = per_pool_6plus[k] / max(n_eval, 1)
             fr.rates_1plus_per_pool[f"k{k}"] = per_pool_1plus[k] / max(n_eval, 1)
         fr.avg_hits_topk = fr.hits_per_pool.get(f"k{game.base_k}", 0.0)
         fr.max_hits_topk = per_pool_max[game.base_k]
         # Regula 4+: rata de extrageri cu >=4 numere ghicite la pool-ul de bază (draw_n)
         fr.rate_4plus = fr.rates_4plus_per_pool.get(f"k{game.base_k}", 0.0)
         fr.rate_3plus = fr.rates_3plus_per_pool.get(f"k{game.base_k}", 0.0)
+        fr.rate_5plus = fr.rates_5plus_per_pool[f"k{game.base_k}"]
+        fr.rate_6plus = fr.rates_6plus_per_pool[f"k{game.base_k}"]
         fr.rate_1plus = fr.rates_1plus_per_pool.get(f"k{game.base_k}", 0.0)
         fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
         fr.blocks = blocks
@@ -807,6 +837,10 @@ def run_benchmark(
                 row[f"rate_4plus_{k}"] = v
             for k, v in row.pop("rates_3plus_per_pool", {}).items():
                 row[f"rate_3plus_{k}"] = v
+            for k, v in row.pop("rates_5plus_per_pool", {}).items():
+                row[f"rate_5plus_{k}"] = v
+            for k, v in row.pop("rates_6plus_per_pool", {}).items():
+                row[f"rate_6plus_{k}"] = v
             for k, v in row.pop("rates_1plus_per_pool", {}).items():
                 row[f"rate_1plus_{k}"] = v
             for k, v in (row.pop("tiebreak_per_pool", {}) or {}).items():
@@ -1380,6 +1414,10 @@ def _aggregate(
                     if rnd_mean is not None
                     else None,
                     "hit_rate_real": real_mean / game.draw_n,
+                    "rate_5plus_real": _pool_mean(real, f"rate_5plus_{k}"),
+                    "rate_5plus_shuffled": _pool_mean(rnd, f"rate_5plus_{k}"),
+                    "rate_6plus_real": _pool_mean(real, f"rate_6plus_{k}"),
+                    "rate_6plus_shuffled": _pool_mean(rnd, f"rate_6plus_{k}"),
                     # WITH blacklist
                     "avg_hits_real_bl": real_mean_bl,
                     "avg_hits_shuffled_bl": rnd_mean_bl,
@@ -1482,6 +1520,7 @@ def _aggregate(
             "draw_n": game.draw_n,
             "pick_n": game.base_k,
             "pool_keys": pool_keys,
+            "priority_pool_sizes": list(game.priority_pool_sizes),
             "winners_per_pool": winners_per_pool,
             "winners_per_pool_bl": winners_per_pool_bl,
             "winners_per_pool_best": winners_per_pool_best,

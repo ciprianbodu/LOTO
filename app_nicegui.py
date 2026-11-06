@@ -609,7 +609,7 @@ def _log_notify(message, type: str = "info", **_kw) -> None:  # noqa: A002
 
 
 def _rebuild_decision_for_target(target: int, notify=None) -> bool:
-    """Recalculează decizia de producție pentru ținta 3+/4+ selectată.
+    """Recalculează decizia de producție pentru ținta selectată (3+ până la 6+).
 
     Refuză un folds.csv care nu acoperă Re-Bench-ul deciziei (bench oprit,
     `--quick`, flush parțial): decizia rămâne cea veche, cu avertisment.
@@ -657,7 +657,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> bool:
             if _mismatch:
                 notify(
                     f"Decizie {_cname} actualizată, DAR folds nu au coloane "
-                    f"{target}+ — s-a folosit 4+ (rate_col_mismatch). "
+                    f"{target}+ — ținta nu este validată (rate_col_mismatch). "
                     "Rulează Re-Bench.",
                     type="warning",
                 )
@@ -688,7 +688,7 @@ def _rebuild_decision_for_target(target: int, notify=None) -> bool:
             if _mismatch:
                 notify(
                     f"Decizie actualizată, DAR folds nu au coloane {target}+ "
-                    f"— s-a folosit 4+ (rate_col_mismatch). Rulează Re-Bench.",
+                    f"— ținta nu este validată (rate_col_mismatch). Rulează Re-Bench.",
                     type="warning",
                 )
             else:
@@ -716,8 +716,8 @@ def _rebuild_decision_for_target(target: int, notify=None) -> bool:
         if isinstance(exc, IncompleteFoldsError):
             logger.warning("Decizie nerecalculată: %s", exc)
             notify(
-                "folds.csv nu acoperă ultimul Re-Bench complet (bench oprit sau "
-                "rulare redusă): decizia de producție rămâne neschimbată. Rulează "
+                "folds.csv nu acoperă ultimul Re-Bench complet sau lipsesc ratele "
+                "țintei selectate: decizia de producție rămâne neschimbată. Rulează "
                 f"un Re-Bench complet ca ținta {target}+ să fie aplicată.",
                 type="warning",
             )
@@ -1203,6 +1203,14 @@ def _bench_target_rule_text(country: str) -> str:
 
     target = _clamped_bench_target()
     if _LOT.normalize_country(country) == _LOT.RO:
+        if target >= 5:
+            return (
+                f"6/49: {game_hit_target('loto_6_49', target)}+ în pool; "
+                f"Joker Urna 1: {game_hit_target('joker_urna1', target)}+ în pool; "
+                f"5/40: {game_hit_target('loto_5_40', target)}+ în pool. "
+                "6+ este urmărit separat la 6/49 și 5/40; o variantă 5/40 are cinci numere. "
+                "Joker Urna 2: top-1, potrivire exactă."
+            )
         return (
             f"6/49 și Joker Urna 1: {target}+. Loto 5/40: minimum 4+ (mereu 4+ "
             "cu selectorul 3/4). Joker Urna 2: top-1, potrivire exactă."
@@ -4386,7 +4394,7 @@ def main_page() -> None:
             _rebuild_decision_for_target(target)
 
         ui.select(
-            {3: "3+ Hits", 4: "4+ Hits"},
+            {3: "3+ Hits", 4: "4+ Hits", 5: "5+ Hits în pool (principal)", 6: "6 Hits în pool"},
             value=_clamped_bench_target(),
             label="🎯 Țintă Optimizare / Bench",
             on_change=_on_target_change,
@@ -4395,8 +4403,10 @@ def main_page() -> None:
             SETTINGS, "bench_hit_target", lambda _: _bench_target_rule_text(_cc)
         ).classes("text-caption text-grey")
         ui.label(
-            "Selecția după 3+ nu optimizează direct 4+ sau 5+. "
-            "Selecția după 4+ nu optimizează direct 5+."
+            "Prioritate: pooluri de la 7 numere în sus, cu metodă aleasă pentru fiecare "
+            "dimensiune. Selecția urmărește rata țintei în pool; "
+            "hiturile de pe variantele schemei LR sunt evaluate separat. "
+            "5+ este ținta principală, iar 6+ este raportat separat unde jocul permite."
         ).classes("text-caption text-grey")
         ui.label(
             f"Validarea pool-ului (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric): "

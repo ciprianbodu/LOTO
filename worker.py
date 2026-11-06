@@ -386,8 +386,13 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
 
         foreign_countries: set[str] = set()
         large_pool = False
+        tail_target = False
         for dataset in config.get("datasets", []):
             for task in dataset.get("tasks", []):
+                try:
+                    tail_target = tail_target or int(task.get("bench_hit_target", 3)) >= 5
+                except (TypeError, ValueError):
+                    pass
                 lot = _resolve_task_lottery(task)
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
@@ -426,6 +431,9 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
             # Old workers silently clamped these requested pools to 16/19.
             # Keep every existing small-pool key while separating new results.
             cache_key += ":lp2"
+        if tail_target:
+            # Older workers silently interpreted explicit 5/6 targets as 3.
+            cache_key += ":tail1"
     return cache_key
 
 

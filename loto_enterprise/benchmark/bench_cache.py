@@ -47,7 +47,9 @@ def _resolve_cache_dir() -> Path:
 
 
 CACHE_DIR = _resolve_cache_dir()
-CACHE_VERSION = "v23"
+CACHE_VERSION = "v24"
+# v24: observed 5+/6+ pool event rates; older folds cannot reconstruct these
+#      tails from mean hits or the 3+/4+ rates and must be evaluated again.
 # v23: DMD includes complete repeated-singular-value blocks at its rank cutoff;
 #      an arbitrary partial SVD eigenspace depended on the number labels.
 # v22: `rank_ensemble_core` dă rangul mediu la egalitate; rangul după poziție
@@ -182,6 +184,35 @@ def get_cached_fold(
         return None
     try:
         obj = pickle_load_path(f)
+        # Dataclass defaults can make hasattr() true even when the field was
+        # never serialized. Check instance data before the compatibility
+        # backfill: missing 5+/6+ observations must not become invented zeros.
+        observed = getattr(obj, "__dict__", {})
+        tail_fields = (
+            "rate_5plus",
+            "rate_6plus",
+            "rates_5plus_per_pool",
+            "rates_6plus_per_pool",
+        )
+        required_pools = set(expected_pools or (observed.get("hits_per_pool") or {}))
+        if (
+            any(name not in observed for name in tail_fields)
+            or any(observed.get(name) is None for name in tail_fields[:2])
+            or any(
+                not isinstance(observed.get(name), dict)
+                or not required_pools
+                or set(observed[name]) != required_pools
+                for name in tail_fields[2:]
+            )
+        ):
+            logger.warning(
+                "[bench_cache] %s/%s pct=%s: fold fără rate observate 5+/6+ "
+                "pentru toate pool-urile — îl ignor și recalculez.",
+                game_key,
+                method,
+                percentile,
+            )
+            return None
         # Backfill câmpuri noi adăugate în FoldResult DUPĂ ce s-a scris cache-ul
         # (ex. `family`) — altfel asdict()/acces atribut crapă pe obiecte vechi.
         if is_dataclass(obj):

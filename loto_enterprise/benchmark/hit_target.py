@@ -1,4 +1,4 @@
-"""Ținta de hituri a bench-ului — doar 3 sau 4.
+"""Ținta de hituri ÎN POOL a bench-ului — 3, 4, 5 sau 6.
 
 Extrasă din `decision.py` ca să fie importabilă fără pandas (teste în
 container, worker, UI).
@@ -30,9 +30,9 @@ def clamp_bench_hit_target(value, *, default: int = 3) -> int:
             default,
         )
         return default
-    if n not in (3, 4):
+    if n not in (3, 4, 5, 6):
         logger.warning(
-            "[decision] LOTO_BENCH_TARGET=%r invalid (doar 3 sau 4) — folosesc %d",
+            "[decision] LOTO_BENCH_TARGET=%r invalid (doar 3, 4, 5 sau 6) — folosesc %d",
             value,
             default,
         )
@@ -42,7 +42,8 @@ def clamp_bench_hit_target(value, *, default: int = 3) -> int:
 
 # Ținta minimă PER JOC. Loto 5/40: se extrag 6 numere, biletul are 5, iar 3
 # numere nu aduc premiu — cel mai mic premiu cere 4 din cele 6 extrase.
-# Ținta globală 3 nu coboară 5/40 sub 4; ținta globală 4 îl lasă tot pe 4.
+# Ținta globală 3 nu coboară 5/40 sub 4. Țintele 5 și 6 măsoară hiturile
+# din pool, nu de pe bilet: toate cele șase numere extrase contează.
 # Urna 2 (top-1) rămâne tratată separat de decizie.
 GAME_MIN_HIT_TARGET: dict[str, int] = {"loto_5_40": 4}
 # Jocurile din alte țări: din registru (azi toate cu 3 numere premiate, deci
@@ -51,9 +52,15 @@ GAME_MIN_HIT_TARGET.update(foreign_min_hit_target())
 
 
 def game_hit_target(game_key: str, global_target) -> int:
-    """Ținta efectivă a deciziei pentru `game_key` (3 sau 4)."""
+    """Ținta efectivă în pool, limitată de numărul de bile EXTRASE.
+
+    Joker Urna 1 are cel mult cinci hituri; Urna 2 rămâne top-1. La 5/40
+    cele șase extrase permit ținta 6 în pool, deși varianta jucată are cinci.
+    """
     t = clamp_bench_hit_target(global_target)
-    return max(t, int(GAME_MIN_HIT_TARGET.get(str(game_key), t)))
+    key = str(game_key)
+    draw_n = GAME_DRAW_PICK.get(key, (6, 6))[0]
+    return min(draw_n, max(t, int(GAME_MIN_HIT_TARGET.get(key, t))))
 
 
 # Geometria jocurilor de bench: (numere EXTRASE, numere pe BILET). Hiturile se

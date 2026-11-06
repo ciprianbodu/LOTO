@@ -35,6 +35,7 @@ class ScoringMixin:
                 combine_ensemble_scores,
                 has_decision,
                 rejected_decision_scorer,
+                recommend_optimal_config,
             )
             from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
         except Exception as exc:
@@ -185,6 +186,13 @@ class ScoringMixin:
                         f"metoda din decizie ({_rejected}) este interzisă în "
                         "producție sau necunoscută"
                     ),
+                )
+            _recommendation = recommend_optimal_config(game_key, _pool_hint, config_path)
+            if _recommendation.get("target_mismatch"):
+                bench_winner_info.update(
+                    fallback=True,
+                    reason=_recommendation["rationale"],
+                    target_mismatch=_recommendation["target_mismatch"],
                 )
             if len(ensemble) > 1:
                 # Membrii EFECTIV folosiţi (ponderi renormalizate după eliminări),

@@ -89,7 +89,7 @@ def _hit_gap_rows(items: list[tuple], today=None) -> list[dict]:
 
 
 def _bench_target() -> int:
-    """Pragul de hituri pe care optimizează bench-ul (doar 3 sau 4)."""
+    """Pragul de hituri în pool pe care optimizează bench-ul (3..6)."""
     return _clamped_bench_target()
 
 
@@ -115,25 +115,37 @@ def _curation_banner_info():
 
 
 def _target_data_ready() -> bool:
-    """True dacă folds.csv conține deja rata pentru pragul curent (≥BENCH_HIT_TARGET).
+    """True dacă folds.csv conține rata exactă a țintei la poolurile selectate.
     Dacă NU (după bump de schemă cache v2→v3 sau schimbare de prag), următorul
     Re-Bench e un recalcul COMPLET (lent), nu rapid din cache — deci banner-ul nu
     trebuie să mintă cu „cache rapid"."""
     try:
+        from loto_enterprise.benchmark.hit_target import game_hit_target
+
         _T = _bench_target()
         f = PROJECT_ROOT / "bench_results" / "folds.csv"
         if not f.exists():
             return False
-        cols = [
-            c for c in pd.read_csv(f, nrows=0).columns if c.startswith(f"rate_{_T}plus")
-        ]
-        if not cols:
+        df = pd.read_csv(f, usecols=lambda c: c == "game" or c.startswith("rate_"))
+        if df.empty or "game" not in df.columns:
             return False
-        df = pd.read_csv(f, usecols=cols)
-        if df.empty:
-            return False
-        # fracția rândurilor cu măcar o valoare reală pentru prag (folduri calculate în schema curentă)
-        return float(df.notna().any(axis=1).mean()) >= 0.9
+        for lottery in _selected_games():
+            for game_key in lottery.bench_keys:
+                single_pick = game_key == lottery.bench_key_urna2
+                target = 1 if single_pick else game_hit_target(game_key, _T)
+                pool = 1 if single_pick else _pool_size_for(lottery.game_id)
+                columns = [f"rate_{target}plus_k{pool}"]
+                if pool == (1 if single_pick else lottery.pick_n):
+                    columns.append(f"rate_{target}plus")
+                columns = [c for c in columns if c in df.columns]
+                rows = df[df["game"].astype(str) == game_key]
+                if rows.empty or not columns:
+                    return False
+                # Coloanele altui pool/prag nu dovedesc disponibilitatea țintei.
+                values = rows[columns].apply(pd.to_numeric, errors="coerce")
+                if float(values.notna().any(axis=1).mean()) < 0.9:
+                    return False
+        return True
     except Exception:  # noqa: BLE001
         # Fișier corupt/blocat/înlocuit în timpul citirii nu dovedește că schema
         # țintei există. True afișa fals bannerul verde „cache rapid”.
@@ -181,9 +193,11 @@ def _decision_target_text(country=None) -> str | None:
         return lot.name if lot is not None else gk
 
     parts = ", ".join(f"{_name(gk)} pe {t}+" for gk, t in stale.items())
+    target = _bench_target()
+    target_text = f"{target}+ în pool" if target >= 5 else f"{target}+"
     return (
         f"⚠️ Decizia Auto-Pilot salvată nu e pe ținta selectată "
-        f"({_bench_target()}+): {parts}. Generarea joacă metoda aleasă pentru "
+        f"({target_text}): {parts}. Generarea joacă metoda aleasă pentru "
         "ținta veche. Decizia se recalculează singură la pornirea UI-ului sau la "
         "finalul Re-Bench-ului, dacă folds.csv acoperă bench-ul deciziei; altfel "
         "rulează un Re-Bench complet."
@@ -1132,7 +1146,7 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
     if _skip.get("decision_moved"):
         _wf_notes.append(
             "⚠️ Walk-forward sărit: decizia de bench s-a schimbat după generare "
-            "(Re-Bench terminat sau țintă 3+/4+ schimbată). Validarea ar fi "
+            "(Re-Bench terminat sau ținta de hituri în pool schimbată). Validarea ar fi "
             "măsurat altă metodă decât cea care a produs pool-ul afișat; "
             "generează din nou."
         )

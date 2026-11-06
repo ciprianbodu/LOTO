@@ -66,10 +66,14 @@ def _is_experimental_interval(name: str) -> bool:
     return method_meta(name).get("family") == "experimental_interval"
 
 
-def _rate_pct(value) -> str | None:
-    """Procent cu două zecimale, aceeași precizie pentru Wilson și pentru brut."""
+def _rate_pct(value, threshold: int = 4) -> str | None:
+    """Aceeași precizie pentru Wilson și brut, fără rotunjirea ratelor rare la zero."""
     if value is None or pd.isna(value):
         return None
+    if threshold >= 5:
+        from ui_results import _five_plus_pct
+
+        return _five_plus_pct(value)
     return f"{float(value) * 100:.2f}%"
 
 
@@ -82,14 +86,18 @@ def _bench_rate_line(
     raw_4,
     rnd_primary,
     rnd_4,
+    raw_5=None,
+    raw_6=None,
+    rnd_5=None,
+    rnd_6=None,
 ) -> str:
     """Aceeași propoziție în clasament și la metoda experimentală.
 
     Wilson (z=1) este scorul de clasare. Brut este rata observată pe aceleași
-    extrageri. Ambele sunt procente cu două zecimale.
+    extrageri. Ratele de 5+/6+ păstrează cifrele semnificative pentru valori rare.
     """
     parts = []
-    wilson_txt = _rate_pct(wilson)
+    wilson_txt = _rate_pct(wilson, shown_t)
     if wilson_txt is not None:
         label = "top-1" if single_pick else f"{shown_t}+"
         parts.append(f"Wilson {label}: {wilson_txt}")
@@ -113,6 +121,12 @@ def _bench_rate_line(
     if four_txt is not None and not single_pick:
         mult = f" ({float(raw_4) / float(rnd_4):.2f}x random)" if rnd_4 else ""
         parts.append(f"brut 4+: {four_txt}{mult}")
+    if not single_pick:
+        for threshold, value, random_rate in ((5, raw_5, rnd_5), (6, raw_6, rnd_6)):
+            text = _rate_pct(value, threshold)
+            if text is not None:
+                mult = f" ({float(value) / float(random_rate):.2f}x random)" if random_rate else ""
+                parts.append(f"brut {threshold}+ în pool: {text}{mult}")
     return " · ".join(parts)
 
 
@@ -127,8 +141,15 @@ def _experimental_method_caption(
     rnd4=None,
     shown_t: int = 4,
     single_pick: bool = False,
+    exclusion_reason: str = "",
+    fails_consistency: bool = False,
+    consistency_pct: int = 60,
+    rate5=None,
+    rate6=None,
+    rnd5=None,
+    rnd6=None,
 ) -> str:
-    """Experimentul măsurat, cu aceleași cifre ca rândul din clasament."""
+    """Experimentul măsurat, cu cifrele și eligibilitatea clasamentului curent."""
     if not _is_experimental_interval(name):
         return ""
     stats = _bench_rate_line(
@@ -139,9 +160,13 @@ def _experimental_method_caption(
         raw_4=rate4,
         rnd_primary=rnd3,
         rnd_4=rnd4,
+        raw_5=rate5,
+        raw_6=rate6,
+        rnd_5=rnd5,
+        rnd_6=rnd6,
     )
     if not stats:
-        stats = "brut 4+ indisponibilă"
+        stats = f"brut {shown_t}+ indisponibilă"
     scope = (
         "Formula este optimizată pentru pool 16 / 4+."
         if pool == 16
@@ -150,10 +175,19 @@ def _experimental_method_caption(
             "aici se măsoară prefixul aceluiași clasament."
         )
     )
+    if exclusion_reason:
+        status = f"Exclusă din decizia acestui benchmark: {exclusion_reason}."
+    elif fails_consistency:
+        status = (
+            "Necalificată în acest benchmark: nu a trecut poarta de consistență "
+            f"(minimum 3 ferestre; ≥{consistency_pct}% peste random)."
+        )
+    else:
+        status = "Eligibilă în producție din 2026-10-31 (cerere explicită)."
     return (
         f"🧪 {name} — Interval adaptiv după minime/maxime, experimentală; {stats}. "
-        f"{scope} Eligibilă în producție din 2026-10-31 (cerere explicită); "
-        "avantajul predictiv rămâne nedemonstrat statistic — confirmare pe date noi încă necesară."
+        f"{status} {scope} "
+        "Avantajul predictiv rămâne nedemonstrat statistic — confirmare pe date noi încă necesară."
     )
 
 
@@ -481,7 +515,7 @@ def _render_bench_leaderboard_slice(
     except Exception:  # noqa: BLE001
         _T = 3
 
-    # Urna 2 este strict top-1, separat de ținta configurabilă 3+/4+ pentru
+    # Urna 2 este strict top-1, separat de ținta configurabilă 3+..6+ pentru
     # jocurile de pool. Coloana fără `_kN` este rata pool-ului de bază și nu e
     # comparabilă cu un alt pool.
     def _has(c):
@@ -489,12 +523,13 @@ def _render_bench_leaderboard_slice(
 
     _draw_n = _BENCH_DRAW_N.get(folds_game_key)
     _is_single_pick = _draw_n == 1
+    from loto_enterprise.benchmark.hit_target import GAME_DRAW_PICK, game_hit_target
+
+    _actual_draw_n = GAME_DRAW_PICK.get(folds_game_key, (_draw_n, _draw_n))[0]
     if _is_single_pick:
         _T = 1
     else:
-        # Aceeași țintă per joc ca decizia: 5/40 rămâne pe 4+.
-        from loto_enterprise.benchmark.hit_target import game_hit_target
-
+        # Aceeași țintă ca decizia, plafonată la numerele extrase în joc.
         _T = game_hit_target(folds_game_key, _T)
     _shown_t, metric = _T, None
     _target_candidates = [f"rate_{_T}plus_k{pool}"]
@@ -504,6 +539,12 @@ def _render_bench_leaderboard_slice(
         if _has(_c):
             metric = _c
             break
+    if metric is None and _T >= 5:
+        ui.label(
+            f"Lipsesc rezultatele pentru ținta {_T}+ în pool {pool} ({section_label}). "
+            "Rulează Re-Bench pentru această țintă; ratele 3+/4+ nu o pot înlocui."
+        ).classes("text-caption text-warning")
+        return
     if metric is None and not _is_single_pick:
         _fallback_candidates = [f"rate_4plus_k{pool}"]
         if _draw_n is not None and int(pool) == int(_draw_n):
@@ -709,6 +750,8 @@ def _render_bench_leaderboard_slice(
                     cons,
                     _base_avg,
                     _structural_reason,
+                    _rate_for(grp, 5) if not _is_single_pick else None,
+                    _rate_for(grp, 6) if _actual_draw_n == 6 else None,
                 )
             )
         if _draw_n is not None and _base_col in sub.columns:
@@ -749,7 +792,7 @@ def _render_bench_leaderboard_slice(
         for item in _current_dec.get("incomplete_methods", []):
             windows = ", ".join(f"{p}%" for p in item.get("missing_windows", []))
             reason = (
-                "extrageri neevaluate"
+                "extrageri neevaluate în ferestrele de istoric"
                 if item.get("reason") == "unevaluated_draws"
                 else "ferestre lipsă"
             )
@@ -849,7 +892,16 @@ def _render_bench_leaderboard_slice(
         folds_game_key, pool, _shown_t if _is_single_pick else 3
     )
     _rnd4 = _random_rate_hypergeo(folds_game_key, pool, 4)
+    _rnd5 = _random_rate_hypergeo(folds_game_key, pool, 5) if not _is_single_pick else None
+    _rnd6 = _random_rate_hypergeo(folds_game_key, pool, 6) if _actual_draw_n == 6 else None
     _rnd_t = _random_rate_hypergeo(folds_game_key, pool, _shown_t)
+    if _shown_t >= 5 and _current_dec.get("rate_data_missing"):
+        missing = [item["method"] for item in _current_dec["rate_data_missing"]]
+        names = ", ".join(missing[:3]) + ("…" if len(missing) > 3 else "")
+        ui.label(
+            f"Lipsesc ratele {_shown_t}+ în pool {pool} pentru {names}. "
+            "Rulează Re-Bench pentru o comparație completă; lipsa datelor nu înseamnă zero hituri."
+        ).classes("text-caption text-warning")
     if not competitors:
         with ui.expansion(f"Clasament bench — {section_label}", value=True).classes(
             "w-full"
@@ -870,6 +922,13 @@ def _render_bench_leaderboard_slice(
                     rnd4=_rnd4,
                     shown_t=_shown_t,
                     single_pick=_is_single_pick,
+                    exclusion_reason=_structural_fail.get(r[0], ""),
+                    fails_consistency=r[0] in _fail_gate,
+                    consistency_pct=_cons_pct,
+                    rate5=r[11],
+                    rate6=r[12],
+                    rnd5=_rnd5,
+                    rnd6=_rnd6,
                 ):
                     ui.label(caption).classes("text-caption text-orange")
         return
@@ -887,9 +946,9 @@ def _render_bench_leaderboard_slice(
     label = (
         "rata top-1 (1/1)"
         if _is_single_pick and has_target_rate
-        else f"rata {_shown_t}+ @ pool {pool}"
+        else f"rata {_shown_t}+ @ pool {pool} (hituri în pool)"
         if has_target_rate and metric.endswith(f"_k{pool}")
-        else f"rata {_shown_t}+ numere ghicite"
+        else f"rata {_shown_t}+ în pool"
         if has_target_rate
         else "medie hituri / extragere"
     )
@@ -920,7 +979,7 @@ def _render_bench_leaderboard_slice(
     # + multiplicator pe fiecare rată. Onestitate: „3+: 10%" pare edge, dar hazardul
     # singur dă ~9% la pool 10 pe 6/49 → diferența reală e mică (zgomot).
     if has_target_rate and _rnd_t is not None:
-        label += f" · baseline random = {_rnd_t * 100:.2f}%"
+        label += f" · baseline random = {_rate_pct(_rnd_t, _shown_t)}"
     if _structural_fail:
         label += f" · {len(_structural_fail)} excluse structural"
     winner = competitors[
@@ -969,6 +1028,10 @@ def _render_bench_leaderboard_slice(
                 raw_4=r4,
                 rnd_primary=_rnd3,
                 rnd_4=_rnd4,
+                raw_5=rec[11],
+                raw_6=rec[12],
+                rnd_5=_rnd5,
+                rnd_6=_rnd6,
             ) or ("date indisponibile" if pd.isna(score) else f"medie: {score:.3f}")
         else:
             sc_txt = "date indisponibile" if pd.isna(score) else f"medie: {score:.3f}"
@@ -1023,18 +1086,24 @@ def _render_bench_leaderboard_slice(
     with ui.expansion(title, value=True).classes("w-full"):
         ui.label(
             "🏆 = primul în clasamentul eligibil; 🎯 = metoda din ultima generare sau decizia salvată. "
-            "⛔ = exclusă structural: la tăietura top-K scorurile sunt egale în ≥50% din blocuri, "
-            "deci pool-ul ar fi ales după număr, nu după semnal — nu e un defect al metodei. "
+            "⛔ = exclusă din decizie: date incomplete sau scoruri egale la limita top-K "
+            "în ≥50% din blocuri. Motivul concret apare lângă metodă. "
             "Necalificată = nu a trecut regula de consistență între ferestre."
         ).classes("text-caption text-grey")
         if has_target_rate:
             ui.label(
-                "Wilson și brut apar în același format (procente, două zecimale). Wilson folosește "
+                "Wilson și brut apar în același format procentual; ratele rare 5+/6+ păstrează "
+                "cifre semnificative. Wilson folosește "
                 "z=1 ca scor de clasare și este mai mic decât rata observată; nu este un "
                 "interval de încredere de 95%. Brut este rata observată pe aceleași "
                 "extrageri. Calificarea este euristică. Un avantaj predictiv necesită "
                 "testare separată."
             ).classes("text-caption text-grey")
+            if not _is_single_pick:
+                ui.label(
+                    "Ratele numără hituri în pool. Un pool cu 5 sau 6 numere extrase nu garantează "
+                    "același număr pe o variantă LR; rezultatele schemei apar separat în istoric."
+                ).classes("text-caption text-grey")
         if _is_single_pick:
             ui.label(
                 "Urna 2: potrivire exactă a unei bile din 20; random = 5%."
@@ -1237,6 +1306,13 @@ def _render_bench_leaderboard_slice(
                 rnd4=_rnd4,
                 shown_t=_shown_t,
                 single_pick=_is_single_pick,
+                exclusion_reason=_structural_fail.get(rec[0], ""),
+                fails_consistency=rec[0] in _fail_gate,
+                consistency_pct=_cons_pct,
+                rate5=rec[11],
+                rate6=rec[12],
+                rnd5=_rnd5,
+                rnd6=_rnd6,
             ):
                 ui.label(caption).classes("text-caption text-orange")
         _rank = 0
@@ -1265,7 +1341,7 @@ def _render_bench_leaderboard_slice(
             # Poziția rândului `random` este o REALIZARE empirică a scorerului,
             # nu baseline-ul teoretic din titlu. Numărul „sub hazard” calculat
             # anterior din această poziție amesteca cele două referințe.
-            _target_idx = 4 if _shown_t in (1, 3) else 5
+            _target_idx = {1: 4, 3: 4, 4: 5, 5: 11, 6: 12}[_shown_t]
             _below_theory = None
             if _rnd_t is not None:
                 _below_theory = sum(
@@ -1276,7 +1352,7 @@ def _render_bench_leaderboard_slice(
                 )
             _theory_txt = (
                 f" Față de pragul teoretic din titlu: {_below_theory} metode eligibile au "
-                f"rata brută ≤ {_rnd_t * 100:.2f}%."
+                f"rata brută ≤ {_rate_pct(_rnd_t, _shown_t)}."
                 if _below_theory is not None
                 else ""
             )
@@ -1599,8 +1675,10 @@ def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
                 "Câștigătorul final + Auto-Pilot se stabilesc abia la sfârșitul bench-ului."
             ).classes("text-caption text-grey")
         ui.label(
-            "ℹ️ Walk-forward: istoricul listează +4 și +5; ținta bench/alerte: "
-            f"≥{_bench_target()} (Loto 5/40 minimum 4+, Joker Urna 2 top-1)."
+            "ℹ️ Walk-forward: istoricul listează +4 și +5, cu +6 separat unde este posibil; "
+            "hiturile poolului sunt separate de cele ale variantelor LR. "
+            f"Ținta bench în pool: ≥{_bench_target()} (Loto 5/40 minimum 4+, "
+            "Joker Urna 1 maximum 5+, Urna 2 top-1)."
         ).classes("text-caption text-grey")
         _sections = (
             [
