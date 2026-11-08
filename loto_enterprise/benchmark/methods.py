@@ -15,6 +15,9 @@ de producție) și cele 50 de metode din modulele:
                            relații de ordinul 2, învățare ieftină
     methods_experimental.py 1 metode: interval adaptiv, experimental; din
                            2026-10-31 eligibila si in productie (numai 6/49)
+    methods_bayes.py        2 metode (al treilea val, 2026-11-08): estimator
+                           bayesian Dirichlet cu uitare + mixtură Hedge online
+                           de experți — ipoteze pentru bench, nu promovate
 
 Metodele marcate `_uses_history_cutoffs` primesc opțional începutul zilei
 fiecărui rând prin `call_method`. Fără date, fiecare rând este un pas temporal.
@@ -147,6 +150,7 @@ def _load_extra_methods() -> None:
         ("methods_learning", "LEARNING_METHODS"),
         ("methods_wave2", "WAVE2_METHODS"),
         ("methods_experimental", "EXPERIMENTAL_METHODS"),
+        ("methods_bayes", "BAYES_METHODS"),
     ):
         try:
             module = __import__(f"{__package__}.{modname}", fromlist=[attr])

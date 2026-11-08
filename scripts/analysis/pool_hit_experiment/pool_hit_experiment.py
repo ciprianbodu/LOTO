@@ -139,7 +139,15 @@ def production_methods() -> list[str]:
     from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
     from loto_enterprise.benchmark.methods import METHODS
 
-    return sorted(m for m in METHODS if m not in EXCLUDED_FROM_PRODUCTION)
+    # Experimentul e preinregistrat (2026-10-02): protocolul lui nu crește
+    # tacit odată cu registry-ul. Valul adăugat după înregistrare (methods_bayes,
+    # 2026-11-08) nu face parte din celulele înregistrate.
+    _after_registration = {"bayes_dirichlet_forget", "hedge_experts_mixture"}
+    return sorted(
+        m
+        for m in METHODS
+        if m not in EXCLUDED_FROM_PRODUCTION and m not in _after_registration
+    )
 
 
 def ranking(scores: dict, max_num: int) -> np.ndarray:

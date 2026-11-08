@@ -30,7 +30,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from covering.lr_schemes import lr_schemes, scheme_odds
-from loto_enterprise.benchmark.methods import METHODS, METHOD_LOAD_ERRORS, call_method
+from loto_enterprise.benchmark.methods import (
+    METHODS as _LIVE_METHODS,
+    METHOD_LOAD_ERRORS,
+    call_method,
+)
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history, history_dates, training_cutoffs
 from loto_enterprise.core.pool_selection import select_pool_from_scores
@@ -41,6 +45,15 @@ from scripts.analysis.hit_evidence_2026_11_04 import (
     hypergeom_tail,
     paired_pvalue,
 )
+
+# Protocolul acestui studiu este înghețat la registry-ul zilei de 2026-11-04
+# (53 de metode). Metodele adăugate ulterior (valul methods_bayes, 2026-11-08)
+# NU au făcut parte din protocolul executat și arhivat; fără această înghețare
+# semnătura cache-ului studiului (`sorted(METHODS)`) s-ar invalida tacit, iar
+# afirmația „studiul a rulat toate metodele din registry" ar deveni retroactiv
+# falsă. Registry-ul viu rămân disponibil ca `_LIVE_METHODS`.
+_METHODS_AFTER_STUDY = frozenset({"bayes_dirichlet_forget", "hedge_experts_mixture"})
+METHODS = {k: v for k, v in _LIVE_METHODS.items() if k not in _METHODS_AFTER_STUDY}
 
 GAMES = (
     ("loto_6_49", "6/49", 49, 6, 6, 16, 59),
