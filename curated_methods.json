@@ -4,7 +4,7 @@
     "updated": "2026-11-08",
     "criterion": "Setul complet de 50 de metode noi (methods_recency 16, methods_relational 10, methods_learning 4, methods_wave2 20 — al doilea val, cu idei reluate din vechea lista disabled), FARA preselectie pe istoric: auditul din 14.09.2026 (§4.1) a aratat ca alegerea candidatilor pe perioada pe care bench-ul ii retesteaza garanteaza practic trecerea portii. Toate ruleaza pe toate cele 4 jocuri; bench-ul si decizia (poarta hipergeometrica, Wilson) spun singure ce ramane. `random` (martor) si `frequency` (fallback de productie) sunt baseline-uri structurale.",
     "count_active": 55,
-    "per_game_note": "Setul anterior de frequency + 50 de metode ramane pe toate cele patru jocuri, iar random este martor structural. interval_extrema_k16 este adaugata numai la loto_6_49 ca experiment exclus din productie. Metodele de co-aparitie raman plate pe Urna2 si se raporteaza inutilizabile. Pe Urna2 lipsesc (audit 2026-10-07): markov_self_state si vlmm_self_k3, care aleg bila precedenta in majoritatea pasilor si pe extrageri uniforme (EXCLUDED_FROM_SINGLE_PICK), si naive_bayes_last, identica cu markov_pairs cand se extrage o singura bila.",
+    "per_game_note": "Setul anterior de frequency + 50 de metode ramane pe toate cele patru jocuri, iar random este martor structural. interval_extrema_k16 este adaugata numai la loto_6_49 ca experiment exclus din productie. Metodele de co-aparitie raman plate pe Urna2 si se raporteaza inutilizabile. Pe Urna2 lipsesc (audit 2026-10-07): markov_self_state si vlmm_self_k3, care aleg bila precedenta in majoritatea pasilor si pe extrageri uniforme (EXCLUDED_FROM_SINGLE_PICK), si naive_bayes_last, identica cu markov_pairs cand se extrage o singura bila. hedge_experts_mixture lipseste de pe Urna2 din 2026-11-08: cu o singura bila extrasa, pierderea logaritmica favorizeaza strict expertul uniform (Jensen), ponderile Hedge converg corect la el si mixtura nu mai are opinie de ranking — scorer plat, neevaluabil; ramane pe celelalte trei jocuri.",
     "filters_note": "Paritate/sume/decade nu sunt in set. Filtre last-draw (`neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`) raman in METHODS/curare ca martori de bench, dar sunt in EXCLUDED_FROM_PRODUCTION (audit 2026-09-15/16). Nu sunt scorer de productie.",
     "experimental_note": "interval_extrema_k16: interval adaptiv dupa minime/maxime, optimizat pentru pool16/4+. Experimental, masurat automat numai la Loto6/49; exclus din productie. Alte dimensiuni masoara prefixele aceluiasi ranking. Warmup200; inceputul fara tinte interne evaluabile ramane ne-evaluat. Nicio promovare pe istoricul cunoscut."
   },
@@ -281,8 +281,7 @@
       "nb_lags_pooled",
       "knn_feature_pooled",
       "gbm_stumps_pooled",
-      "bayes_dirichlet_forget",
-      "hedge_experts_mixture"
+      "bayes_dirichlet_forget"
     ]
   }
 }

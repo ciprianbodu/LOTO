@@ -92,6 +92,33 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Valul methods_bayes și Re-Bench 2026-11-08
+
+- Registry: 55 de metode (`methods_bayes.py`, al treilea val):
+  `bayes_dirichlet_forget` (Dirichlet-multinomial online, uitare λ=0.997,
+  prior Jeffreys) și `hedge_experts_mixture` (Hedge η=1 pe log-loss peste 6
+  experți online). Deterministe, cauzale; ipoteze de bench, nu promovate.
+  `curated_methods.json`: `active` 55; `per_game` 54/53/53/49.
+- Re-Bench complet 2026-11-08 (ținta 5, percentile 10/30/60/100, block 1,
+  fără control amestecat; ~2,5 min prin cache-ul WF v31): decizia oficială
+  cu poartă Holm a ales `hedge_experts_mixture` pe joker_urna1 k12/k17/k18.
+  Câștigătorii de producție rămân cei dinainte pe restul poolurilor
+  (6/49 k16 `drift_linear`, 5/40 k19 `neighbor_adjacent`, Joker k15
+  `holt_forecast`, Urna 2 `ridge_pooled_feats`). `methods_hash` din
+  `best_methods.json._meta.engine_signature` e din nou sincronizat (55).
+- `hedge_experts_mixture` lipsește din `per_game` al Urnei 2 (aceeași
+  convenție ca `naive_bayes_last`/`markov_self_state`/`vlmm_self_k3`): cu o
+  singură bilă extrasă, log-loss-ul favorizează strict expertul uniform
+  (Jensen), ponderile converg corect la el și mixtura devine plată —
+  scorer neevaluabil, nu eroare de cod.
+- Protocoale înghețate înainte de val: studiul LR 2026-11-04 rămâne la 53
+  de metode (`_METHODS_AFTER_STUDY`), iar experimentul preînregistrat
+  2026-10-02 exclude explicit valul; semnăturile arhivate nu se invalidează.
+- `best_methods.json` este ignorat de Git (produs local); `bench_results/`
+  rămâne necomis pe stație. Suita locală `_TESTE/` este verde integral,
+  inclusiv noul `test_methods_bayes.py` și gardianul conftest care izolează
+  `LOTO_BENCH_TARGET`/`decision.BENCH_HIT_TARGET` între teste.
+
 ### Dependențe CPU fixate — 2026-11-06
 
 - `requirements_base.txt` fixează NiceGUI 4.0.0, psutil 7.2.2, pandas 3.1.1,

@@ -16,6 +16,12 @@ super avansate"):
   mixtura predictivelor cu ponderile finale — „universal prediction" aplicată
   peste o grădină mică de modele simple, spre deosebire de
   `rank_ensemble_core` (medie statică de ranguri, fără feedback online).
+  Pe jocuri cu o singură bilă extrasă (Joker Urna 2) log-loss-ul favorizează
+  strict expertul uniform (inegalitatea Jensen: Σ log p_i e maxim la p_i
+  egale), ponderile converg corect la el și mixtura devine plată — metoda
+  raportează onest „nicio opinie", deci lipsește din per_game al Urna 2
+  (aceeași convenție ca `naive_bayes_last`, `markov_self_state`,
+  `vlmm_self_k3`); pe celelalte trei jocuri rămâne evaluabilă.
 
 Ambele sunt IPOTEZE pentru bench, nu dovezi: intră în aceeași poartă
 walk-forward + corecție Holm ca restul registry-ului și nu sunt promovate în
