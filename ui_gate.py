@@ -25,7 +25,16 @@ from nicegui import ui
 
 import runtime_paths
 
-logger = logging.getLogger(__name__)
+# Convenția modulelor ui_*: același logger „app_nicegui" — altfel
+# `from ui_gate import *` ar re-lega numele `logger` din app_nicegui la
+# loggerul acestui modul, iar TOATE liniile de log ale aplicației ar apărea
+# etichetate „ui_gate".
+logger = logging.getLogger("app_nicegui")
+
+# `from ui_gate import *` în app_nicegui exportă DOAR aceste nume — fără
+# `__all__` s-ar scurge în namespace-ul aplicației și modulele importate aici
+# (json, sys, Path, threading, ui, runtime_paths...).
+__all__ = ["gate_panel", "evaluate_new_draws", "load_gate_state"]
 
 _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
