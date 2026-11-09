@@ -92,6 +92,30 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Poarta preînregistrată weibull_k0.85 (garanție 6) — 2026-11-09
+
+- La cererea utilizatorului, candidatul direcțional din ecranul valului 4
+  (`weibull_k0.85`, 19 vs 8,0 așteptate la 6/49 pool 16 ținta 5+, dar fără
+  Holm) primește o POARTĂ PREÎNREGISTRATĂ pe extrageri viitoare:
+  `scripts/analysis/preregister_weibull_k085_gate_2026_11_09.py` + raportul
+  `preregister_weibull_k085_gate_2026-11-09.md`. Protocolul este înghețat prin
+  commit; numără strict extragerile cu data > 2026-11-09 (prima eligibilă:
+  joi 2026-11-12).
+- Regula fixă: traiectorie Weibull κ=0,85 cauzală pe zi, pool top-16 canonic,
+  garanție 6 = sistem complet C(16,6)=8008 variante (6 în pool ⇒ exact o
+  variantă cu 6, garantat combinatorial); distribuția variantelor exactă prin
+  C(h,j)·C(16−h,6−j); cost 64064 lei/extragere cumulat. Premiile în bani nu
+  sunt preînregistrate.
+- Poarta: H0 uniform (p0 5+ = 0,0108805779), orizont 104 extrageri, succes =
+  ≥5 evenimente 5+ (P=0,00576 ≤ α=0,01). Putere onestă: 0,134 la rata din
+  screening (2,59%), 0,403 la 4%. Ținte secundare descriptive: 4+, 6, media,
+  distribuția variantelor.
+- Starea se acumulează LOCAL în `RUNTIME_ROOT/gate_weibull_k085_2026_11_09_state.json`
+  (nu în Git); `update` este idempotent. La înregistrare: 0/104 extrageri,
+  386 teste locale verzi (combinatorică garanție 6, prag, cauzalitate,
+  idempotență). Registry (55) și deciziile de producție neschimbate — poarta
+  nu promovează nimic; deschiderea ei ar fi doar începutul unei confirmări.
+
 ### Ecranul valului 4 — 356 de metode × tipare 5+ — 2026-11-09
 
 - La cererea utilizatorului („sute de metode avansate de statistică și
