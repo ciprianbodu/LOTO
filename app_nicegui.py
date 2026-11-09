@@ -75,6 +75,7 @@ from ui_runtime import *  # noqa: F403
 from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
+from ui_gate import *  # noqa: F403
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
@@ -4522,11 +4523,29 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
+        gate_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
         ):
             logs_panel()
         results_panel()
+
+    # Poarta preînregistrată: la fiecare deschidere a paginii evaluează
+    # idempotent extragerile noi (lansatorul actualizează CSV-urile înainte de
+    # UI, deci extragerea de joi/duminică intră singură). În thread — fără
+    # blocarea event-loop-ului; la extrageri noi panoul se reîmprospătează.
+    async def _gate_startup_eval() -> None:
+        from nicegui import run as _nrun
+
+        try:
+            changed = await _nrun.io_bound(evaluate_new_draws)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[GATE] evaluarea de la deschidere a eșuat: %s", exc)
+            return
+        if changed:
+            gate_panel.refresh()
+
+    ui.timer(3.0, _gate_startup_eval, once=True)
 
     # ---- Polling fără reload. Munca BLOCANTĂ (citiri loguri OneDrive, psutil, pid-uri)
     # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără
