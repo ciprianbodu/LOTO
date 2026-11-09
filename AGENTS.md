@@ -92,6 +92,38 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Ecranul valului 4 — 356 de metode × tipare 5+ — 2026-11-09
+
+- La cererea utilizatorului („sute de metode avansate de statistică și
+  probabilități, tipare de predicție pentru +5, începând cu pool 6"), studiu
+  offline nou, separat de registry: `scripts/analysis/methods_wave4_bank_2026_11_09.py`
+  (356 de predictori — Dirichlet/Beta-Bernoulli/EWMA/Holt/Weibull/Markov/
+  Hawkes/BOCPD/Fourier/faze/CUSUM/KDE/entropie/logistic online/Hedge + mixturi
+  liniare, geometrice, triple, agregatori de rang; semnalele de bază memoizate
+  per istorie) și `scripts/analysis/wave4_pattern_screen_2026_11_09.py`
+  (protocol fixat a priori în docstring: cauzalitate pe zi, warmup 200,
+  confirmare = ultimele 30%, binom exact vs hipergeometric + z pe medie,
+  Holm per celulă, două controale shuffle cu semințe fixe).
+- Putere a priori: 6/49 pool 6, ținta 5+ are baseline 1,85e-5/extragere ⇒
+  0,014 evenimente așteptate în fereastra de confirmare — NEVALIDABIL empiric;
+  ecranul raportează acolo 3+/4+/media hiturilor. Pool 16, ținta 5+ cere ≥22
+  evenimente pentru Holm (baseline 1,09%).
+- Rezultat (`wave4_pattern_screen_2026_11_09_results.json`, ~8,5 min, 9
+  istorii × 356 metode): real = 1 semnificație Holm în 72 de celule (Joker
+  pool 10 ținta 3+, p=1,01e-4, NU se replica pe fereastra completă);
+  controalele shuffle = 2 semnificații în 144 de celule — podea de zgomot
+  identică. Holm global (prag 1,95e-6): nimic. Celulele 5+: 6/49 k16 max 19
+  vs 8,0 așteptate (`weibull_k0.85`, p=5,8e-4, sub pragul Holm 1,4e-4);
+  5/40 k19 max 41 vs 33,9 (p=0,12); Joker k15 max 6 vs 1,49 (p=4,3e-3).
+  Concluzie: nicio metodă nu depășește baseline-ul după corecție; consistent
+  cu studiile 2026-11-04/05.
+- Registry (55), deciziile de producție (16/15/19) și schemele rămân
+  NESCHIMBATE: promovarea din ecran este interzisă (ar cere Re-Bench oficial
+  și decizia separată a utilizatorului). Testele ecranului sunt locale în
+  `_TESTE/test_wave4_bank.py` (380 teste: shape/rânduri=1, cauzalitate prin
+  invarianță la prefix, determinism, echivalență resolver) — nu intră în Git.
+- Raport: `scripts/analysis/wave4_pattern_screen_2026-11-09.md`.
+
 ### Valul methods_bayes și Re-Bench 2026-11-08
 
 - Registry: 55 de metode (`methods_bayes.py`, al treilea val):
