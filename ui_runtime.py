@@ -178,6 +178,8 @@ _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_
 # jocului (`Lottery.max_pool`: 49 / 40 / 45) și implicit cel mai mare cod LR
 # al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19; Joker Cod 12: 15). Jocurile
 # altor țări folosesc câmpul comun `pool_size_val`.
+# Minimul UI (2026-11-11): cel mai mic cod LR oficial (`Lottery.min_pool`:
+# 9 la 6/49 = Cod 48; 7 la 5/40 = Cod 15; 7 la Joker = Cod 45).
 _POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
 _POOL_DEFAULTS = {
     label: _LOT.GAMES_BY_ID[label].default_pool for label in _POOL_KEYS
@@ -187,12 +189,14 @@ _POOL_DEFAULTS = {
 def _pool_size_for(game) -> int:
     """Pool-ul următoarei generări pentru `game` (etichetă, fișier sau cheie de bench).
 
-    România: câmpul jocului; altă țară: câmpul comun. Plafonat la 6..maximul
-    jocului, ca worker-ul (`ui.number` aplică min/max abia la blur)."""
+    România: câmpul jocului; altă țară: câmpul comun. Plafonat la
+    minimul UI al jocului (`Lottery.min_pool`: cel mai mic cod LR oficial în
+    România, 6 în alte țări) .. maximul jocului (`ui.number` aplică min/max
+    abia la blur, deci valorile tranzitorii de la tastare ajung aici)."""
     lot = _game_spec_for(game)
     key = _POOL_KEYS.get(lot.game_id) if lot.is_romanian else None
     raw = _int_setting(key) if key else _int_setting("pool_size_val")
-    return max(6, min(int(lot.max_pool), int(raw)))
+    return max(int(lot.min_pool), min(int(lot.max_pool), int(raw)))
 
 
 def _large_pool_notes() -> list[str]:

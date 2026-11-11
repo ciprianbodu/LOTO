@@ -167,6 +167,20 @@ class Lottery:
         return self.max_n if self.is_romanian else 16
 
     @property
+    def min_pool(self) -> int:
+        """Pool-ul minim oferit în UI: cel mai mic cod LR oficial al jocului.
+
+        6/49: 9 (Cod 48, 12 variante); 5/40: 7 (Cod 15, 9 variante);
+        Joker: 7 (Cod 45, 5 variante) — covering_designs/lr/index_oficial.json.
+        Motorul, workerul și bench-ul păstrează neschimbate pool-urile mici
+        de referință sub acest prag; limita vizează doar alegerea din
+        interfață și calea ei de clamp (``ui_runtime._pool_size_for``).
+        """
+        if self.is_romanian:
+            return {"6/49": 9, "5/40": 7, "joker": 7}.get(self.geometry, 6)
+        return 6
+
+    @property
     def default_pool(self) -> int:
         """Implicitul păstrat, independent de extinderea maximului acceptat."""
         if self.is_romanian:

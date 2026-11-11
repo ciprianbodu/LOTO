@@ -4133,18 +4133,22 @@ def main_page() -> None:
                 ("5/40", "Pool Loto 5/40"),
                 ("joker", "Pool Joker (Urna 1)"),
             ):
-                _pmax = _LOT.GAMES_BY_ID[_plabel].max_pool
+                _pspec = _LOT.GAMES_BY_ID[_plabel]
+                _pmin, _pmax = _pspec.min_pool, _pspec.max_pool
                 _pool_inputs.append(
                     _bind_save(
                         ui.number(
-                            f"{_ptitle} (6–{_pmax} numere)", min=6, max=_pmax, step=1
+                            f"{_ptitle} ({_pmin}–{_pmax} numere)",
+                            min=_pmin, max=_pmax, step=1,
                         ).classes("w-full"),
                         _POOL_KEYS[_plabel],
                     )
                 )
             ui.label(
                 "La fiecare pornire: 16 numere la 6/49, 19 la 5/40 și 15 la Joker. "
-                "Dimensiunile pot fi schimbate pentru Re-Bench. Maximul poate fi ales separat: "
+                "Dimensiunile pot fi schimbate pentru Re-Bench. Minimul este cel mai mic "
+                "cod LR oficial: 9 la 6/49 (Cod 48), 7 la 5/40 (Cod 15), 7 la Joker "
+                "(Cod 45). Maximul poate fi ales separat: "
                 "49 la 6/49, 40 la 5/40, 45 la Joker. Numai Loto 5/40 are coduri peste "
                 "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "
                 "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda decisă "

@@ -92,6 +92,26 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Minimul UI al pool-ului = cel mai mic cod LR — 2026-11-11
+
+- La cererea utilizatorului, „2. Setări algoritm" nu mai acceptă pool-uri sub
+  cel mai mic cod LR oficial al jocului: **9 la 6/49** (Cod 48, 12 variante),
+  **7 la 5/40** (Cod 15, 9 variante), **7 la Joker** (Cod 45, 5 variante)
+  — sursă: `covering_designs/lr/index_oficial.json`.
+- `Lottery.min_pool` (registry, lângă `max_pool`) poartă regula; widgeturile
+  `ui.number` folosesc `min=min_pool` și eticheta „(9–49 numere)" etc.;
+  `ui_runtime._pool_size_for` plafonează acum la `min_pool..max_pool` —
+  valorile sub minim (inclusiv cele tranzitorii de la tastare, 0/1) urcă la
+  minimul jocului. Jocurile altor țări rămân la 6..16.
+- Motorul, workerul și bench-ul NU se schimbă: pool-urile mici de referință
+  (6..8) rămân evaluabile programatic (`worker._task_norm` acceptă 6), doar
+  calea UI nu le mai oferă. Implicitele 16/19/15 și resetul de la pornire
+  sunt neschimbate; nu e nevoie de migrarea setărilor salvate.
+- Verificare: teste locale noi/actualizate în `_TESTE/test_full_pool_settings.py`
+  (min_pool vs catalogul LR, clamp sub minim, worker neschimbat) și
+  `_TESTE/test_base_threshold.py` (tabelele de bază pornesc de la minimul LR);
+  330 de teste țintă verzi pe cele două fișiere + regresia UI/worker/setări.
+
 ### Panoul porții în aplicație — 2026-11-09
 
 - La cererea utilizatorului, poarta preînregistrată este integrată în UI:
