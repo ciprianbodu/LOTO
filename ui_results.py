@@ -407,7 +407,9 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
     """Costul unui joc din altă țară: tarif și monedă din registru; fără scheme
     reduse (sunt ale Loteriei Române); tarif neverificat → fără cifre."""
     pick = spec.pick_n
-    pool_used = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    pool_used = len({int(n) for n in (data.get("hard_core") or [])}) or int(
+        data.get("pool_size") or 0
+    )
     full_vars = math.comb(pool_used, pick) if pool_used >= pick else 0
     variants = data.get("variants") or []
     if spec.price is None:
@@ -825,6 +827,11 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
         )
     elif is_joker:
         lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
+        lines.append(
+            "Optimizarea pentru 3+ numere în urna 1 poate reduce șansa categoriei "
+            "cu două numere și Joker; această categorie nu este protejată de "
+            "criteriul de optimizare."
+        )
     lines.append(
         "Acoperirea afișată aparține sistemului generat; 100% înseamnă garanție "
         "condiționată de numerele prinse în pool, nu șansa de câștig."
@@ -1193,7 +1200,8 @@ def _build_report() -> str:
             out.append(f"\n{indent}{'-' * 60}\n{indent}{label}\n{indent}{'-' * 60}")
         pool = sorted(int(x) for x in (d.get("hard_core") or []))
         stats = d.get("hard_core_stats") or {}
-        eff, req = d.get("pool_size"), d.get("pool_size_requested")
+        eff = len(set(pool)) or d.get("pool_size")
+        req = d.get("pool_size_requested")
         # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea
         # CERUTĂ din setări — pot diferi (rezultate vechi/recuperate, engine-ul
         # clampează intern). Același fallback ca în _render_pool_body/_render_cost,

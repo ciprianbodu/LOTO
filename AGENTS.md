@@ -92,6 +92,30 @@ python -c "from loto_enterprise.benchmark.methods import METHODS; print(len(METH
 python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_game; print(len(load_curated()), {k:len(v) for k,v in load_per_game().items()})"
 ```
 
+### Audit cod și scheme reduse — 2026-11-13
+
+- Mesajul deciziei pe țintă diferită descrie rezerva `frequency` pentru
+  poolurile afectate de trecerea la 5+/6+, conform `method_selector`.
+- Costul jocurilor străine și poolul efectiv din raport preferă numerele
+  distincte din `hard_core`, inclusiv la rezultate vechi cu `pool_size` cerut.
+- `PoolPrizeBinding` refolosește estimările LR numai când contextul istoric
+  și snapshotul oficial sunt identice. Benchmark local: 300 rânduri Cod 48,
+  zece actualizări asincrone, 1,079 s → 0,043 s; sumele sunt identice.
+- Audit exhaustiv: 277 fișiere / 519 designuri, 33 indici LR, 53.557
+  comparații exacte, diferență zero. Oracolul premiilor: 829.050 variante,
+  zero diferențe. Worker real 13 jocuri și UI HTTP 200, izolate.
+- Generatorul păstrează certificarea pragurilor 3+ și mai sus; ținta
+  principală de evaluare rămâne 5+ în pool, distinctă de garanția wheel-ului.
+  Interfața explică faptul că la Joker acest criteriu poate reduce șansa
+  categoriei cu două numere și Joker pe bugete mici. Nu se modifică schemele,
+  scorerii, deciziile sau istoricele de producție. Extinderea locală pentru
+  5+ nu a fost adoptată: o schimbare aparent mai bună a redus șansa finală.
+- Raport: `scripts/analysis/code_audit_reduced_schemes_2026-11-13.md`.
+  Regresiile noi și corecția fixture-ului porții rămân locale în `_TESTE/`.
+- Validare finală pe Python 3.15.2: toate cele 214 fișiere locale, 7.170
+  teste trecute, 25 omise, zero eșecuri. SHA-256 confirmă cele 16 fișiere
+  protejate ale stației neschimbate; portul 8000 nu a fost repornit.
+
 ### Minimul UI al pool-ului = cel mai mic cod LR — 2026-11-11
 
 - La cererea utilizatorului, „2. Setări algoritm" nu mai acceptă pool-uri sub

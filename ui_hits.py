@@ -195,10 +195,15 @@ def _decision_target_text(country=None) -> str | None:
     parts = ", ".join(f"{_name(gk)} pe {t}+" for gk, t in stale.items())
     target = _bench_target()
     target_text = f"{target}+ în pool" if target >= 5 else f"{target}+"
+    generation = (
+        "Pentru poolurile cu ținta nepotrivită, generarea folosește rezerva frequency. "
+        if target >= 5
+        else "Generarea joacă metoda aleasă pentru ținta veche. "
+    )
     return (
         f"⚠️ Decizia Auto-Pilot salvată nu e pe ținta selectată "
-        f"({target_text}): {parts}. Generarea joacă metoda aleasă pentru "
-        "ținta veche. Decizia se recalculează singură la pornirea UI-ului sau la "
+        f"({target_text}): {parts}. {generation}"
+        "Decizia se recalculează singură la pornirea UI-ului sau la "
         "finalul Re-Bench-ului, dacă folds.csv acoperă bench-ul deciziei; altfel "
         "rulează un Re-Bench complet."
     )

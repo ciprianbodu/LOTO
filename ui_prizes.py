@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime
 import logging
@@ -571,6 +572,28 @@ class PoolPrizeBinding:
         self.pagination = {"page": 1, "rowsPerPage": 15}
         self.lookup = lookup or PoolPrizeHistoryLookup(game)
         self.version = -1
+        self._lr_prize_cache = {}
+
+    def _prize(self, index, data, view):
+        if data.get("lr_scheme_code") is None:
+            self._lr_prize_cache.pop(index, None)
+            return pool_prize_text(self.game, data, view)
+        # LR histories have a compact, explicit context. Compare its values
+        # before reusing a result: pool edits, Joker changes and replacement
+        # official draws must never retain an earlier estimate. General wheels
+        # keep their existing path instead of copying potentially huge lists.
+        context = deepcopy({key: data.get(key) for key in (
+            "label", "drawn", "pool_numbers", "best_variant_raw",
+            "best_variant_joker_hit", "history_system_issue",
+            "lr_scheme_code", "lr_scheme_game", "system_label",
+            "expected_variant_count", "virtual_full_system",
+        )})
+        cached = self._lr_prize_cache.get(index)
+        if cached is not None and cached[0] == context and cached[1] == view:
+            return cached[2]
+        prize = pool_prize_text(self.game, data, view)
+        self._lr_prize_cache[index] = (context, view, prize)
+        return prize
 
     def _visible(self):
         try:
@@ -605,8 +628,9 @@ class PoolPrizeBinding:
         self.version = version
         changed = False
         for row in self.rows:
-            data = self.records[row["_draw_index"]]
-            prize = pool_prize_text(self.game, data, self.lookup.view(data))
+            index = row["_draw_index"]
+            data = self.records[index]
+            prize = self._prize(index, data, self.lookup.view(data))
             fields = {"pool_prize": prize.text, "prize_source": prize.source_url, "prize_detail": prize.detail}
             if any(row.get(k) != v for k, v in fields.items()):
                 row.update(fields)
