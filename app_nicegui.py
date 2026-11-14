@@ -316,7 +316,7 @@ def apply_autopilot_and_generate() -> None:
                 low = (
                     " · low_confidence"
                     if cfg.get("low_confidence")
-                    else " · avantaj nedemonstrat (Holm)"
+                    else " · avantaj nedemonstrat"
                     if (cfg.get("multiplicity") or {}).get("proven") is False
                     else ""
                 )
@@ -339,7 +339,7 @@ def apply_autopilot_and_generate() -> None:
                     low2 = (
                         " · low_confidence"
                         if cfg2.get("low_confidence")
-                        else " · avantaj nedemonstrat (Holm)"
+                        else " · avantaj nedemonstrat"
                         if (cfg2.get("multiplicity") or {}).get("proven") is False
                         else ""
                     )
@@ -3157,7 +3157,8 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
 
     Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
     țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
-    de decision.py), cu avertismentul Holm ca panoul de rezultate. Ratingul se
+    de decision.py), cu avertismentul de avantaj nedemonstrat ca panoul de
+    rezultate. Ratingul se
     dă numai dacă decizia de acum alege aceeași metodă: după un Re-Bench sau o
     schimbare a țintei 3+/4+ ar fi al altui scorer. Cu `urna2`, același lucru
     pentru numărul Joker: metoda Urnei 2, top-1, față de 5% la întâmplare."""
@@ -3223,7 +3224,7 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
             line + "; nicio metodă nu a bătut hazardul constant (încredere redusă)"
         )
     # Ca panoul de rezultate: pe low_confidence ajunge mesajul de mai sus; altfel
-    # o rată peste hazard care nu trece corecția Holm e spusă explicit.
+    # o rată peste hazard care nu trece testul binomial brut e spusă explicit.
     note = _multiplicity_note(entry)
     if note and _decision_low_confidence(entry) is not True:
         lines.append(note)

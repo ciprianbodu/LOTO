@@ -79,8 +79,10 @@ CONSISTENCY_THRESHOLD = 0.60  # method must beat random in ≥60% of windows
 # Poarta de consistență pe ferestre imbricate (10/30/60/100%) spune puțin: un
 # singur eveniment în ultimele 10% contează în 3 din 4 ferestre, iar cu ~50 de
 # candidați una trece aproape sigur din noroc. Avantajul se consideră demonstrat
-# numai dacă excesul de evenimente pe fereastra completă trece testul binomial
-# unilateral față de rata aleatoare, cu corecția Holm peste candidații celulei.
+# dacă excesul de evenimente pe fereastra completă trece testul binomial
+# unilateral față de rata aleatoare. Din 2026-11-14, la cererea explicită a
+# utilizatorului, verdictul se dă pe p-ul BRUT, FĂRĂ corecția Holm peste
+# candidații celulei (`holm_p` rămâne înregistrat, doar informativ).
 # Verdictul stă în `multiplicity.proven`; scorerul ales rămâne același.
 MULTIPLICITY_ALPHA = 0.05
 
@@ -1405,14 +1407,17 @@ def decide_optimal_config_for_pool(
             "test": "binomial unilateral pe fereastra completă, față de rata aleatoare",
             "candidates": len(excess_p),
             "p_value": round(excess_p[scorer], 6),
+            # Doar informativ din 2026-11-14 (Holm eliminat la cererea
+            # utilizatorului): cât ar fi fost p-ul după corecție.
             "holm_p": round(_holm[scorer], 6),
             "alpha": MULTIPLICITY_ALPHA,
-            "proven": _holm[scorer] < MULTIPLICITY_ALPHA,
+            "correction": "none",
+            "proven": excess_p[scorer] < MULTIPLICITY_ALPHA,
         }
         if not multiplicity["proven"]:
             rationale += (
-                f" [după corecția Holm pentru {len(excess_p)} candidați: "
-                f"p={_holm[scorer]:.3f} ≥ {MULTIPLICITY_ALPHA} — avantaj nedemonstrat]"
+                f" [fără corecție multiplă pentru {len(excess_p)} candidați: "
+                f"p={excess_p[scorer]:.3f} ≥ {MULTIPLICITY_ALPHA} — avantaj nedemonstrat]"
             )
 
     return {

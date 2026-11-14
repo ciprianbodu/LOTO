@@ -309,24 +309,26 @@ def _candidates_text(n) -> str:
 
 
 def _multiplicity_note(entry: dict) -> str | None:
-    """Avertismentul pentru un avantaj care nu trece corecția pentru candidați.
+    """Avertismentul pentru un avantaj care nu trece testul binomial brut.
 
     `decision.multiplicity.proven` False: excesul metodei alese pe fereastra
-    completă nu trece testul binomial după corecția Holm pentru toți candidații
-    pool-ului. None când decizia nu are câmpul (bench vechi) sau avantajul trece.
+    completă nu trece testul binomial pe p-ul brut, fără corecție pentru
+    candidații pool-ului (corecția Holm a fost eliminată la cererea
+    utilizatorului, 2026-11-14). None când decizia nu are câmpul (bench vechi)
+    sau avantajul trece. La decizii vechi citește `holm_p` ca p de rezervă.
     """
     mu = (entry or {}).get("multiplicity") or {}
     if mu.get("proven") is not False:
         return None
     try:
-        holm_p = float(mu.get("holm_p"))
+        p = float(mu.get("p_value", mu.get("holm_p")))
     except (TypeError, ValueError):
         return None
     return (
-        f"⚠️ Avantaj nedemonstrat: după corecția Holm pentru "
-        f"{_candidates_text(mu.get('candidates'))} testați pe acest pool, p = {holm_p:.2f} "
-        f"(prag {mu.get('alpha', 0.05)}). Metoda aleasă poate fi doar cea mai "
-        "norocoasă dintre ei."
+        "⚠️ Avantaj nedemonstrat: excesul pe fereastra completă nu trece "
+        f"testul binomial (p = {p:.2f}, prag {mu.get('alpha', 0.05)}, fără "
+        f"corecție pentru {_candidates_text(mu.get('candidates'))}). Metoda "
+        "aleasă poate fi doar cea mai norocoasă dintre ei."
     )
 
 
