@@ -22,6 +22,10 @@ de producție) și cele 50 de metode din modulele:
                            de verosimilitate (e-value prequential, unilateral
                            cald) pe fereastră de 104 extrageri — ipoteză pentru
                            bench, nu promovată
+    methods_selfcalib.py    1 metodă (al cincilea val, 2026-11-14): KT cu uitare
+                           + calibrare logistică online pe reziduul propriu —
+                           învățare și autocorectare prequentială; ipoteză
+                           pentru bench, nu promovată
 
 Metodele marcate `_uses_history_cutoffs` primesc opțional începutul zilei
 fiecărui rând prin `call_method`. Fără date, fiecare rând este un pas temporal.
@@ -156,6 +160,7 @@ def _load_extra_methods() -> None:
         ("methods_experimental", "EXPERIMENTAL_METHODS"),
         ("methods_bayes", "BAYES_METHODS"),
         ("methods_evalue", "EVALUE_METHODS"),
+        ("methods_selfcalib", "SELFCALIB_METHODS"),
     ):
         try:
             module = __import__(f"{__package__}.{modname}", fromlist=[attr])

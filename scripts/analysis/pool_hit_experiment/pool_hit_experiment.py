@@ -147,6 +147,7 @@ def production_methods() -> list[str]:
         "bayes_dirichlet_forget",
         "hedge_experts_mixture",
         "evalue_kelly_w104",
+        "selfcalib_online_logit",
     }
     return sorted(
         m

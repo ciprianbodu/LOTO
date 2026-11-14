@@ -54,7 +54,12 @@ from scripts.analysis.hit_evidence_2026_11_04 import (
 # metodele din registry" ar deveni retroactiv falsă. Registry-ul viu rămân
 # disponibil ca `_LIVE_METHODS`.
 _METHODS_AFTER_STUDY = frozenset(
-    {"bayes_dirichlet_forget", "hedge_experts_mixture", "evalue_kelly_w104"}
+    {
+        "bayes_dirichlet_forget",
+        "hedge_experts_mixture",
+        "evalue_kelly_w104",
+        "selfcalib_online_logit",
+    }
 )
 METHODS = {k: v for k, v in _LIVE_METHODS.items() if k not in _METHODS_AFTER_STUDY}
 
