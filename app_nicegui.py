@@ -4088,10 +4088,20 @@ def main_page() -> None:
                     if _game_spec_for(fn).game_id not in _sel:
                         continue
                     _last = _csv_last_date(df)
-                    ui.label(
-                        f"✅ {fn}: {len(df)} extrageri"
-                        + (f", ultima extragere {_last}" if _last else "")
-                        + (f"; încărcat {_at[fn]}" if fn in _at else "")
+                    _last_html = (
+                        render_html_safe(
+                            t", ultima extragere <span style='color:#38bdf8;font-weight:600'>{_last}</span>"
+                        )
+                        if _last
+                        else ""
+                    )
+                    _at_html = (
+                        render_html_safe(t"; încărcat {_at[fn]}") if fn in _at else ""
+                    )
+                    ui.html(
+                        render_html_safe(t"✅ {fn}: {len(df)} extrageri")
+                        + _last_html
+                        + _at_html
                     ).classes("text-caption text-positive")
                 _ignored = [
                     fn
