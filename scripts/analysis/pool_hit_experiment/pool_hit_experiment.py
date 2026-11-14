@@ -140,9 +140,14 @@ def production_methods() -> list[str]:
     from loto_enterprise.benchmark.methods import METHODS
 
     # Experimentul e preinregistrat (2026-10-02): protocolul lui nu crește
-    # tacit odată cu registry-ul. Valul adăugat după înregistrare (methods_bayes,
-    # 2026-11-08) nu face parte din celulele înregistrate.
-    _after_registration = {"bayes_dirichlet_forget", "hedge_experts_mixture"}
+    # tacit odată cu registry-ul. Valurile adăugate după înregistrare
+    # (methods_bayes, 2026-11-08; methods_evalue, 2026-11-14) nu fac parte
+    # din celulele înregistrate.
+    _after_registration = {
+        "bayes_dirichlet_forget",
+        "hedge_experts_mixture",
+        "evalue_kelly_w104",
+    }
     return sorted(
         m
         for m in METHODS

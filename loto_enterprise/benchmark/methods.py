@@ -18,6 +18,10 @@ de producție) și cele 50 de metode din modulele:
     methods_bayes.py        2 metode (al treilea val, 2026-11-08): estimator
                            bayesian Dirichlet cu uitare + mixtură Hedge online
                            de experți — ipoteze pentru bench, nu promovate
+    methods_evalue.py       1 metodă (al patrulea val, 2026-11-14): martingale
+                           de verosimilitate (e-value prequential, unilateral
+                           cald) pe fereastră de 104 extrageri — ipoteză pentru
+                           bench, nu promovată
 
 Metodele marcate `_uses_history_cutoffs` primesc opțional începutul zilei
 fiecărui rând prin `call_method`. Fără date, fiecare rând este un pas temporal.
@@ -151,6 +155,7 @@ def _load_extra_methods() -> None:
         ("methods_wave2", "WAVE2_METHODS"),
         ("methods_experimental", "EXPERIMENTAL_METHODS"),
         ("methods_bayes", "BAYES_METHODS"),
+        ("methods_evalue", "EVALUE_METHODS"),
     ):
         try:
             module = __import__(f"{__package__}.{modname}", fromlist=[attr])

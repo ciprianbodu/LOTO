@@ -47,12 +47,15 @@ from scripts.analysis.hit_evidence_2026_11_04 import (
 )
 
 # Protocolul acestui studiu este înghețat la registry-ul zilei de 2026-11-04
-# (53 de metode). Metodele adăugate ulterior (valul methods_bayes, 2026-11-08)
-# NU au făcut parte din protocolul executat și arhivat; fără această înghețare
-# semnătura cache-ului studiului (`sorted(METHODS)`) s-ar invalida tacit, iar
-# afirmația „studiul a rulat toate metodele din registry" ar deveni retroactiv
-# falsă. Registry-ul viu rămân disponibil ca `_LIVE_METHODS`.
-_METHODS_AFTER_STUDY = frozenset({"bayes_dirichlet_forget", "hedge_experts_mixture"})
+# (53 de metode). Metodele adăugate ulterior (valul methods_bayes, 2026-11-08;
+# valul methods_evalue, 2026-11-14) NU au făcut parte din protocolul executat
+# și arhivat; fără această înghețare semnătura cache-ului studiului
+# (`sorted(METHODS)`) s-ar invalida tacit, iar afirmația „studiul a rulat toate
+# metodele din registry" ar deveni retroactiv falsă. Registry-ul viu rămân
+# disponibil ca `_LIVE_METHODS`.
+_METHODS_AFTER_STUDY = frozenset(
+    {"bayes_dirichlet_forget", "hedge_experts_mixture", "evalue_kelly_w104"}
+)
 METHODS = {k: v for k, v in _LIVE_METHODS.items() if k not in _METHODS_AFTER_STUDY}
 
 GAMES = (
