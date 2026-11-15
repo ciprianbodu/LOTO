@@ -1,5 +1,16 @@
 @AGENTS.md
 
+Lucrare curentă: optimizare 5/40 la 21 variante (15.11.2026).
+Design pe 40 de numere, cu P(4+) global maxim 1,646788489% la exact 21
+variante; comparația C(7,5) avea 0,499689973%. Nu este selecție predictivă.
+Acțiunea este explicită pe rezultatul C(7,5); păstrează setările celorlalte
+jocuri și arată schimbarea garanției și taxele pe bilete.
+Validare: 7.257 teste trecute. 25 omise. 0 eșecuri și 0 erori; 219 fișiere. Python 3.15.2. trei copii/runtime-uri izolate. Include enumerarea celor 3.838.380 extrageri,
+WF, worker/cache, UI în browser și integrarea tuturor celor 13 jocuri.
+Raport: scripts/analysis/fixed_budget_540_2026-11-15.txt.
+UI și worker vor încărca împreună sursele noi la lansarea normală.
+
+Lucrări anterioare:
 Lucrare curenta: pool pana la universul jocului (30.10.2026), finalizata.
 Maxim 49 / 40 / 45, implicit pastrat 16 / 19 / 15; setari, worker, generare,
 WF si note UI adaptate. Validare cumulata: 3896 teste distincte trecute,
