@@ -439,139 +439,6 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
         ).classes("text-caption text-grey")
 
 
-def _fixed_budget_540_issue(game: str, data: dict) -> str | None:
-    """The proven comparison starts from the complete C(7,5), without filters."""
-    try:
-        spec = _game_spec_for(game, data)
-        if (not spec.is_romanian or spec.game_id != "5/40"
-                or str(data.get("country") or "RO").upper() != "RO"):
-            return "Comparația este disponibilă numai pentru Loto 5/40 din România."
-        pool = data.get("hard_core") or []
-        if (len(pool) != 7 or len(set(pool)) != 7
-                or any(isinstance(n, bool) or int(n) != n or not 1 <= int(n) <= 40 for n in pool)):
-            return "Comparația pornește de la sistemul complet de 7 numere și 21 variante."
-        variants = data.get("variants") or []
-        if len(variants) != 21:
-            return "Comparația cere exact 21 de variante distincte de câte 5 numere."
-        pool_set = set(pool)
-        blocks = set()
-        for variant in variants:
-            if (len(variant) != 5 or len(set(variant)) != 5
-                    or any(isinstance(n, bool) or int(n) != n for n in variant)
-                    or not set(variant).issubset(pool_set)):
-                return "Comparația cere exact 21 de variante distincte de câte 5 numere."
-            blocks.add(tuple(sorted(int(n) for n in variant)))
-        if len(blocks) != 21:
-            return "Comparația cere exact 21 de variante distincte de câte 5 numere."
-        from covering.dispatch import resolve_wheel_method
-        if resolve_wheel_method(21) != "hitcover":
-            return "Metoda de generare impusă în această sesiune nu folosește distribuirea certificată."
-        opts = _wf_generation_options(data)
-        restriction = (data.get("audit") or {}).get("restrict_base") or {}
-        if (opts["restrict_base_min"] or opts["restrict_base_max"]
-                or (restriction and not restriction.get("ignored"))):
-            return "Sistemul pe 40 de numere nu se aplică unei baze restrânse."
-        requested_run = ((data.get("audit") or {}).get("consecutive_limit") or {}).get("requested")
-        if opts["max_consecutive_run"] or requested_run:
-            return "Sistemul pe 40 de numere nu se aplică limitei de consecutive."
-    except (TypeError, ValueError, OverflowError):
-        return "Poolul sau variantele rezultatului nu permit această comparație."
-    return None
-
-
-def _fixed_budget_540_comparison(data: dict) -> dict:
-    from covering.probability import wheel_hit_probabilities
-
-    baseline = wheel_hit_probabilities(data["hard_core"], data["variants"], 6, 40)
-    total = math.comb(40, 6)
-    # The 21 certified blocks have pairwise intersections <= 1. Therefore the
-    # sets of six-number draws hitting >=4 on each block are disjoint.
-    p4 = 21 * (math.comb(5, 4) * math.comb(35, 2) + math.comb(35, 1)) / total
-    p5 = 21 * math.comb(35, 1) / total
-    return {"baseline_4": baseline["ticket"][4], "baseline_5": baseline["ticket"][5],
-            "new_4": p4, "new_5": p5, "category_i": 21 / math.comb(40, 5)}
-
-
-def _show_fixed_budget_540(fname: str, data: dict) -> None:
-    try:
-        issue = _fixed_budget_540_issue("5/40", data)
-        if issue:
-            raise ValueError(issue)
-        # Freeze the original source before the next generation clears STATE.
-        config_json = _fixed_budget_540_config(fname, data)
-        odds = _fixed_budget_540_comparison(data)
-    except (TypeError, ValueError, KeyError, OverflowError) as exc:
-        ui.notify(str(exc), type="warning")
-        return
-    price = _LOT.GAMES_BY_ID["5/40"].price
-    with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
-        ui.label("Aceleași 21 variante, șanse mai mari la 4+").classes("text-bold text-lg")
-        ui.label(
-            f"Loto 5/40: 21 variante distincte × {price:g} lei = {_thousands(21 * price)} lei în variante. "
-            "Numerele sunt distribuite pe întregul univers de 40 de numere."
-        )
-        ui.table(columns=[
-            {"name": "system", "label": "Sistem", "field": "system"},
-            {"name": "pool", "label": "Numere", "field": "pool"},
-            {"name": "p4", "label": "4+ pe cel puțin o variantă", "field": "p4"},
-            {"name": "p5", "label": "5 din cele 6 extrase", "field": "p5"},
-        ], rows=[
-            {"system": "Complet C(7,5), 21 variante", "pool": 7,
-             "p4": f"{100 * odds['baseline_4']:.6f}%", "p5": f"{100 * odds['baseline_5']:.6f}%"},
-            {"system": "21 variante distribuite", "pool": 40,
-             "p4": f"{100 * odds['new_4']:.6f}%", "p5": f"{100 * odds['new_5']:.6f}%"},
-        ], row_key="system").classes("w-full").props("dense wrap-cells")
-        ui.label(
-            f"Șanse exacte la extrageri uniforme, fără folosirea rezultatului de azi. "
-            f"Categoria I rămâne identică: {100 * odds['category_i']:.6f}% (5 din primele 5 extrase)."
-        ).classes("text-caption")
-        ui.label(
-            "Optimizarea urmărește frecvența extragerilor cu cel puțin un bilet cu 4+. "
-            "Numărul mediu de variante premiate pe categorie rămâne același; "
-            "această comparație nu dovedește că valoarea așteptată a premiilor crește. Distribuirea "
-            "nu prezice numerele extrase. Fiecare variantă conține numai 5 numere. "
-            f"Șansa de a nu obține niciun premiu rămâne {100 * (1 - odds['new_4']):.4f}%."
-        ).classes("text-caption")
-        ui.label(
-            "Se renunță la garanția completă pe cele 7 numere. Cu 21 variante pe 40 de numere, "
-            "nici 4, nici 5 numere aflate în pool nu asigură un bilet cu același număr de potriviri. "
-            "Crește șansa necondiționată de 4+ pe cel puțin un bilet; nu garantează câștigul."
-        ).classes("text-caption text-warning")
-        ui.label(
-            "105 lei în variante; 21 variante simple în agenție încap în 6 bilete: "
-            "3 lei taxe, total 108 lei. Dacă vechiul C(7,5) era jucat combinat pe un bilet, "
-            "totalul era 105,50 lei. Tarifele platformelor pot diferi."
-        ).classes("text-caption text-warning")
-        ui.label(
-            "Se generează numai Loto 5/40 din istoricul acestui rezultat. "
-            "Rezultatul nou afișat va conține numai acest joc; setările celorlalte jocuri rămân neschimbate."
-        ).classes("text-caption")
-
-        def generate():
-            dialog.close()
-            _submit_fixed_budget_540(config_json)
-
-        with ui.row():
-            ui.button("Generează cele 21 variante", on_click=generate)
-            ui.button("Închide", on_click=dialog.close).props("flat")
-    dialog.open()
-
-
-def _render_fixed_budget_540(fname: str, game: str, data: dict) -> None:
-    spec = _game_spec_for(game, data)
-    if not spec.is_romanian or spec.game_id != "5/40":
-        return
-    # Keep the targeted action out of unrelated systems and foreign lotteries.
-    if len(data.get("hard_core") or []) != 7 or len(data.get("variants") or []) != 21:
-        return
-    issue = _fixed_budget_540_issue(game, data)
-    if issue:
-        ui.label(f"Comparația la același număr de variante: {issue}").classes("text-caption text-grey")
-        return
-    ui.button("Aceleași 21 variante, șanse mai mari la 4+",
-              on_click=lambda: _show_fixed_budget_540(fname, data)).props("outline no-caps")
-
-
 def _lr_schemes_for(game: str, data: dict) -> list:
     """Schemele reduse LR pentru numerele pool-ului rezultatului; [] la alte țări."""
     pool = {int(x) for x in (data.get("hard_core") or [])}
@@ -872,37 +739,6 @@ def _render_lr_layouts(game: str, data: dict, schemes) -> None:
             ui.label(text).classes("font-mono text-sm").style("white-space: pre")
 
 
-def _certified_fixed_budget_540_lines(game: str, data: dict) -> list[str]:
-    """Recheck the actual tickets; stored probability fields are never trusted."""
-    spec = _game_spec_for(game, data)
-    if not spec.is_romanian or spec.game_id != "5/40":
-        return []
-    evidence = (data.get("audit") or {}).get("fixed_budget_540") or {}
-    positions = evidence.get("position_pool") if isinstance(evidence, dict) else None
-    pool, variants = data.get("hard_core") or [], data.get("variants") or []
-    try:
-        if positions is None or len(pool) != 40 or len(set(pool)) != 40 or set(pool) != set(positions):
-            return []
-        from covering.fixed_budget_540 import fixed_budget_540_certificate
-
-        certificate = fixed_budget_540_certificate(positions, variants, draw_n=6, max_num=40)
-    except (ImportError, TypeError, ValueError, OverflowError):
-        return []
-    if certificate is None:
-        return []
-    return [
-        "Șanse exacte la o extragere uniformă pentru cele 21 variante de câte 5 numere:",
-        " · ".join(f"{t}+ pe cel puțin o variantă: {100 * certificate['ticket'][t]:.6f}%" for t in (3, 4, 5)),
-        "4+ și 5+ ating limita maximă la 21 de variante distincte. "
-        "Se urmărește frecvența extragerilor cu cel puțin un bilet premiat, nu un câștig mediu mai mare.",
-        f"Categoria I: {100 * 21 / math.comb(40, 5):.6f}% (aceeași șansă pentru orice 21 variante distincte). "
-        "5+ de mai sus numără toate cele 6 extrase; categoria I cere primele 5. "
-        "3 numere nu aduc premiu la 5/40.",
-        "Poolul conține toate cele 40 de numere, dar fiecare bilet are numai 5. "
-        "Niciun premiu nu este garantat; acoperirea condiționată nu mai este cea a sistemului complet de 7 numere.",
-    ]
-
-
 def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     """Same exact, unconditional ticket odds in the UI and the saved report."""
     from covering.probability import MAX_EXACT_POOL, wheel_hit_probabilities
@@ -915,8 +751,6 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     pick = _ticket_pick(game)
     is_joker = "joker" in str(game).lower()
     if len(pool) > MAX_EXACT_POOL:
-        if certified_lines := _certified_fixed_budget_540_lines(game, data):
-            return certified_lines
         try:
             pool_set = {int(n) for n in pool}
             valid = (
@@ -2055,7 +1889,6 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
         _render_adaptive(audit)
 
     _render_cost(game, data)
-    _render_fixed_budget_540(fname, game, data)
 
     if audit:
         _render_stages(audit)

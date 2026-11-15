@@ -619,20 +619,6 @@ class PipelineMixin:
             condition=wheel_condition,
         )
 
-        # Only the exact frozen design can advertise its independently
-        # enumerated probabilities on a pool larger than the subset-DP limit.
-        self.audit.pop("fixed_budget_540", None)
-        if self.game_type == "5/40" and len(self.hard_core) == 40 and len(lines) == 21:
-            from covering.common import _sorted_pool
-            from covering.fixed_budget_540 import fixed_budget_540_certificate
-
-            certificate = fixed_budget_540_certificate(
-                _sorted_pool(self.hard_core, wheeling_scores), lines,
-                draw_n=int(self.params["draw_n"]), max_num=int(self.params["max_n"]),
-            )
-            if certificate is not None:
-                self.audit["fixed_budget_540"] = certificate
-
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
         # putea sparge garanția de acoperire. Dacă vreodată se reintroduce unul,
         # foloseşte `wheeling_methods.filter_preserving_coverage` (scoate bilete doar

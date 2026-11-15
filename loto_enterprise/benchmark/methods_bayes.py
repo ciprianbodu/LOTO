@@ -135,7 +135,9 @@ def score_hedge_experts_mixture(draws_2d, max_num):
     logw -= logw.max()
     w = np.exp(logw)
     w /= w.sum()
-    return vector_to_scores(w @ p, v)
+    # Remove the common uniform offset before min-max: a dominant uniform
+    # expert otherwise rounds away the informative, nearly-flat residual.
+    return vector_to_scores(w @ (p - 1.0 / v), v)
 
 
 BAYES_METHODS = make_registry(

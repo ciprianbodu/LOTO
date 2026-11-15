@@ -394,15 +394,6 @@ def _wheel_sig(
             )
             else "lp2"
         )
-        from covering.fixed_budget_540 import fixed_budget_540_signature
-
-        draw_n, max_num = _WF_DRAW_UNIVERSE.get(game_type, (None, None))
-        packed = fixed_budget_540_signature(
-            int(pool_size), int(_WF_PICK.get(game_type) or 6), g, cap,
-            condition, draw_n, max_num,
-        )
-        if packed and (not requested or requested == "hitcover"):
-            revision += "|" + packed
         return f"constructive_cover|{geometry}|rt1|{revision}"
     try:
         from wheeling_methods import (

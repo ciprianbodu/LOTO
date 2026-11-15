@@ -41,6 +41,11 @@ def lookback_pct(lookback_percent) -> int | str:
         return 100
 
 
+def method_cache_semantics(name) -> str:
+    """Numerical revisions shared by method-specific cache namespaces."""
+    return "|hedge-center1" if name == "hedge_experts_mixture" else ""
+
+
 def scorer_semantics(config: dict) -> str:
     """Invalidate only decisions using a scorer whose output semantics changed.
 
@@ -59,4 +64,6 @@ def scorer_semantics(config: dict) -> str:
     suffix = "|dmd-svd-ties1" if "dmd_forecast" in names else ""
     if "interval_extrema_k16" in names:
         suffix += "|interval-days1"
+    if "hedge_experts_mixture" in names:
+        suffix += method_cache_semantics("hedge_experts_mixture")
     return suffix

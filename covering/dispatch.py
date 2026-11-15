@@ -210,19 +210,6 @@ def generate_wheel(
     wheel, cov = _generate_wheel(
         method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
     )
-    from covering.fixed_budget_540 import (
-        fixed_budget_540_signature,
-        improve_fixed_budget_540,
-    )
-
-    if (method or "").strip().lower() == "hitcover" and fixed_budget_540_signature(
-        len(pool), pick, guarantee, max_variants, condition, draw_n, max_num
-    ):
-        improved, improved_cov = improve_fixed_budget_540(
-            _sorted_pool(pool, scores), wheel, guarantee
-        )
-        if improved_cov is not None:
-            wheel, cov = improved, improved_cov
     if max_num and scores and wheel:
         order_scores = scores
         if (method or "").strip().lower() in {"weighted", "multihit"}:
