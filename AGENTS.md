@@ -2070,6 +2070,16 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Optimizare 5/40 la 21 variante — 2026-11-15
+
+Distribuirea nouă pe toate cele 40 de numere este o optimizare de geometrie a biletelor, fără scorer nou. Pentru 21 variante distincte de 5 numere, perechile au intersecție de cel mult un număr: evenimentele 4+ nu se suprapun la șase extrase. P(4+) = 1,646788489%, limita globală la acest număr de variante; față de C(7,5), 0,499689973%, factorul este 3,295620438. P(5 din toate șase) = 0,019148703%; categoria I rămâne 21/C(40,5). Poolul de 40 are trivial toate șase extrase, astfel că indicatorul relevant este cel mai bun bilet. Nu există garanția unui premiu sau dovada creșterii valorii așteptate.
+
+`covering/fixed_budget_540.py` certifică numai designul înghețat și incumbentele enumerate integral. `dispatch` aplică etapa doar la auto/hitcover, pool40/pick5/draw6/max40/cap21, garanție 4 sau 5 și condiție clasică. Acoperirea condiționată și toate pragurile sunt păstrate față de constructorul anterior. Schema nu este LR și nu modifică fișierele LR. Auditul include ordinea pozițiilor; UI recalculează certificatul din biletele actuale. Cheia WF are sufixul `fb540-21-v1-1b354b956891`, preluat și de worker; alte configurații nu sunt invalidate.
+
+Acțiunea UI apare numai la un rezultat RO 5/40 complet C(7,5), fără bază restrânsă sau consecutive. Dialogul compară 21 variante, nu costul total: 105 lei în variante, potențial 108 lei cu șase bilete fizice, față de 105,50 lei la combinata pe un bilet. Generează numai 5/40 din sursa rezultatului, fără mutarea plafonului global sau a setărilor celorlalte jocuri. Override-urile de metodă diferite de hitcover sunt refuzate. Nu este un nou mod automat implicit.
+
+Validare: 7.257 teste trecute. 25 omise. 0 eșecuri și 0 erori; 219 fișiere. Python 3.15.2. trei copii/runtime-uri izolate. Testele noi portabile sunt în `tests/test_fixed_budget_540.py` și `tests/test_fixed_budget_540_ui.py`; conțin enumerarea tuturor C(40,6)=3.838.380 extrageri, WF real, worker separat și configurația UI izolată. Detalii: `scripts/analysis/fixed_budget_540_2026-11-15.txt`. După actualizare, UI și worker trebuie încărcate împreună prin lansatorul normal, nu doar prin refresh de browser.
+
 ## 3. Arhitectura
 
 ```text

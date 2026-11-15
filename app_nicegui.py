@@ -225,16 +225,17 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
 
 
 def submit_generation(
-    pure: bool = False, sim_depth_per_game: dict | None = None
+    pure: bool = False, sim_depth_per_game: dict | None = None,
+    *, config_json: str | None = None,
 ) -> None:
     if STATE.get("virtual_wf_running"):
         ui.notify("Analiza virtuală este în curs; așteaptă sau anulează.", type="warning")
         return
-    if not STATE["datasets"]:
+    if config_json is None and not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
         return
     _selected = {g.game_id for g in _selected_games()}
-    if not any(_game_spec_for(fn).game_id in _selected for fn, _ in STATE["datasets"]):
+    if config_json is None and not any(_game_spec_for(fn).game_id in _selected for fn, _ in STATE["datasets"]):
         ui.notify(
             f"Niciun istoric încărcat pentru {_country_label()} (jocurile bifate). "
             f"Folosește «📂 Încarcă istoricul {_country_label()}».",
@@ -243,6 +244,37 @@ def submit_generation(
         return
     if STATE["active_job_id"]:
         ui.notify("Există deja un job în rulare.", type="warning")
+        return
+    try:
+        cfg = config_json if config_json is not None else _build_config_json(sim_depth_per_game)
+        if config_json is not None:
+            from covering.dispatch import resolve_wheel_method
+            if resolve_wheel_method(21) != "hitcover":
+                raise ValueError("Metoda de generare impusă în această sesiune nu folosește distribuirea certificată.")
+            prepared = json.loads(cfg)
+            datasets = prepared.get("datasets")
+            if not isinstance(datasets, list) or len(datasets) != 1:
+                raise ValueError("Configurația pregătită trebuie să conțină numai Loto 5/40.")
+            dataset = datasets[0]
+            tasks = dataset.get("tasks")
+            if not isinstance(tasks, list) or len(tasks) != 1:
+                raise ValueError("Configurație Loto 5/40 invalidă.")
+            task = tasks[0]
+            if (task.get("game_label") != "5/40" or task.get("country") != _LOT.RO
+                    or task.get("pool_size") != 40 or task.get("max_variants") != 21
+                    or task.get("guarantee") != 5 or task.get("wheel_condition") != 0
+                    or task.get("restrict_base_min") or task.get("restrict_base_max")
+                    or task.get("max_consecutive_run")):
+                raise ValueError("Configurația pregătită nu respectă sistemul de 21 variante.")
+            frame = pd.read_json(io.StringIO(dataset["df_json"]), orient="split", convert_dates=False)
+            if frame.empty or not str(dataset.get("fname") or ""):
+                raise ValueError("Lipsește istoricul rezultatului Loto 5/40.")
+            from loto_enterprise.core.draw_validation import valid_draw_matrix
+            _draws, valid = valid_draw_matrix(frame, [f"n{i}" for i in range(1, 7)], draw_n=6, max_num=40)
+            if not bool(valid.all()):
+                raise ValueError("Istoricul Loto 5/40 conține extrageri invalide.")
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        ui.notify(f"Nu pot pregăti generarea: {exc}", type="negative")
         return
     with STATE_LOCK:
         # Un walk-forward încă în rulare aparține rezultatului vechi: îl facem
@@ -256,7 +288,6 @@ def submit_generation(
         STATE["retro_meta"] = {}
         STATE["wf_status"] = ""
     ensure_worker_running()
-    cfg = _build_config_json(sim_depth_per_game)
     job_id = submit_job("pipeline", cfg)
     STATE["active_job_id"] = int(job_id)
     STATE["job_start_time"] = time.time()
@@ -264,6 +295,37 @@ def submit_generation(
     STATE["wf_elapsed"] = None  # reset; se fixează la finalul walk-forward
     ui.notify(f"Job #{job_id} trimis.", type="positive")
     _refresh_status()
+
+
+def _fixed_budget_540_config(fname: str, data: dict) -> str:
+    """Freeze one displayed 5/40 source; never change the shared game settings."""
+    issue = _fixed_budget_540_issue("5/40", data)
+    if issue:
+        raise ValueError(issue)
+    frame = _result_source(fname)
+    if frame is None or frame.empty:
+        raise ValueError("Istoricul folosit de acest rezultat nu mai este disponibil.")
+    frame = frame.copy(deep=True)
+    options = _wf_generation_options(data)
+    task = {
+        "game_label": "5/40", "country": _LOT.RO,
+        "pool_size": 40, "guarantee": 5, "max_variants": 21,
+        "wheel_condition": 0,
+        "lookback": data.get("lookback", (data.get("audit") or {}).get("lookback_pct", 0)),
+        "recent_penalty_draws": options["recent_penalty_draws"],
+        "recent_penalty_factor": options["recent_penalty_factor"],
+        "restrict_base_min": 0, "restrict_base_max": 0,
+        "max_consecutive_run": 0,
+        "sim_depth_pct": 30, "pure_bench_mode": True,
+        "bench_hit_target": _clamped_bench_target(),
+    }
+    datasets = [{"fname": str(fname), "df_json": frame.to_json(orient="split"), "tasks": [task]}]
+    digest = hashlib.sha256(json.dumps(datasets, sort_keys=True).encode("utf-8")).hexdigest()
+    return json.dumps({"input_hash": digest, "use_cache": False, "datasets": datasets})
+
+
+def _submit_fixed_budget_540(config_json: str) -> None:
+    submit_generation(config_json=config_json)
 
 
 def apply_autopilot_and_generate() -> None:
