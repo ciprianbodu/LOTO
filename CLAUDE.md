@@ -1,14 +1,20 @@
 @AGENTS.md
 
-Lucrare curentă: optimizare 5/40 la 21 variante (15.11.2026).
-Design pe 40 de numere, cu P(4+) global maxim 1,646788489% la exact 21
-variante; comparația C(7,5) avea 0,499689973%. Nu este selecție predictivă.
-Acțiunea este explicită pe rezultatul C(7,5); păstrează setările celorlalte
-jocuri și arată schimbarea garanției și taxele pe bilete.
-Validare: 7.257 teste trecute. 25 omise. 0 eșecuri și 0 erori; 219 fișiere. Python 3.15.2. trei copii/runtime-uri izolate. Include enumerarea celor 3.838.380 extrageri,
-WF, worker/cache, UI în browser și integrarea tuturor celor 13 jocuri.
-Raport: scripts/analysis/fixed_budget_540_2026-11-15.txt.
-UI și worker vor încărca împreună sursele noi la lansarea normală.
+Lucrare curentă: verificare 4+/5+/6+ exclusiv pe scheme reduse LR (15.11.2026).
+Fluxul LR existent este păstrat pentru toate cele trei jocuri. Acțiunea separată
+cu 21 de variante simple și etapa specială non-LR sunt retrase integral.
+Pornirea folosește codurile confirmate: 6/49 Cod 48, pool 9, 12 variante;
+5/40 Cod 16, pool 8, 21 variante; Joker Cod 24, pool 10, 14 variante.
+Bugetul se raportează la codul LR, nu la sistemul complet intern. Catalogul
+și toate partițiile acestor bugete în coduri LR nu oferă dominanță simultană
+4+/5+/6+ la același număr de variante ori mai puține, la extrageri uniforme.
+Nu este demonstrată o creștere a hiturilor; studiile LR existente nu justifică
+un scorer nou. Schemele oficiale, istoricele și deciziile sunt păstrate.
+Validare: 7.223 teste trecute, 25 omise, zero eșecuri și erori, 218 fișiere, Python 3.15.2. UI/worker real pe 9/8/10, izolat.
+Corecția numerică Hedge și cache-urile sale au fost verificate
+independent; nu se afirmă o creștere a hiturilor.
+Testele noi/adaptate rămân locale, în afara commitului.
+Raport: scripts/analysis/lr_only_2026-11-15.md.
 
 Lucrări anterioare:
 Lucrare curenta: pool pana la universul jocului (30.10.2026), finalizata.

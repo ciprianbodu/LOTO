@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
+from loto_enterprise.core.wf_sig import method_cache_semantics
 from runtime_paths import RUNTIME_ROOT
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,7 @@ def _fold_key(
     raw = (
         f"{CACHE_VERSION}::{csv_hash}::{game_key}::{method}::{percentile}::{is_random}"
     )
+    raw += method_cache_semantics(method)
     if _CACHE_VARIANT["block_size"] != _DEFAULT_BLOCK_SIZE:
         raw += f"::bs{_CACHE_VARIANT['block_size']}"
     if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:

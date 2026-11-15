@@ -2070,15 +2070,46 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
-### Optimizare 5/40 la 21 variante — 2026-11-15
+### Obiectiv 4+/5+/6+ exclusiv pe scheme LR — 2026-11-15
 
-Distribuirea nouă pe toate cele 40 de numere este o optimizare de geometrie a biletelor, fără scorer nou. Pentru 21 variante distincte de 5 numere, perechile au intersecție de cel mult un număr: evenimentele 4+ nu se suprapun la șase extrase. P(4+) = 1,646788489%, limita globală la acest număr de variante; față de C(7,5), 0,499689973%, factorul este 3,295620438. P(5 din toate șase) = 0,019148703%; categoria I rămâne 21/C(40,5). Poolul de 40 are trivial toate șase extrase, astfel că indicatorul relevant este cel mai bun bilet. Nu există garanția unui premiu sau dovada creșterii valorii așteptate.
+Utilizatorul joacă numai schemele reduse oficiale LR la toate cele trei jocuri.
+Evaluarea privește variantele codului LR, cu maparea numerică crescătoare a
+terminalului: 4+/5+/6 la 6/49, 4+/5 la 5/40 și Joker, inclusiv bila Joker
+la evaluarea premiilor. Hiturile de pool și wheel-ul intern sunt indicatori
+diferiți și nu stabilesc numărul variantelor LR efectiv jucate.
 
-`covering/fixed_budget_540.py` certifică numai designul înghețat și incumbentele enumerate integral. `dispatch` aplică etapa doar la auto/hitcover, pool40/pick5/draw6/max40/cap21, garanție 4 sau 5 și condiție clasică. Acoperirea condiționată și toate pragurile sunt păstrate față de constructorul anterior. Schema nu este LR și nu modifică fișierele LR. Auditul include ordinea pozițiilor; UI recalculează certificatul din biletele actuale. Cheia WF are sufixul `fb540-21-v1-1b354b956891`, preluat și de worker; alte configurații nu sunt invalidate.
+Extinderea poolului este autorizată numai în limita aceluiași număr real de
+variante, folosind coduri oficiale, cu garanția condiționată recalculată.
+Codurile confirmate sunt 6/49 Cod 48 (9 numere, 12 variante), 5/40 Cod 16
+(8 numere, 21 variante), Joker Cod 24 (10 numere, 14 variante). Pornirea UI
+revine la aceste dimensiuni 9/8/10; câmpurile rămân editabile în sesiune.
+`Lottery.default_pool` păstrează reperele maxime LR 16/19/15 folosite și
+pentru nota poolurilor mari. Configurația jobului păstrează poolul, fără
+un cod LR ales explicit; bugetul LR nu se deduce din wheel-ul intern.
 
-Acțiunea UI apare numai la un rezultat RO 5/40 complet C(7,5), fără bază restrânsă sau consecutive. Dialogul compară 21 variante, nu costul total: 105 lei în variante, potențial 108 lei cu șase bilete fizice, față de 105,50 lei la combinata pe un bilet. Generează numai 5/40 din sursa rezultatului, fără mutarea plafonului global sau a setărilor celorlalte jocuri. Override-urile de metodă diferite de hitcover sunt refuzate. Nu este un nou mod automat implicit.
+Catalogul actual cu 33 de scheme nu conține două coduri ale aceluiași joc
+cu exact același număr de variante. Nici înlocuirea unui singur cod cu un
+alt cod mai ieftin nu domină simultan pragurile 4+/5+/6+. O creștere 4+
+însoțită de pierdere la 5+/6+ nu satisface obiectivul. Această comparație
+a codurilor este completată, pentru bugetele confirmate 12/21/14, cu toate
+partițiile în coduri oficiale întregi. Limita reuniunii evenimentelor exclude
+o îmbunătățire simultană și pentru aceste portofolii, oricare ar fi numerele
+alese în ipoteza extragerilor uniforme. Concluzia nu se extinde la alte bugete.
 
-Validare: 7.257 teste trecute. 25 omise. 0 eșecuri și 0 erori; 219 fișiere. Python 3.15.2. trei copii/runtime-uri izolate. Testele noi portabile sunt în `tests/test_fixed_budget_540.py` și `tests/test_fixed_budget_540_ui.py`; conțin enumerarea tuturor C(40,6)=3.838.380 extrageri, WF real, worker separat și configurația UI izolată. Detalii: `scripts/analysis/fixed_budget_540_2026-11-15.txt`. După actualizare, UI și worker trebuie încărcate împreună prin lansatorul normal, nu doar prin refresh de browser.
+Fluxul folosește panourile și desfășurările LR existente. Acțiunea separată
+pentru 21 de variante simple și etapa specială de distribuire pe 40 de
+numere au fost retrase. Schemele oficiale, deciziile, poolurile istorice
+și extragerile curente rămân intacte. Cache-urile baseline sunt compatibile;
+semnăturile worker/WF separă rezultatele fostei etape speciale.
+
+Studiile LR din 4–5 noiembrie nu justifică promovarea unui scorer nou:
+rezultatele retrospective nu confirmă un avantaj stabil la hiturile LR.
+Raport și comparație reproductibilă: `scripts/analysis/lr_only_2026-11-15.md`.
+Validare: 7.223 teste trecute, 25 omise, zero eșecuri și erori, 218 fișiere, Python 3.15.2. UI HTTP 200 și worker real pe 9/8/10,
+în runtime-uri izolate. Testele noi/adaptate rămân locale.
+Suita a identificat și corectat numeric mixtura Hedge; tagul
+`hedge-center1` separă numai cache-urile metodei afectate.
+Detaliile și limitele sunt consemnate în raport.
 
 ## 3. Arhitectura
 

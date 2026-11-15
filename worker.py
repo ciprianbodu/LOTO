@@ -366,6 +366,55 @@ def _task_norm(task: dict, lot) -> dict:
     return _normalize_task(task, int(lot.pick_n), max_n=cap, pool_max=int(lot.max_pool))
 
 
+def _hedge_cache_semantics(lot, pool_size: int) -> str:
+    """Revise only jobs whose selected decision can contain the corrected scorer.
+
+    Inspect the nominal cell before the target fallback: a queued task may
+    set a different target later. Legacy reserves are conservative, while
+    unrelated games and pool cells keep their existing cache key.
+    """
+    from loto_enterprise.core.method_selector import (
+        _auto_pilot_entry, _load_config, decision_path_for,
+    )
+    from loto_enterprise.core.wf_sig import method_cache_semantics
+
+    path = PROJECT_ROOT / "best_methods.json" if lot.is_romanian else decision_path_for(lot.country)
+    games = _load_config(str(path)).get("games", {})
+    choices = [(lot.bench_key, pool_size)]
+    if lot.bench_key_urna2:
+        choices.append((lot.bench_key_urna2, 1))
+    tag = method_cache_semantics("hedge_experts_mixture")
+    for key, size in choices:
+        game = games.get(key, {})
+        if not isinstance(game, dict):
+            continue
+        entry = _auto_pilot_entry(game, size)
+        if entry:
+            names = [entry.get("scorer")]
+            ensemble = entry.get("ensemble") or []
+            if isinstance(ensemble, dict):
+                names.extend(ensemble)
+            elif isinstance(ensemble, list):
+                names.extend(item.get("method") if isinstance(item, dict) else item
+                             for item in ensemble)
+            if any(method_cache_semantics(name) for name in names if isinstance(name, str)):
+                return tag
+            continue
+        # Old decision schema: only this pool's reserves and game-wide fallbacks.
+        names = []
+        best = game.get("winners_per_pool_best") or {}
+        selected = best.get(f"k{size}", {}) if isinstance(best, dict) else {}
+        if isinstance(selected, dict):
+            names.append(selected.get("winner"))
+        per_pool = game.get("winners_per_pool") or {}
+        if isinstance(per_pool, dict):
+            names.append(per_pool.get(f"k{size}"))
+        names.extend(game.get(field) for field in ("overall_winner", "overall_winner_bl", "winner"))
+        if any(method_cache_semantics(name) for name in names):
+            return tag
+    return ""
+
+
 def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
     cache_key = f"{PIPELINE_CACHE_VERSION}:{input_hash}" if input_hash else ""
     if not cache_key:
@@ -397,6 +446,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                digest.update(_hedge_cache_semantics(lot, norm["pool_size"]).encode())
                 previous_cap = 19 if lot.geometry == "5/40" else 16
                 large_pool = large_pool or (
                     lot.is_romanian and norm["pool_size"] > previous_cap

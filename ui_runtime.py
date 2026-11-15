@@ -174,16 +174,16 @@ _RESTRICT_BASE_GAMES = (
 )
 _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_BASE_GAMES}
 
-# Pool-ul pe joc (2026-10-22): un câmp pentru fiecare joc românesc, cu maximul
-# jocului (`Lottery.max_pool`: 49 / 40 / 45) și implicit cel mai mare cod LR
-# al lui (6/49 Cod 59: 16; 5/40 Cod 48: 19; Joker Cod 12: 15). Jocurile
-# altor țări folosesc câmpul comun `pool_size_val`.
+# Pool-ul pe joc: câmpuri separate pentru România, cu limitele jocului
+# (`Lottery.max_pool`: 49 / 40 / 45). La pornire revenim la schemele oficiale
+# jucate de utilizator: 6/49 Cod 48 (9 numere), 5/40 Cod 16 (8 numere),
+# Joker Cod 24 (10 numere). Aceste valori nu sunt maximele catalogului LR;
+# `Lottery.default_pool` rămâne separat, fiind folosit și pentru notele de catalog.
+# Jocurile altor țări folosesc câmpul comun `pool_size_val`.
 # Minimul UI (2026-11-11): cel mai mic cod LR oficial (`Lottery.min_pool`:
 # 9 la 6/49 = Cod 48; 7 la 5/40 = Cod 15; 7 la Joker = Cod 45).
 _POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
-_POOL_DEFAULTS = {
-    label: _LOT.GAMES_BY_ID[label].default_pool for label in _POOL_KEYS
-}
+_POOL_DEFAULTS = {"6/49": 9, "5/40": 8, "joker": 10}
 
 
 def _pool_size_for(game) -> int:
