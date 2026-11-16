@@ -213,6 +213,13 @@ def _render_stages(audit: dict) -> None:
             prev = pool_set
 
 
+def _result_pool_size(data: dict) -> int:
+    """Actual distinct numbers; old recovered payloads may store the requested size."""
+    return len({int(n) for n in (data.get("hard_core") or [])}) or int(
+        data.get("pool_size") or 0
+    )
+
+
 def _generated_system_identity(game: str, data: dict) -> tuple[str, str]:
     """Name the actual block set; a matching size or guarantee is not evidence."""
     variants = data.get("variants") or []
@@ -419,9 +426,7 @@ def _render_cost_foreign(game: str, data: dict, spec) -> None:
     """Costul unui joc din altă țară: tarif și monedă din registru; fără scheme
     reduse (sunt ale Loteriei Române); tarif neverificat → fără cifre."""
     pick = spec.pick_n
-    pool_used = len({int(n) for n in (data.get("hard_core") or [])}) or int(
-        data.get("pool_size") or 0
-    )
+    pool_used = _result_pool_size(data)
     full_vars = math.comb(pool_used, pick) if pool_used >= pick else 0
     variants = data.get("variants") or []
     if spec.price is None:
@@ -1269,7 +1274,7 @@ def _build_report() -> str:
             out.append(f"\n{indent}{'-' * 60}\n{indent}{label}\n{indent}{'-' * 60}")
         pool = sorted(int(x) for x in (d.get("hard_core") or []))
         stats = d.get("hard_core_stats") or {}
-        eff = len(set(pool)) or d.get("pool_size")
+        eff = _result_pool_size(d)
         req = d.get("pool_size_requested")
         # Garanția EFECTIV folosită la wheel (audit.wheel_guarantee_used) vs cea
         # CERUTĂ din setări — pot diferi (rezultate vechi/recuperate, engine-ul
@@ -1694,7 +1699,7 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
             ui.label(f"ℹ️ {_training_only_note(_lot_key)}.").classes("text-caption text-warning")
     pool = data.get("hard_core") or []
     stats = data.get("hard_core_stats") or {}
-    eff = data.get("pool_size")
+    eff = _result_pool_size(data)
     req = data.get("pool_size_requested")
     variants = data.get("variants") or []
     if route_note := _large_pool_route_note(game, data):

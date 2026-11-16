@@ -2070,6 +2070,40 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Mail legat de job și ratinguri exacte — 2026-11-16
+
+- La finalul jobului se capturează numerele, codul LR, auditul, sursele,
+  data, deciziile și ratingurile înaintea threadului SMTP. Un rezultat nou
+  sau modificarea UI nu mai poate înlocui conținutul mesajului deja pregătit.
+- Ratingul folosește foldurile numerice și funcțiile canonice de agregare,
+  Wilson și baseline, cu verificarea celulei exacte și a consistenței fișierelor.
+  Nu se recuperează cifre din `rationale`; datele incompatibile dau rating
+  indisponibil. Textul distinge hiturile în pool, Urna 2 și costul variantelor
+  de taxa pe bilet. Rezultatele goale/invalide nu declanșează trimiterea.
+- Validare finală: 7.376 trecute, 25 omise, zero eșecuri, 224 fișiere,
+  Python 3.15.2; worker pe 13 jocuri, UI HTTP 200 și preview real capturat
+  prin transport simulat. SMTP blocat, zero trimiteri reale. Testele rămân
+  locale în `_TESTE/`; cele 19 căi protejate sunt neschimbate. Verificarea
+  vizuală finală confruntă toate cele 47 de variante ale jobului 42 cu workerul.
+- Raport: `scripts/analysis/mail_output_fix_2026-11-16.md`.
+
+### Audit global hituri și rezultate UI — 2026-11-16
+
+- Semnătura motorului de benchmark include reviziile numerice per-metodă
+  din `method_cache_semantics`; deciziile anterioare corecției Hedge nu mai
+  sunt declarate actuale doar pentru că lista metodelor și v24 coincid.
+- Un istoric precedent restaurat nu mai stabilește poolul clasamentului
+  rezultatului curent. Istoricul își păstrează poolul propriu și este etichetat.
+  Dimensiunea efectivă din numere distincte este comună etichetei, clasamentului,
+  costului și raportului; `pool_size` este rezervă pentru payloaduri fără numere.
+- Revalidate: 277 fișiere/519 designuri, 33 LR, 53.557 comparații exacte;
+  57 metode, 912 probe de paritate, worker pe 13 jocuri și UI HTTP 200.
+  Verificarea vizuală confruntă toate cele 47 de variante afișate cu workerul.
+- Validare finală: 7.327 trecute, 25 omise, zero eșecuri, 222 fișiere locale,
+  Python 3.15.2. Testele rămân locale în `_TESTE/`; schemele și scorerii sunt
+  păstrați. Benchmarkul pornit separat în aplicație nu a fost oprit/restaurat.
+- Raport: `scripts/analysis/global_hits_audit_2026-11-16.md`.
+
 ### Glisoare pe coduri LR, generare fizică și istoric — 2026-11-16
 
 - La cererea explicită nouă a utilizatorului, fiecare poziție a glisoarelor RO

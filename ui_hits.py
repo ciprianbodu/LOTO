@@ -22,6 +22,7 @@ from ui_results import (
     _method_from_bench,
     _partial_wf_note,
     _random_rate_hypergeo,
+    _result_pool_size,
     _scorer_fallback_reason,
     _thousands,
     _ticket_pick,
@@ -1127,7 +1128,7 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
 
     # Pool-ul din rezultatul afișat rămâne reperul și dacă utilizatorul
     # a schimbat între timp setarea pentru următoarea generare.
-    _pn = int(data.get("pool_size") or len(data.get("hard_core") or []))
+    _pn = _result_pool_size(data)
     _spec = _game_spec_for(game, data)
     if _spec.is_romanian:
         _render_bench_leaderboard(game, pool_size=_pn or None)
@@ -1228,6 +1229,8 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
             analysis.on_value_change(lambda event: STATE.__setitem__("analysis_expanded", bool(event.value)))
             _render_virtual_controls()
             if status := STATE.get("virtual_wf_status"):
+                if STATE.get("virtual_wf_previous"):
+                    status = f"Istoric precedent: {status}"
                 ui.label(status).classes("text-caption")
             groups = {}
             for fname, outs in results_bundle:
@@ -1245,15 +1248,24 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                 spec, current, old = group["spec"], group["current"], group["old"]
                 if current:
                     if spec:
+                        leaderboard_pool = current[0].get("pool")
+                        if STATE.get("virtual_wf_previous"):
+                            # A restored previous history can use another pool.
+                            # Keep its records intact while ranking the displayed
+                            # generation, or the current selection without a result.
+                            generated = _primary_pool_data(old[0][2]) if old else {}
+                            leaderboard_pool = (
+                                _result_pool_size(generated) or _pool_size_for(spec.game_id)
+                            )
                         if spec.is_romanian:
-                            _render_bench_leaderboard(spec.game_id, pool_size=current[0].get("pool"))
+                            _render_bench_leaderboard(spec.game_id, pool_size=leaderboard_pool)
                         else:
-                            _render_bench_leaderboard(spec.game_id, pool_size=current[0].get("pool"), spec=spec)
+                            _render_bench_leaderboard(spec.game_id, pool_size=leaderboard_pool, spec=spec)
                     _render_virtual_history(current, show_status=False)
                 if old and (current or STATE.get("results_recovered")):
                     for fname, game, data in old:
                         pool = _primary_pool_data(data)
-                        size = pool.get("pool_size") or len(pool.get("hard_core") or [])
+                        size = _result_pool_size(pool)
                         title = "Rezultatul recuperat" if STATE.get("results_recovered") else "Rezultatul generat anterior"
                         suffix = f" · pool {size}" if size else ""
                         with ui.expansion(f"📁 {title}{suffix}", value=False).classes("w-full"):

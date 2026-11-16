@@ -2847,6 +2847,11 @@ def status_panel() -> None:
                         None  # rezultat PROASPĂT → fără marcaj „vechi"
                     )
                     STATE["active_job_id"] = None
+                    try:
+                        mail_snapshot = _mail_snapshot_inputs(payload, STATE["result_sources"])
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("[MAIL] snapshot indisponibil pentru job #%s: %s", job_id, exc)
+                        mail_snapshot = None
             if not claimed:
                 ui.label("✅ Ultima generare e gata (vezi mai jos).").classes(
                     "text-positive"
@@ -2860,13 +2865,21 @@ def status_panel() -> None:
             # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
             # SMTP (connect + STARTTLS + login, timeout 30s fiecare) NU pe event-loop:
             # un server lent bloca UI-ul >60s → «connection lost».
-            def _mail_bg():
+            if mail_snapshot is not None and mail_snapshot["enabled"]:
                 try:
-                    _maybe_send_results_email()
+                    _freeze_mail_ratings(mail_snapshot)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("[MAIL] snapshot rating indisponibil pentru job #%s: %s", job_id, exc)
+                    mail_snapshot = None
+
+            def _mail_bg(snapshot=mail_snapshot):
+                try:
+                    _maybe_send_results_email(snapshot)
                 except Exception as exc:  # noqa: BLE001
                     logger.error("[MAIL] trimitere imediată eșuată: %s", exc)
 
-            threading.Thread(target=_mail_bg, name="mail-results", daemon=True).start()
+            if mail_snapshot is not None:
+                threading.Thread(target=_mail_bg, name="mail-results", daemon=True).start()
             _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
             results_panel.refresh()
             try:
@@ -3067,88 +3080,160 @@ def _ro_next_draw_date() -> str:
     return _next_draw_date(last_draw=max(days) if days else None)
 
 
-def _mail_subject_date() -> str:
-    """Data din subiect: RO (sau fără rezultat) = antetul mailului; altfel cea
-    mai apropiată extragere dintre jocurile rezultatului, fiecare după ultima
-    extragere din istoricul lui."""
-    games = _results_games()
-    if not games or all(sp.is_romanian for _fn, sp in games):
-        return _ro_next_draw_date()
-    dates = [
-        _next_draw_date(sp.draw_weekdays, _result_last_draw_day(fn)) for fn, sp in games
-    ]
-    return min(dates, key=lambda d: _dt.strptime(d, "%d-%m-%Y"))
+def _mail_method_context(spec, data: dict, *, urna2: bool = False) -> tuple:
+    """Stable audit identity for the scorer and benchmark pool used by the job."""
+    key = (spec.bench_key_urna2 or f"{spec.bench_key}_urna2") if urna2 else spec.bench_key
+    info = ((data.get("audit") or {}).get("bench_winner") or {}).get(key) or {}
+    pool = (
+        1 if urna2 else info.get("pool_hint") or data.get("pool_size_requested")
+        or data.get("pool_size") or len(data.get("hard_core") or []) or None
+    )
+    pool = int(pool) if pool else None
+    method = info.get("method") or (info.get("ensemble") or [{}])[0].get("method")
+    return key, pool, info, method
 
 
-def _build_mail_body() -> str:
-    """Conținut CONCIS: data extragerii + pool-ul unic per joc."""
-    results = STATE.get("results")
-    if not (isinstance(results, tuple) and len(results) == 2):
+def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
+    """Copy only email inputs while the caller owns STATE_LOCK.
+
+    Large variant lists and walk-forward results are deliberately omitted.
+    Frames are copied once per filename; no later upload or in-place change
+    can replace the history belonging to this completed job.
+    """
+    results = STATE.get("results") if results is None else results
+    snapshot = {
+        "generated_at": _dt.now(),
+        "enabled": bool(SETTINGS.get("mail_on_complete")),
+        "valid": isinstance(results, tuple) and len(results) == 2,
+        "games": [], "sources": {}, "decisions": {}, "exact_ratings": {},
+    }
+    if not snapshot["valid"]:
+        return snapshot
+    fields = ("hard_core", "hard_core_joker", "pool_size", "pool_size_requested", "lr_scheme_code")
+    audit_fields = ("bench_winner", "recent_penalty", "lookback_pct", "restrict_base", "consecutive_limit")
+    for fname, outs in results[0]:
+        if fname not in snapshot["sources"]:
+            source = result_sources.get(fname) if result_sources is not None else _result_source(fname)
+            snapshot["sources"][fname] = source.copy(deep=True) if isinstance(source, pd.DataFrame) else None
+        for game, raw_data in outs.items():
+            primary = _primary_pool_data(raw_data)
+            spec = _game_spec_for(game, primary)
+            data = {key: deepcopy(primary[key]) for key in fields if key in primary}
+            data.update(game_id=spec.game_id, country=spec.country)
+            audit = primary.get("audit") or {}
+            data["audit"] = {key: deepcopy(audit[key]) for key in audit_fields if key in audit}
+            code = _result_lr_scheme_code(primary)
+            if code is not None:
+                data["lr_scheme_code"] = deepcopy(code)
+            snapshot["games"].append({"fname": fname, "game": game, "spec": spec, "data": data})
+    return snapshot
+
+
+def _freeze_mail_ratings(snapshot: dict) -> dict:
+    """Detach the relevant decisions and scalar ratings outside STATE_LOCK."""
+    for record in snapshot["games"]:
+        spec, data = record["spec"], record["data"]
+        for urna2 in (False, True) if data.get("hard_core_joker") else (False,):
+            key, pool, info, method = _mail_method_context(spec, data, urna2=urna2)
+            identity = (key, pool)
+            if identity not in snapshot["decisions"]:
+                snapshot["decisions"][identity] = deepcopy(_decision_entry(key, pool)) if pool else {}
+            entry = snapshot["decisions"][identity]
+            rating_identity = (key, pool, method)
+            if rating_identity in snapshot["exact_ratings"]:
+                continue
+            exact = None
+            if pool and method and not (info.get("fallback") or info.get("no_decision")):
+                try:
+                    exact = _mail_exact_rating(key, pool, method, entry)
+                except Exception as exc:  # noqa: BLE001 - numbers remain usable without a rating
+                    logger.warning("[MAIL] rating indisponibil pentru %s k%s: %s", key, pool, exc)
+            snapshot["exact_ratings"][rating_identity] = deepcopy(exact)
+    return snapshot
+
+
+def _capture_mail_snapshot() -> dict:
+    """Capture the current result for previews/direct callers, without sending."""
+    with STATE_LOCK:
+        snapshot = _mail_snapshot_inputs()
+    return _freeze_mail_ratings(snapshot)
+
+
+def _mail_draw_info(snapshot: dict, record: dict):
+    return _last_draw_from_source(snapshot["sources"].get(record["fname"]), record["spec"])
+
+
+def _mail_draw_date(snapshot: dict, record: dict | None = None) -> str:
+    """Target day from the captured timestamp and captured source boundaries."""
+    from datetime import timedelta
+    from loto_enterprise.core.history import history_dates
+
+    records = [record] if record is not None else snapshot["games"]
+    start = snapshot["generated_at"].date()
+    for item in records:
+        info = _mail_draw_info(snapshot, item)
+        if info and info[0]:
+            try:
+                last = history_dates(pd.DataFrame({"date": [info[0]]})).iloc[0].date()
+                start = max(start, last + timedelta(days=1))
+            except (TypeError, ValueError, OverflowError):
+                pass
+    weekdays = record["spec"].draw_weekdays if record is not None else (3, 6)
+    return _next_draw_date_for(weekdays, start)
+
+
+def _mail_subject_date(snapshot: dict | None = None) -> str:
+    snapshot = _capture_mail_snapshot() if snapshot is None else snapshot
+    games = snapshot["games"]
+    if not games or all(item["spec"].is_romanian for item in games):
+        return _mail_draw_date(snapshot)
+    dates = [_mail_draw_date(snapshot, item) for item in games]
+    return min(dates, key=lambda day: _dt.strptime(day, "%d-%m-%Y"))
+
+
+def _build_mail_body(snapshot: dict | None = None) -> str:
+    """Compose one completed job's concise email from detached inputs only."""
+    snapshot = _capture_mail_snapshot() if snapshot is None else snapshot
+    if not snapshot["valid"]:
         return "Nu există rezultate de generare."
-    rb, _ = results
 
     def _nums(seq):
         return " ".join(str(int(x)) for x in sorted(seq)) if seq else "—"
 
-    _all_ro = all(sp.is_romanian for sp in _results_specs())
+    games = snapshot["games"]
+    all_ro = all(item["spec"].is_romanian for item in games)
     lines = [
-        (
-            f"📅 Extragere (următoarea, Joi/Duminică): {_ro_next_draw_date()}"
-            if _all_ro
-            else "📅 Următoarea extragere: pe fiecare joc, mai jos"
-        ),
-        f"(generat: {_dt.now().strftime('%d-%m-%Y %H:%M')})",
-        "",
+        f"📅 Extragere (următoarea, Joi/Duminică): {_mail_draw_date(snapshot)}"
+        if all_ro else "📅 Următoarea extragere: pe fiecare joc, mai jos",
+        f"(generat: {snapshot['generated_at'].strftime('%d-%m-%Y %H:%M')})", "",
     ]
-    # Ordine FIXĂ în mail: 6/49 → Joker → 5/40 (aplatizăm jocurile din toate fișierele).
-    # Păstrăm fname ca să putem arăta ultima extragere reală din CSV pentru fiecare joc.
-    games = sorted(
-        ((fn, g, d) for fn, outs in rb for g, d in outs.items()),
-        key=lambda t: _GAME_DISPLAY_ORDER.get(_game_label_for(str(t[1])), 99),
-    )
-    for fn, g, d in games:
-        primary = _primary_pool_data(d)
+    for record in sorted(games, key=lambda item: _GAME_DISPLAY_ORDER.get(item["spec"].geometry, 99)):
+        fname, game, spec, primary = (record[key] for key in ("fname", "game", "spec", "data"))
         joker = sorted(int(x) for x in (primary.get("hard_core_joker") or []))
-        _sp = _game_spec_for(g, primary)
-        lines.append(f"=== {_sp.display} ===")
-        if not _all_ro:
-            _next = _next_draw_date(_sp.draw_weekdays, _result_last_draw_day(fn))
-            lines.append(f"extragere: {_next} ({_weekdays_text(_sp.draw_weekdays)})")
-            if _training_only_note(_sp):
-                lines.append(f"({_training_only_note(_sp)})")
-        info = _last_csv_draw(fn)
+        lines.append(f"=== {spec.display} ===")
+        if not all_ro:
+            lines.append(f"extragere: {_mail_draw_date(snapshot, record)} ({_weekdays_text(spec.draw_weekdays)})")
+            if note := _training_only_note(spec):
+                lines.append(f"({note})")
+        info = _mail_draw_info(snapshot, record)
         if info:
-            _ds, _dn, _dj = info
-            _draw = " ".join(str(x) for x in _dn) + (
-                f" + joker {_dj}" if _dj is not None else ""
-            )
-            lines.append(f"ultima extragere CSV: {_ds or '?'} → {_draw}")
-        lines.append(
-            "POOL:   "
-            + _nums(primary.get("hard_core") or [])
-            + (f"  | joker: {_nums(joker)}" if joker else "")
-        )
-        _lr = _lr_schemes_for(g, primary)
-        if _lr:
-            _price = PRICES.get(_game_label_for(g), 8.0)
-            lines.append(
-                "SCHEMĂ LR: "
-                + " sau ".join(
-                    f"{s.label} ({s.size} var. ≈ {_thousands(s.size * _price)} lei)"
-                    for s in _lr
-                )
-            )
-        lines.extend(_mail_method_lines(_sp, primary))
+            day, numbers, ball = info
+            draw = " ".join(str(x) for x in numbers) + (f" + joker {ball}" if ball is not None else "")
+            lines.append(f"ultima extragere CSV: {day or '?'} → {draw}")
+        lines.append("POOL:   " + _nums(primary.get("hard_core") or []) + (f"  | joker: {_nums(joker)}" if joker else ""))
+        schemes = _lr_schemes_for(spec.game_id, primary)
+        if schemes:
+            price = spec.price if spec.price is not None else PRICES.get(spec.geometry, 8.0)
+            lines.append("SCHEMĂ LR: " + " sau ".join(
+                f"{scheme.label} ({scheme.size} var. ≈ {_thousands(scheme.size * price)} lei în variante; taxa pe bilet se adaugă separat)"
+                for scheme in schemes
+            ))
+        lines.extend(_mail_method_lines(spec, primary, snapshot=snapshot))
         if joker:
-            lines.extend(_mail_method_lines(_sp, primary, urna2=True))
-        lines.append(
-            _mail_best_draw_line(
-                _sp, _result_source(fn), primary.get("hard_core")
-            )
-        )
+            lines.extend(_mail_method_lines(spec, primary, urna2=True, snapshot=snapshot))
+        lines.append(_mail_best_draw_line(spec, snapshot["sources"].get(fname), primary.get("hard_core")))
         lines.append("")
     return "\n".join(lines).strip()
-
 
 def _mail_best_draw_line(spec, df, pool) -> str:
     """Cea mai bună extragere din istoric pentru pool-ul de azi și ultima ei dată.
@@ -3200,33 +3285,11 @@ def _mail_best_draw_line(spec, df, pool) -> str:
     )
 
 
-def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
-    """Metoda folosită la generare și ratingul ei din bench (top-K brut al metodei).
-
-    Metoda vine din auditul rezultatului (`bench_winner`), ratingul din decizia
-    țării pentru pool-ul cu care s-a ales metoda (`pool_hint`; `rationale` scris
-    de decision.py), cu avertismentul de avantaj nedemonstrat ca panoul de
-    rezultate. Ratingul se
-    dă numai dacă decizia de acum alege aceeași metodă: după un Re-Bench sau o
-    schimbare a țintei 3+/4+ ar fi al altui scorer. Cu `urna2`, același lucru
-    pentru numărul Joker: metoda Urnei 2, top-1, față de 5% la întâmplare."""
-    import re
-
-    key = (spec.bench_key_urna2 or f"{spec.bench_key}_urna2") if urna2 else spec.bench_key
-    tag, where = (" JOKER", "pe Urna 2, top-1") if urna2 else ("", "la pool {pool}")
-    audit = data.get("audit") or {}
-    info = (audit.get("bench_winner") or {}).get(key) or {}
-    pool = (
-        1
-        if urna2
-        else info.get("pool_hint")
-        or data.get("pool_size_requested")
-        or data.get("pool_size")
-        or len(data.get("hard_core") or [])
-        or None
-    )
-    where = where.format(pool=pool)
-    method = info.get("method") or (info.get("ensemble") or [{}])[0].get("method")
+def _mail_method_lines(spec, data: dict, *, urna2: bool = False, snapshot: dict | None = None) -> list[str]:
+    """Actual scorer and exact benchmark rating, never parsed from rounded prose."""
+    key, pool, info, method = _mail_method_context(spec, data, urna2=urna2)
+    tag = " JOKER" if urna2 else ""
+    where = "pe Urna 2, top-1" if urna2 else f"la pool {pool}"
     if not method:
         return [f"METODĂ{tag}: necunoscută (rezultat fără audit de metodă)"]
     if info.get("no_decision") or info.get("fallback"):
@@ -3236,59 +3299,40 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False) -> list[str]:
             else f"fără bench pentru {spec.display}"
         )
         return [f"METODĂ{tag}: {method} ({why}; rezervă implicită, fără rating)"]
-    entry = _decision_entry(key, int(pool)) if pool else {}
+    if snapshot is None:
+        entry = deepcopy(_decision_entry(key, pool)) if pool else {}
+        exact = _mail_exact_rating(key, pool, method, entry) if pool else None
+    else:
+        entry = snapshot["decisions"].get((key, pool), {})
+        exact = snapshot["exact_ratings"].get((key, pool, method))
     head = f"METODĂ{tag}: {method} (câștigătoarea bench-ului {where})"
     now = _decision_entry_method(entry, key) if entry else method
     if now != method:
-        return [
-            head,
-            f"RATING{tag}: indisponibil — decizia de bench s-a schimbat după generare "
-            f"(acum alege {now or 'altă metodă'} {where}); ratingul ei nu "
-            "descrie metoda care a produs aceste numere",
-        ]
-    rat = str(entry.get("rationale") or "")
-    base = entry.get("baseline_rate")
-    label = "top-1" if urna2 else entry.get("target_label") or "3+"
-    lines = [head, f"RATING{tag}: indisponibil în decizia salvată"]
-    # Rata și Wilson vin din `rationale`, scrise ca fracții cu 3 zecimale: în
-    # procente, o zecimală, cât are sursa (6.2%, nu 6.20% lângă 6.15% din
-    # clasament). Rata la întâmplare e exactă și rămâne cu două.
-    m = re.search(r"= ([0-9.]+) \(Wilson_lb=([0-9.]+)\).*?in (\d+)/(\d+) windows", rat)
-    if m:
-        rate, wil, w_ok, w_all = float(m[1]), float(m[2]), m[3], m[4]
-        line = f"RATING{tag}: rată {label} {100 * rate:.1f}%"
-        if base:
-            line += f" față de {100 * float(base):.2f}% la întâmplare"
-        line += (
-            f"; scor Wilson (z=1) {100 * wil:.1f}%; rata observată peste media "
-            f"aleatoare în {w_ok}/{w_all} ferestre suprapuse (comparație descriptivă)"
-        )
+        return [head, f"RATING{tag}: indisponibil — decizia de bench s-a schimbat după generare "
+                f"(acum alege {now or 'altă metodă'} {where}); ratingul ei nu "
+                "descrie metoda care a produs aceste numere"]
+    lines = [head, f"RATING{tag}: indisponibil — benchmarkul exact nu poate fi verificat pentru această metodă și acest pool"]
+    if exact:
+        target = int(exact["target"])
+        rate, wilson = _rate_pct(exact["rate"], target), _rate_pct(exact["wilson"], target)
+        baseline = _rate_pct(exact["baseline"], target)
+        label = "top-1" if urna2 else f"{exact['label']} în pool"
+        line = f"RATING{tag}: rată {label} {rate} față de {baseline} la întâmplare"
+        line += (f"; scor Wilson (z=1) {wilson}; rata observată peste media "
+                 f"aleatoare în {exact['beat']}/{exact['windows']} ferestre suprapuse (comparație descriptivă)")
+        if _decision_low_confidence(entry) is True:
+            line += "; încredere redusă: nicio metodă nu a trecut poarta de consistență"
         lines[1] = line
-    elif m := re.search(r"raw=([0-9.]+), Wilson_lb=([0-9.]+)", rat):
-        line = f"RATING{tag}: rată {label} {100 * float(m[1]):.1f}%"
-        if base:
-            line += f" față de {100 * float(base):.2f}% la întâmplare"
-        lines[1] = (
-            line + "; nicio metodă nu a bătut hazardul constant (încredere redusă)"
-        )
-    # Ca panoul de rezultate: pe low_confidence ajunge mesajul de mai sus; altfel
-    # o rată peste hazard care nu trece testul binomial brut e spusă explicit.
     note = _multiplicity_note(entry)
     if note and _decision_low_confidence(entry) is not True:
         lines.append(note)
-    # Ca nota de sub clasament: ratingul e al top-K brut, iar pool-ul de mai sus
-    # poate fi schimbat de limita de consecutive, penalizare sau restrângere.
     if urna2:
-        _rp = (data.get("audit") or {}).get("recent_penalty") or {}
-        if int(_rp.get("draws") or 0) > 0 and _rp.get("penalized_urna2"):
-            lines.append(
-                "Numărul Joker include penalizarea recentă; ratingul măsoară "
-                "scorerul fără ea."
-            )
-    elif _transform := _bench_transform_note(data):
-        lines.append(_transform)
+        penalty = (data.get("audit") or {}).get("recent_penalty") or {}
+        if int(penalty.get("draws") or 0) > 0 and penalty.get("penalized_urna2"):
+            lines.append("Numărul Joker include penalizarea recentă; ratingul măsoară scorerul fără ea.")
+    elif transform := _bench_transform_note(data):
+        lines.append(transform)
     return lines
-
 
 def _send_test_email() -> None:
     """Buton (declanșat de utilizator): trimite un mail de test ca să confirmi configul."""
@@ -3317,11 +3361,18 @@ def _send_test_email() -> None:
         logger.error("[MAIL] test eșuat: %s", exc)
 
 
-def _maybe_send_results_email() -> None:
+def _maybe_send_results_email(snapshot: dict | None = None) -> None:
     """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
     'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
     orice eroare e logată, NU oprește restul (shutdown etc.)."""
-    if not SETTINGS.get("mail_on_complete"):
+    snapshot = _capture_mail_snapshot() if snapshot is None else snapshot
+    if not snapshot["enabled"]:
+        return
+    games = snapshot.get("games") or []
+    if not snapshot.get("valid") or not games or any(
+        not (record.get("data") or {}).get("hard_core") for record in games
+    ):
+        logger.warning("[MAIL] rezultat gol sau invalid — nu trimit mesaj de rezultate.")
         return
     cfg = load_mail_config(PROJECT_ROOT)
     if not cfg:
@@ -3337,11 +3388,11 @@ def _maybe_send_results_email() -> None:
             pass
         return
     try:
-        body = _build_mail_body()
+        body = _build_mail_body(snapshot)
+        subject = f"🎰 Loto — numere pentru extragerea {_mail_subject_date(snapshot)}"
     except Exception as exc:  # noqa: BLE001
         logger.error("[MAIL] build body: %s", exc)
-        body = "(eroare la construirea conținutului)"
-    subject = f"🎰 Loto — numere pentru extragerea {_mail_subject_date()}"
+        return
     try:
         send_email(cfg, subject, body)  # doar esențialul (data + pool), fără atașament
         logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])

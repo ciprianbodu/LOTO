@@ -8,7 +8,7 @@ Strategy:
     1. Hash all number columns and dates (dates define training boundaries).
     2. Also record total row count.
     3. Stamp the MOTOR alongside the data: versiunea cache-ului de bench și
-       setul de metode din registry (vezi `compute_engine_signature`).
+       setul de metode și reviziile lor numerice (vezi `compute_engine_signature`).
     4. On Auto-Pilot click, compare:
         • Același hash ȘI același motor → decizia din cache rămâne validă.
         • Hash diferit → s-au schimbat datele (numărul de rânduri poate fi
@@ -151,12 +151,14 @@ def _content_hash(csv_path: Path, num_cols: list[str] | None = None) -> tuple[st
 
 
 def compute_engine_signature() -> dict[str, str | int]:
-    """Semnătura MOTORULUI care a produs decizia: versiune de cache + registry.
+    """Semnătura MOTORULUI: versiune de cache, registry și revizii numerice.
 
     Nu include configurația de rulare (percentile, pool_extra): aceea schimbă cât
     de fin e măsurată decizia, nu ce ar măsura. Aici stă doar ce face un
     `folds.csv` vechi INCOMPARABIL cu unul nou: scoruri schimbate (bump de
-    `CACHE_VERSION`) și alt set de metode.
+    `CACHE_VERSION`) și alt set de metode. Reviziile locale din `method_cache_semantics`
+    schimbă scorurile fără bump global de cache și trebuie incluse și aici;
+    altfel foldurile sunt recalculate, dar decizia veche rămâne «fresh».
     """
     try:
         from loto_enterprise.benchmark.bench_cache import CACHE_VERSION
@@ -168,7 +170,12 @@ def compute_engine_signature() -> dict[str, str | int]:
         names = sorted(str(n) for n in METHODS)
     except Exception:  # noqa: BLE001
         names = []
-    digest = hashlib.md5("\n".join(names).encode("utf-8")).hexdigest()[:16]
+    from loto_enterprise.core.wf_sig import method_cache_semantics
+
+    # Same numerical revisions as the per-method fold namespace. Empty suffixes
+    # preserve the legacy digest for registries without revised scorers.
+    payload = "\n".join(f"{name}{method_cache_semantics(name)}" for name in names)
+    digest = hashlib.md5(payload.encode("utf-8")).hexdigest()[:16]
     return {
         "bench_cache_version": str(CACHE_VERSION),
         "methods_hash": digest,
@@ -326,11 +333,13 @@ def check_freshness(
         if _engine_changed:
             logger.warning(
                 "[freshness] decizia din cache a fost calculată cu alt motor "
-                "(cache %s / %s metode, acum %s / %s) — full re-bench.",
+                "(cache %s / %s metode / %s, acum %s / %s / %s) — full re-bench.",
                 _cached_engine.get("bench_cache_version"),
                 _cached_engine.get("n_methods"),
+                _cached_engine.get("methods_hash"),
                 _current_engine.get("bench_cache_version"),
                 _current_engine.get("n_methods"),
+                _current_engine.get("methods_hash"),
             )
 
     for gk in csv_map:

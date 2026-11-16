@@ -1409,10 +1409,7 @@ def draw_vs_production_pool(draw_nums, pool):
 
 
 def _last_csv_draw(fname: str):
-    """Ultima extragere validă cronologic, după același contract ca motorul."""
-    from loto_enterprise.core.draw_validation import valid_draw_matrix
-    from loto_enterprise.core.history import chronological_history
-
+    """Latest valid draw from the displayed result's source snapshot."""
     source = globals().get("_result_source")
     df = (
         source(fname)
@@ -1422,13 +1419,24 @@ def _last_csv_draw(fname: str):
     if df is None or len(df) == 0:
         return None
     try:
-        # Un snapshot al rezultatului își păstrează identitatea, chiar dacă
-        # același nume de fișier a fost legat între timp de alt joc în UI.
         spec = (
             _LOT.require_lottery(df.attrs["game_id"], df.attrs.get("country"))
             if "game_id" in df.attrs
             else _game_spec_for(fname)
         )
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return _last_draw_from_source(df, spec)
+
+
+def _last_draw_from_source(df, spec):
+    """Pure draw validation shared by the UI and an immutable email snapshot."""
+    from loto_enterprise.core.draw_validation import valid_draw_matrix
+    from loto_enterprise.core.history import chronological_history
+
+    if df is None or len(df) == 0:
+        return None
+    try:
         df = chronological_history(df)
         cols = [f"n{i}" for i in range(1, spec.draw_n + 1)]
         matrix, valid = valid_draw_matrix(
@@ -1626,6 +1634,142 @@ def _read_bench_folds_cached(path: Path) -> pd.DataFrame:
         _BENCH_FOLDS_CACHE["signature"] = signature
         _BENCH_FOLDS_CACHE["df"] = df
     return df
+
+
+
+def _mail_exact_rating(folds_game_key: str, pool: int, method: str, entry: dict):
+    """Canonical measured rates, only while folds and the saved decision agree.
+
+    Return detached scalars for the email snapshot. Rationale is prose rounded
+    to three fractional decimals and cannot recover rare event rates.
+    """
+    import json
+    import math
+    from loto_enterprise.benchmark.decision import (
+        _windows_method_beats_random,
+        common_window_percentiles,
+        filter_window_percentiles,
+        expected_random_rate,
+        missing_decision_folds,
+        pooled_rate_and_neff,
+        pooled_wilson_distinct,
+    )
+    from loto_enterprise.benchmark.freshness import compute_engine_signature
+
+    def signature(path):
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size, stat.st_ino
+
+    try:
+        pool = int(pool)
+        target = int(entry["hit_target"])
+        if target not in (1, 3, 4, 5, 6) or entry.get("rate_col_mismatch"):
+            return None
+        if _decision_entry_method(entry, folds_game_key) != method:
+            return None
+        spec = _LOT.lottery_by_bench_key(folds_game_key)
+        if spec is None:
+            return None
+        single = folds_game_key == spec.bench_key_urna2
+        if (single and (target != 1 or pool != 1)) or (
+            not single and (target == 1 or target > spec.draw_n or not 1 <= pool <= spec.max_n)
+        ):
+            return None
+        decision_path = Path(
+            _decision_path_for_key(folds_game_key) or PROJECT_ROOT / "best_methods.json"
+        )
+        folds_path = _country_folds_path(spec.country)
+        decision_before, folds_before = signature(decision_path), signature(folds_path)
+        # A running/reduced bench can replace folds before its decision is ready.
+        if folds_before[0] > decision_before[0]:
+            return None
+        cfg = json.loads(decision_path.read_text(encoding="utf-8"))
+        if not isinstance(cfg, dict):
+            return None
+        cell = ((cfg.get("games") or {}).get(folds_game_key) or {}).get(
+            "auto_pilot_per_pool", {}
+        ).get(f"k{pool}")
+        if cell != entry:
+            return None
+        engine = (cfg.get("_meta") or {}).get("engine_signature")
+        if engine and any(
+            str(engine.get(k, "")) != str(v)
+            for k, v in compute_engine_signature().items()
+        ):
+            return None
+        raw = pd.read_csv(folds_path)
+        if not {"game", "method", "percentile"}.issubset(raw.columns):
+            return None
+        total = (cfg.get("_meta") or {}).get("n_folds_total")
+        if total is not None and len(raw) != int(total):
+            return None
+        if missing_decision_folds(cfg, raw):
+            return None
+        real = raw[raw["game"].astype(str) == folds_game_key]
+        if "is_random" in real.columns:
+            real = real[real["is_random"] == False]  # noqa: E712
+        metric = entry.get("rate_col_used") or f"rate_{target}plus_k{pool}"
+        allowed = {f"rate_{target}plus_k{pool}"}
+        if pool == _BENCH_DRAW_N.get(folds_game_key):
+            allowed.add(f"rate_{target}plus")
+        if metric not in allowed or metric not in real.columns:
+            return None
+        expected = entry.get("expected_windows") or (cfg.get("_meta") or {}).get("percentiles")
+        expected = {int(v) for v in expected} if expected else common_window_percentiles(real, metric)
+        if not expected:
+            return None
+        common = filter_window_percentiles(real, expected)
+        chosen = common[common["method"].astype(str) == method]
+        percentiles = pd.to_numeric(chosen["percentile"], errors="coerce")
+        if len(chosen) != len(expected) or set(percentiles) != expected:
+            return None
+        if "failed" in chosen.columns and chosen["failed"].fillna(True).any():
+            return None
+        rates = pd.to_numeric(chosen[metric], errors="coerce")
+        if not rates.between(0.0, 1.0).all():
+            return None
+        n_eval = pd.to_numeric(chosen["n_eval"], errors="coerce") if "n_eval" in chosen else None
+        n_test = pd.to_numeric(chosen["n_test"], errors="coerce") if "n_test" in chosen else None
+        if n_eval is None:
+            counts = n_test
+        elif n_test is None:
+            counts = n_eval
+        else:
+            # The canonical aggregation coalesces legacy missing n_eval per row;
+            # a known partial or zero evaluation cannot claim a complete window.
+            known = n_eval.notna()
+            if (known & ((n_eval <= 0) | (n_test.notna() & n_eval.ne(n_test)))).any():
+                return None
+            counts = n_eval.where(known, n_test)
+        if counts is None or not counts.map(lambda n: math.isfinite(n) and n > 0).all():
+            return None
+        pooled = pooled_rate_and_neff(chosen, metric)
+        wilson = pooled_wilson_distinct(chosen, metric)
+        if pooled is None or wilson is None:
+            return None
+        baseline = expected_random_rate(
+            spec.geo.second.max_n if single else spec.max_n,
+            1 if single else spec.draw_n, pool, target,
+        )
+        saved_baseline = entry.get("baseline_rate")
+        if saved_baseline is not None and not math.isclose(
+            float(saved_baseline), baseline, rel_tol=1e-10, abs_tol=1e-15
+        ):
+            return None
+        random = common[common["method"].astype(str) == "random"]
+        beat, windows = _windows_method_beats_random(chosen, random, metric, baseline)
+        if windows != len(expected):
+            return None
+        if signature(decision_path) != decision_before or signature(folds_path) != folds_before:
+            return None
+        return {
+            "rate": float(pooled[0]), "wilson": float(wilson),
+            "baseline": baseline, "beat": beat, "windows": windows,
+            "target": target, "label": entry.get("target_label") or f"{target}+",
+            "pool": pool,
+        }
+    except (OSError, AttributeError, KeyError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def _render_bench_live_leaderboard(bench_start=None, progress=None) -> None:
