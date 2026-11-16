@@ -50,6 +50,7 @@ class PipelineMixin:
         restrict_base_min=0,
         max_consecutive_run=0,
         _pool_analysis_only=False,
+        lr_scheme_code=None,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -115,6 +116,23 @@ class PipelineMixin:
             pool-ul real. NU folosi enable_adaptive_persistence ca poartă —
             producția îl pasează tot False (worker.py).
         """
+        self.audit.pop("lr_scheme", None)
+        if lr_scheme_code is not None:
+            from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
+
+            if getattr(self, "lottery", None) is not None and not self.lottery.is_romanian:
+                raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+            scheme = resolve_lr_scheme(self.game_type, lr_scheme_code, pool_size)
+            validate_lr_variants(scheme, max_variants)
+            if _pool_analysis_only:
+                raise ValueError("O schemă LR se validează prin variantele sale fizice, nu ca sistem complet virtual")
+            lr_scheme_code = scheme.code
+            max_variants = scheme.size
+            # Auxiliary coverage at four pool hits; official guarantees are
+            # carried separately in audit.lr_scheme, without a generic promise.
+            guarantee = 4
+            wheel_condition = 4
+
         # Memoram pool_size-ul cerut pentru ca _scores_via_bench_winner să poată
         # selecta câștigătorul corect din best_methods.json (per pool size).
         self._winner_pool_hint = int(pool_size)
@@ -617,6 +635,7 @@ class PipelineMixin:
             max_variants=max_variants,
             scores=wheeling_scores,
             condition=wheel_condition,
+            **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
         )
 
         # Nu se aplică NICIUN filtru pe variante după wheeling: orice eliminare ar
@@ -714,6 +733,9 @@ class PipelineMixin:
             context["last_3"] = extract_draws(self.data.tail(3))
 
         context["coverage_pct"] = coverage_pct
+        if lr_scheme_code is not None:
+            context["lr_scheme_code"] = lr_scheme_code
+            context["lr_scheme"] = self.audit["lr_scheme"]
         context["wheel_condition"] = int(wheel_condition)
         context["recent_penalty"] = {
             "draws": _rp_n,

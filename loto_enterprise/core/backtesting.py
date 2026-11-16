@@ -144,6 +144,7 @@ def _retroactive_step_stateless(
     country: str | None = None,
     compact_variants: bool = False,
     virtual_full_system: bool = False,
+    lr_scheme_code=None,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
@@ -191,10 +192,13 @@ def _retroactive_step_stateless(
             wheel_condition=wheel_condition,
             max_consecutive_run=max_consecutive_run,
             **({"_pool_analysis_only": True} if virtual_full_system else {}),
+            **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
         )
         return eng, out_lines, (_ctx or {}), audit
 
     if virtual_full_system:
+        if lr_scheme_code is not None:
+            raise ValueError("O schemă LR nu poate fi validată ca sistem complet virtual")
         pick = 6 if game_type in ("6/49", "6/45") else 5
         if int(guarantee) != pick or int(max_variants or 0) != 0 or int(wheel_condition or pick) != pick:
             raise ValueError("Analiza virtuală cere sistem complet nelimitat")
@@ -281,7 +285,7 @@ def _retroactive_step_stateless(
 
 
 # Auditul pasului păstrat împreună cu pool-ul istoric.
-_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base")
+_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base", "lr_scheme")
 
 
 def _ticket_context(engine, audit, actual) -> dict:
@@ -293,7 +297,7 @@ def _ticket_context(engine, audit, actual) -> dict:
     """
     try:
         audit = audit if isinstance(audit, dict) else {}
-        return {
+        context = {
             "hard_core": [int(x) for x in engine.hard_core or []],
             "hard_core_joker": [
                 int(x) for x in (getattr(engine, "hard_core_joker", None) or [])[:1]
@@ -301,6 +305,9 @@ def _ticket_context(engine, audit, actual) -> dict:
             "audit": {k: audit[k] for k in _TICKET_AUDIT_KEYS if k in audit},
             "actual": sorted(int(x) for x in actual),
         }
+        if isinstance(audit.get("lr_scheme"), dict):
+            context["lr_scheme_code"] = audit["lr_scheme"]["code"]
+        return context
     except (TypeError, ValueError):
         return {}
 
@@ -939,6 +946,7 @@ class LotoBacktester:
         max_consecutive_run: int = 0,
         compact_variants: bool = False,
         virtual_full_system: bool = False,
+        lr_scheme_code=None,
     ) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
@@ -961,6 +969,16 @@ class LotoBacktester:
                 dupa catastrofe a fost sters). Decide doar ruta: cu False si
                 use_feedback=False, pasii ruleaza pe calea paralela stateless.
         """
+        if lr_scheme_code is not None:
+            from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
+            if self.country is not None:
+                raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+            scheme = resolve_lr_scheme(self.game_type, lr_scheme_code, pool_size)
+            validate_lr_variants(scheme, max_variants)
+            if virtual_full_system:
+                raise ValueError("O schemă LR nu poate fi validată ca sistem complet virtual")
+            lr_scheme_code = scheme.code
+            guarantee, wheel_condition, max_variants = 4, 4, scheme.size
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")
             return []
@@ -1050,6 +1068,7 @@ class LotoBacktester:
                     "max_consecutive_run": int(max_consecutive_run or 0),
                     **({"compact_variants": True} if compact_variants else {}),
                     **({"virtual_full_system": True} if virtual_full_system else {}),
+                    **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
                 }
                 for sim_idx in sim_indices
             ]
@@ -1344,6 +1363,7 @@ class LotoBacktester:
                     max_consecutive_run=int(max_consecutive_run or 0),
                     **({"compact_variants": True} if compact_variants else {}),
                     **({"virtual_full_system": True} if virtual_full_system else {}),
+                    **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None

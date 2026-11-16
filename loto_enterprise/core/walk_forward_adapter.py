@@ -356,6 +356,7 @@ def _wheel_sig(
     max_variants=0,
     *,
     method_override: str | None = None,
+    lr_scheme_code=None,
 ) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
@@ -373,6 +374,12 @@ def _wheel_sig(
     mare). Un pickle de dinainte punea numărul mai mic pe poziția mai bună când
     scorurile erau egale; cheia nouă nu îl mai servește.
     """
+    if lr_scheme_code is not None:
+        from covering.lr_selection import resolve_lr_scheme, lr_scheme_signature, validate_lr_variants
+
+        scheme = resolve_lr_scheme(game_type, lr_scheme_code, pool_size)
+        validate_lr_variants(scheme, max_variants)
+        return f"lr-official|{lr_scheme_signature(game_type, scheme.code, pool_size)}"
     requested = (
         method_override
         if method_override is not None
@@ -648,6 +655,7 @@ def _decision_sig(
     *,
     game_key: str | None = None,
     country: str | None = None,
+    lr_scheme_code=None,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
@@ -663,6 +671,13 @@ def _decision_sig(
         pool_size, game_type, restrict_base_max, restrict_base_min
     )
     lot = _wf_lottery(game_type, game_key, country)
+    if lr_scheme_code is not None:
+        from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
+
+        if lot is not None:
+            raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+        scheme = resolve_lr_scheme(game_type, lr_scheme_code, _wheel_pool)
+        validate_lr_variants(scheme, max_variants)
     foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
     compact_sfx = "|compact-wf1" if _wheel_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16) else ""
     try:
@@ -705,7 +720,7 @@ def _decision_sig(
         raw = (
             f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
             f"{game_hit_target(gk, BENCH_HIT_TARGET)}|{_ens_sig}{urna2_sig}|"
-            f"{_wheel_sig(_wheel_pool, game_type, guarantee, wheel_condition, max_variants)}|lb{lb}"
+            f"{_wheel_sig(_wheel_pool, game_type, guarantee, wheel_condition, max_variants, **({'lr_scheme_code': lr_scheme_code} if lr_scheme_code is not None else {}))}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
@@ -721,7 +736,8 @@ def _decision_sig(
             + hashlib.md5(
                 (
                     _wheel_sig(
-                        _wheel_pool, game_type, guarantee, wheel_condition, max_variants
+                        _wheel_pool, game_type, guarantee, wheel_condition, max_variants,
+                        **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {})
                     )
                     + f"|lb{lookback_pct(lookback_percent)}"
                     + _penalty_sig(recent_penalty_draws, recent_penalty_factor)
@@ -1044,6 +1060,7 @@ def run_honest_walk_forward(
     cache_only: bool = False,
     virtual_full_system: bool = False,
     compact_results: bool = False,
+    lr_scheme_code=None,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -1085,12 +1102,27 @@ def run_honest_walk_forward(
     lot = _wf_lottery(game_type, game_key, country)
     wf_key = lot.bench_key if lot is not None else None
     wf_country = lot.country if lot is not None else None
+    lr_metadata = None
+    if lr_scheme_code is not None:
+        from covering.lr_selection import resolve_lr_scheme, lr_scheme_metadata, validate_lr_variants
+
+        if lot is not None:
+            raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+        scheme = resolve_lr_scheme(game_type, lr_scheme_code, pool_size)
+        validate_lr_variants(scheme, max_variants)
+        if virtual_full_system:
+            raise ValueError("O schemă LR nu poate fi validată ca sistem complet virtual")
+        lr_scheme_code = scheme.code
+        lr_metadata = lr_scheme_metadata(scheme)
+        guarantee, wheel_condition, max_variants = 4, 4, scheme.size
     universe = lot.max_n if lot is not None else _MAX_NUM.get(game_type)
     if universe is not None and int(pool_size) > universe:
         pool_size = universe
     effective_pool = _effective_pool_size(
         pool_size, game_type, restrict_base_max, restrict_base_min
     )
+    if lr_scheme_code is not None:
+        resolve_lr_scheme(game_type, lr_scheme_code, effective_pool)
     compact_variants = compact_results or virtual_full_system or effective_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16)
     if virtual_full_system:
         pick = _WF_PICK.get(game_type)
@@ -1139,6 +1171,7 @@ def run_honest_walk_forward(
         max_consecutive_run=int(max_consecutive_run or 0),
         game_key=wf_key,
         country=wf_country,
+        **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
     )
     if virtual_full_system:
         # The representative ticket is a mathematical witness, not the first
@@ -1185,6 +1218,9 @@ def run_honest_walk_forward(
         meta["game_key"] = wf_key
         meta["country"] = wf_country
         meta["game_id"] = lot.game_id
+    if lr_scheme_code is not None:
+        meta["lr_scheme_code"] = lr_scheme_code
+        meta["lr_scheme"] = lr_metadata
 
     cached = None
     if use_cache and not force_refresh and cache_file.exists():
@@ -1311,6 +1347,7 @@ def run_honest_walk_forward(
         max_consecutive_run=int(max_consecutive_run or 0),
         **({"compact_variants": True} if compact_variants else {}),
         **({"virtual_full_system": True} if virtual_full_system else {}),
+        **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).

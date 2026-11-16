@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
@@ -207,6 +208,13 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
+        if _spec.is_romanian:
+            from covering.lr_selection import lr_scheme_signature
+
+            scheme = _lr_scheme_for(g_label)
+            task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
+                        max_variants=scheme.size)
+            h.update(lr_scheme_signature(g_label, scheme.code, scheme.n).encode("utf-8"))
         if not _spec.is_romanian:
             task["country"] = _spec.country
             h.update(f"country={_spec.country}|game_id={_spec.game_id}".encode("utf-8"))
@@ -738,9 +746,12 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
     initial = json.loads(original)
     selected = {g.game_id for g in _selected_games()}
     original_by_game = {}
+    original_lr_codes = {}
     for dataset in initial.get("datasets", []):
         for task in dataset.get("tasks", []):
             original_by_game.setdefault(task.get("game_label"), []).append(dataset)
+            if task.get("lr_scheme_code") is not None:
+                original_lr_codes[task["game_label"]] = task["lr_scheme_code"]
     merged = []
     for dataset in current.get("datasets", []):
         tasks = dataset.get("tasks", [])
@@ -765,6 +776,18 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
             gid = task.get("game_label")
             if gid in pools:
                 task["pool_size"] = pools[gid]
+            if task.get("lr_scheme_code") is not None:
+                from covering.lr_selection import resolve_lr_scheme, select_lr_scheme
+
+                code = original_lr_codes.get(gid, task["lr_scheme_code"])
+                try:
+                    scheme = resolve_lr_scheme(gid, code, task["pool_size"])
+                except ValueError:
+                    if gid in original_lr_codes:
+                        raise
+                    scheme = select_lr_scheme(gid, task["pool_size"], policy="cost")
+                task.update(lr_scheme_code=scheme.code, max_variants=scheme.size,
+                            guarantee=4, wheel_condition=0)
     if merged == current.get("datasets"):
         return current_text
     current["datasets"] = merged
@@ -817,7 +840,7 @@ def _on_bench_finished(*, context=None, config_json=None) -> None:
         cfg = json.loads(cfg_text)
         tasks = [task for ds in cfg.get("datasets", []) for task in ds.get("tasks", [])]
         full = bool(tasks) and all(
-            min(max(3, int(task["guarantee"])),
+            task.get("lr_scheme_code") is None and min(max(3, int(task["guarantee"])),
                 _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO)).pick_n)
             == _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO)).pick_n
             and int(task.get("max_variants") or 0) == 0 for task in tasks
@@ -1810,6 +1833,9 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "wheel_condition": meta.get("wheel_condition"),
             "max_variants": meta.get("max_variants"),
             "max_consecutive_run": meta.get("max_consecutive_run"),
+            # Identitatea și profilul oficial sunt ale rulării, nu ale sliderului curent.
+            "lr_scheme_code": meta.get("lr_scheme_code"),
+            "lr_scheme": deepcopy(meta.get("lr_scheme")),
         }
         for key in (
             "large_pool_wf_skipped", "skip_reason", "skip_detail", "estimated_rows", "row_limit"
@@ -2330,7 +2356,9 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                     spec = _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO))
                     source_hashes[(dataset["fname"], spec.game_id)] = hashlib.sha256(dataset["df_json"].encode("utf-8")).hexdigest()
                     guarantee = max(3, min(spec.pick_n, int(task["guarantee"])))
-                    if not simulated and (guarantee != spec.pick_n or int(task.get("max_variants") or 0) != 0):
+                    if not simulated and task.get("lr_scheme_code") is not None:
+                        guarantee = spec.pick_n  # explicit complete-system reference, outside the LR bet
+                    if not simulated and task.get("lr_scheme_code") is None and (guarantee != spec.pick_n or int(task.get("max_variants") or 0) != 0):
                         raise ValueError("Analiza virtuală cere sistem complet și plafon 0 pentru fiecare joc selectat.")
                     jobs.append((dataset["fname"], spec, frame, dict(task), guarantee))
             if not jobs:
@@ -2402,7 +2430,7 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             for index, (fname, spec, frame, task, guarantee) in enumerate(jobs):
                 # Sistemele complete se pot evalua virtual, fără a materializa
                 # sute de mii de combinații; restul simulează variantele reale.
-                complete = guarantee == spec.pick_n and int(task.get("max_variants") or 0) == 0
+                complete = task.get("lr_scheme_code") is None and guarantee == spec.pick_n and int(task.get("max_variants") or 0) == 0
                 job_simulated = simulated and (materialize_full or not complete)
                 if complete and materialize_full:
                     from covering.large_pool import LEGACY_MAX_POOL, validate_large_pool_request
@@ -2441,6 +2469,8 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                 }
                 if not spec.is_romanian:
                     kw.update(game_key=spec.bench_key, country=spec.country)
+                if job_simulated and task.get("lr_scheme_code") is not None:
+                    kw["lr_scheme_code"] = task["lr_scheme_code"]
                 meta = {}
                 try:
                     flat, meta = run_honest_walk_forward(**kw)
@@ -2452,13 +2482,15 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                               "source": fname, "pool": task["pool_size"],
                               "source_sha256": source_hashes[(fname, spec.game_id)], "task": dict(task),
                               "guarantee": guarantee, "depth": depth, "flat": flat, "meta": meta, "simulated": job_simulated,
+                              "lr_reference_only": not job_simulated,
                               "max_variants": int(task.get("max_variants") or 0), "wheel_condition": task.get("wheel_condition")}
                 except Exception as exc:  # noqa: BLE001
                     fatal_error = True
                     logger.error("[WF VIRTUAL] %s: %s", spec.name, exc)
                     record = {"name": spec.name, "game": spec.geometry, "game_id": spec.game_id,
                               "source": fname, "pool": task["pool_size"], "guarantee": guarantee,
-                              "depth": depth, "error": str(exc), "simulated": job_simulated}
+                              "depth": depth, "error": str(exc), "simulated": job_simulated,
+                              "task": dict(task), "lr_reference_only": not job_simulated}
                 if decision_moved() or (not record.get("error") and meta.get("decision_changed")):
                     decision_changed = True
                     break
@@ -2542,14 +2574,25 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                 ui.label(STATE["_virtual_physical_notice"]).classes("text-caption text-warning")
             for record in records:
                 simulated = bool(record.get("simulated"))
-                ui.label(f"{record['name']} · pool cerut {record['pool']} · garanție inițială {record['guarantee']} · fereastră cerută {record['depth']}%").classes("text-bold")
+                meta = record.get("meta") or {}
+                lr_meta = dict(meta)
+                if lr_meta.get("lr_scheme_code") is None and (record.get("task") or {}).get("lr_scheme_code") is not None:
+                    lr_meta.update(lr_scheme_code=record["task"]["lr_scheme_code"], pool_size=record["pool"])
+                lr_lines = _lr_history_lines(record["game"], lr_meta) if simulated and not record.get("lr_reference_only") else []
+                system_note = ("schemă LR" if lr_lines else "referință sistem complet virtual" if record.get("lr_reference_only")
+                               else f"garanție inițială {record['guarantee']}")
+                ui.label(f"{record['name']} · pool cerut {record['pool']} · {system_note} · fereastră cerută {record['depth']}%").classes("text-bold")
+                for line in lr_lines:
+                    ui.label(line).classes("text-caption")
                 ui.label(
-                    "Istoricul nu stabilește că au fost jucate. Schema LR disponibilă este reconstituită "
-                    "pe pool-ul de atunci; în lipsa unui cod se păstrează sistemul simulat sau virtual. "
+                    "Istoricul nu stabilește că au fost jucate. "
+                    + ("Codul LR păstrat în rulare este reconstituit pe pool-ul de atunci. " if lr_lines else
+                       "Referința completă este o ipoteză fără schemă LR. " if record.get("lr_reference_only") else
+                       "Schema LR disponibilă este reconstituită pe pool-ul de atunci; în lipsa unui cod se păstrează sistemul simulat sau virtual. ") +
                     "Premiul și costul corespund sistemului indicat pe rând. Exemplul de variantă este "
                     "construit după extragerea istorică, din variantele sistemului evaluat."
                 ).classes("text-caption text-warning")
-                if simulated and not record.get("error"):
+                if simulated and not lr_lines and not record.get("error"):
                     cap = int(record.get("max_variants") or 0)
                     condition = int(record.get("meta", {}).get("wheel_condition") or record.get("wheel_condition") or record["guarantee"])
                     ui.label(f"Simularea inițială: condiție {condition}; " + (f"plafon {cap} variante pe extragere." if cap else "fără plafon de variante.")).classes("text-caption")
@@ -2600,8 +2643,11 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         "best_ticket": int(entry.hits),
                         "generated_variants": [list(getattr(e, "variant", None) or []) for e in per_draw[int(entry.draw_index)]],
                         "expected_variant_count": getattr(entry, "variant_count", None),
+                        "lr_scheme_code": context.get("lr_scheme_code"),
+                        "lr_catalog_signature": ((context.get("audit") or {}).get("lr_scheme") or context.get("lr_scheme") or {}).get("catalog_signature"),
                         "variant_prize_groups": getattr(entry, "variant_prize_groups", None),
                         "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
+                        "lr_reference_only": bool(record.get("lr_reference_only")),
                     })
                 has_lr = any(d.get("lr_scheme_code") is not None for d in played.values())
                 if not has_lr:
@@ -2632,7 +2678,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     ui.table(columns=[
                         {"name": "threshold", "label": "Hiturile", "field": "threshold"},
                         {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
-                        {"name": "ticket", "label": "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "ticket"},
+                        {"name": "ticket", "label": "Maxim pe variantele evaluate" if has_lr else "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "ticket"},
                     ], rows=summary, row_key="threshold").classes("w-full").props("dense wrap-cells")
                 rows = []
                 pool_records = {}
@@ -2668,9 +2714,11 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         if holder.get("binding") is not None:
                             holder["binding"].set_pagination(event.value)
                     ui.label(
-                        "Premiul brut estimat și costul folosesc schema redusă LR disponibilă pentru pool-ul de atunci; "
-                        "la mai multe coduri se alege cel cu cele mai puține variante. În lipsa unei scheme LR, "
-                        "se folosesc variantele simulate. Codul și numărul de variante sunt afișate pe fiecare rând. "
+                        ("Premiul brut estimat și costul folosesc exact codul LR păstrat în rulare. " if lr_lines else
+                         "Referința completă nu atribuie premiile unei scheme LR. " if record.get("lr_reference_only") else
+                         "Premiul brut estimat și costul folosesc schema redusă LR disponibilă pentru pool-ul de atunci; "
+                         "la mai multe coduri se alege cel cu cele mai puține variante. În lipsa unei scheme LR, se folosesc variantele simulate. ") +
+                        "Codul și numărul de variante sunt afișate pe fiecare rând. "
                         "Sumele sunt estimări la tariful actual și premiile unitare publicate, fără taxa pe bilet; "
                         "reconstituirea nu dovedește că variantele au fost jucate."
                     ).classes("text-caption text-grey") if romanian else None
@@ -3933,6 +3981,42 @@ def _render_base_interval_tables() -> None:
 # --------------------------------------------------------------------------- #
 # Pagina principală
 # --------------------------------------------------------------------------- #
+def _render_lr_pool_input(game: str, title: str):
+    """One stop per official code, including codes sharing a pool size."""
+    from covering.lr_schemes import lr_schemes
+
+    schemes = sorted(lr_schemes(game), key=lambda scheme: (scheme.n, scheme.size, scheme.code))
+    selected = _lr_scheme_for(game)
+    codes = [scheme.code for scheme in schemes]
+    key = _LR_CODE_KEYS[game]
+    SETTINGS[key] = selected.code
+    SETTINGS[_POOL_KEYS[game]] = selected.n
+    previous = {"code": selected.code}
+    ui.label(title).classes("text-bold mt-2")
+    control = ui.slider(min=0, max=len(schemes) - 1, step=1,
+                        value=codes.index(selected.code)).classes("w-full")
+    control.props(f"label-always markers label-value={selected.n}")
+    control.bind_value(SETTINGS, key,
+                       forward=lambda index: schemes[max(0, min(len(schemes) - 1, int(index or 0)))].code,
+                       backward=lambda code: codes.index(code) if code in codes else codes.index(_lr_scheme_for(game).code))
+    ui.label().bind_text_from(SETTINGS, key, lambda _: _lr_selection_lines(game)[0]).classes("text-caption text-info")
+    ui.label().bind_text_from(SETTINGS, key, lambda _: _lr_selection_lines(game)[1]).classes("text-caption text-grey")
+    transition = ui.label("").classes("text-caption text-warning")
+
+    def changed(event):
+        index = max(0, min(len(schemes) - 1, int(event.value or 0)))
+        scheme = schemes[index]
+        SETTINGS[key] = scheme.code
+        SETTINGS[_POOL_KEYS[game]] = scheme.n
+        control.props(f"label-value={scheme.n}")
+        transition.set_text(_lr_selection_change_text(game, previous["code"], scheme.code))
+        previous["code"] = scheme.code
+        _save_settings()
+
+    control.on_value_change(changed)
+    return control
+
+
 @ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
@@ -4134,9 +4218,8 @@ def main_page() -> None:
             widget.on_value_change(lambda: _save_settings())
             return widget
 
-        # Pool-ul pe joc (2026-10-22): România are un câmp pentru fiecare joc,
-        # cu maximul jocului și implicit cel mai mare cod LR; alte țări, câmpul
-        # comun de dinainte.
+        # România: fiecare cod LR oficial are o poziție proprie a sliderului.
+        # Alte țări: câmpul numeric comun de dinainte.
         _pool_inputs = []
         if _cc == _LOT.RO:
             for _plabel, _ptitle in (
@@ -4144,27 +4227,13 @@ def main_page() -> None:
                 ("5/40", "Pool Loto 5/40"),
                 ("joker", "Pool Joker (Urna 1)"),
             ):
-                _pspec = _LOT.GAMES_BY_ID[_plabel]
-                _pmin, _pmax = _pspec.min_pool, _pspec.max_pool
-                _pool_inputs.append(
-                    _bind_save(
-                        ui.number(
-                            f"{_ptitle} ({_pmin}–{_pmax} numere)",
-                            min=_pmin, max=_pmax, step=1,
-                        ).classes("w-full"),
-                        _POOL_KEYS[_plabel],
-                    )
-                )
+                _pool_inputs.append(_render_lr_pool_input(_plabel, _ptitle))
             ui.label(
-                "La fiecare pornire: 9 numere la 6/49 (Cod 48), 8 la 5/40 (Cod 16) "
-                "și 10 la Joker (Cod 24), schemele reduse pe care le joci. "
-                "Dimensiunile pot fi schimbate pentru Re-Bench. Minimul este cel mai mic "
-                "cod LR oficial: 9 la 6/49 (Cod 48), 7 la 5/40 (Cod 15), 7 la Joker "
-                "(Cod 45). Maximul poate fi ales separat: "
-                "49 la 6/49, 40 la 5/40, 45 la Joker. Numai Loto 5/40 are coduri peste "
-                "16 numere (Cod 45 și 46 pe 17, Cod 47 pe 18, Cod 48 pe 19); "
-                "„Istoric hits” se validează pe pool-ul fiecărui joc, cu metoda decisă "
-                "pentru acea mărime sau pentru cel mai apropiat pool evaluat."
+                "Fiecare poziție a sliderului alege un cod LR oficial complet. Codurile cu "
+                "același număr de numere au poziții distincte, în ordinea costului. "
+                "La pornire: Cod 48 la 6/49, Cod 16 la 5/40 și Cod 24 la Joker. "
+                "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
+                "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
         else:
             _pool_inputs.append(
@@ -4175,51 +4244,49 @@ def main_page() -> None:
                     "pool_size_val",
                 )
             )
-        _guarantee_input = _bind_save(
-            ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes(
-                "w-full"
-            ),
-            "guarantee_val",
-        )
-        if _cc == _LOT.RO:
-            ui.label(_romanian_guarantee_text()).bind_text_from(
-                SETTINGS, "guarantee_val", lambda _: _romanian_guarantee_text()
+        _guarantee_input = _condition_input = _variant_limit_input = None
+        if _cc != _LOT.RO:
+            _guarantee_input = _bind_save(
+                ui.number("Garanție minimă (Set Cover)", min=3, max=6, step=1).classes(
+                    "w-full"
+                ),
+                "guarantee_val",
+            )
+            ui.label(
+                "6 este sistem complet pentru 6/49. La 5/40 garanția este plafonată "
+                "la 5 numere pe bilet, din cele 6 extrase. Joker are 5 numere extrase "
+                "în Urna 1, deci garanția maximă este 5."
             ).classes("text-caption text-grey")
-        ui.label(
-            "6 este sistem complet pentru 6/49. La 5/40 garanția este plafonată "
-            "la 5 numere pe bilet, din cele 6 extrase. Joker are 5 numere extrase "
-            "în Urna 1, deci garanția maximă este 5."
-        ).classes("text-caption text-grey")
-        _condition_input = _bind_save(
-            ui.number(
-                "Garanția se aplică dacă în pool cad (0 = câte cere garanția)",
-                min=0,
-                max=6,
-                step=1,
-            ).classes("w-full"),
-            "wheel_condition_val",
-        )
-        ui.label(
-            "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
-            "doar când cad 4 numere din pool. Economia de bilete depinde de dimensiunea pool-ului."
-        ).classes("text-caption text-grey")
-        _variant_limit_input = _bind_save(
-            ui.number(
-                "Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10
-            ).classes("w-full"),
-            "max_variants_val",
-        )
-        ui.label(
-            "La buget limitat, aplicația caută automat o acoperire mai bună "
-            "fără să mărească numărul de variante. 0 cere acoperire completă, "
-            "în limitele de calcul afișate."
-        ).classes("text-caption text-grey")
+            _condition_input = _bind_save(
+                ui.number(
+                    "Garanția se aplică dacă în pool cad (0 = câte cere garanția)",
+                    min=0,
+                    max=6,
+                    step=1,
+                ).classes("w-full"),
+                "wheel_condition_val",
+            )
+            ui.label(
+                "Lotto design „t dacă p”: de exemplu garanție 3 cu 4 = un bilet cu 3 numere garantat "
+                "doar când cad 4 numere din pool. Economia de bilete depinde de dimensiunea pool-ului."
+            ).classes("text-caption text-grey")
+            _variant_limit_input = _bind_save(
+                ui.number(
+                    "Limită maximă variante (0=nelimitat)", min=0, max=10000, step=10
+                ).classes("w-full"),
+                "max_variants_val",
+            )
+            ui.label(
+                "La buget limitat, aplicația caută automat o acoperire mai bună "
+                "fără să mărească numărul de variante. 0 cere acoperire completă, "
+                "în limitele de calcul afișate."
+            ).classes("text-caption text-grey")
         _large_pool_warning = ui.column().classes("w-full gap-1")
 
         def _render_large_pool_warning():
             _large_pool_warning.clear()
             with _large_pool_warning:
-                for note in _large_pool_notes():
+                for note in (_large_pool_notes() if _cc != _LOT.RO else []):
                     ui.label(note).classes("text-caption text-warning")
 
         _render_large_pool_warning()
@@ -4353,7 +4420,8 @@ def main_page() -> None:
             *_pool_inputs, _guarantee_input, _condition_input,
             _variant_limit_input, _consecutive_input,
         ):
-            _budget_input.on_value_change(lambda: _render_large_pool_warning())
+            if _budget_input is not None:
+                _budget_input.on_value_change(lambda: _render_large_pool_warning())
         _bind_save(
             ui.number(
                 "Analizează doar ultimele X% extrageri", min=0, max=100, step=5

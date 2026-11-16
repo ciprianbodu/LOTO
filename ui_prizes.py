@@ -401,7 +401,7 @@ class PoolPrizeHistoryLookup(PrizeHistoryLookup):
 
 
 def history_played_system(game: str, row: dict) -> dict:
-    """Reconstruct the cheapest available official LR code on the historical pool.
+    """Keep the persisted official code; old rows reconstruct the cheapest code.
 
     Select the code by size/code only, before inspecting the draw. Only the
     displayed representative is chosen afterwards. Exact compact LR groups
@@ -412,6 +412,9 @@ def history_played_system(game: str, row: dict) -> dict:
     result = dict(row)
     label = {"loto_6_49": "6/49", "loto_5_40": "5/40"}.get(game, game)
     result["system_label"] = "Sistem complet virtual" if row.get("virtual_full_system") else "Variante simulate"
+    if row.get("lr_reference_only"):
+        result.pop("lr_scheme_code", None)
+        return result
     if str(row.get("country") or "RO").upper() != "RO":
         return result
     pool = sorted({int(n) for n in row.get("pool_numbers") or []})
@@ -420,7 +423,23 @@ def history_played_system(game: str, row: dict) -> dict:
     schemes = lr_schemes(label, len(pool))
     if not schemes:
         return result
-    scheme = min(schemes, key=lambda s: (s.size, s.code))
+    code = row.get("lr_scheme_code")
+    if code is not None:
+        from covering.lr_selection import resolve_lr_scheme, lr_scheme_signature
+        try:
+            scheme = resolve_lr_scheme(label, code, len(pool))
+            signature = row.get("lr_catalog_signature")
+            if signature is not None and signature != lr_scheme_signature(label, code, len(pool)):
+                raise ValueError("desfășurarea oficială LR s-a schimbat față de istoricul păstrat")
+        except ValueError as exc:
+            result["history_system_issue"] = str(exc)
+            return result
+    else:
+        scheme = min(schemes, key=lambda s: (s.size, s.code))
+    expected = row.get("expected_variant_count")
+    if code is not None and expected is not None and expected != scheme.size:
+        result["history_system_issue"] = "numărul variantelor păstrate nu corespunde codului LR"
+        return result
     drawn = {int(n) for n in row.get("drawn") or []}
     example, hits = best_variant(scheme, pool, drawn)
     if label == "joker":
@@ -585,7 +604,7 @@ class PoolPrizeBinding:
         context = deepcopy({key: data.get(key) for key in (
             "label", "drawn", "pool_numbers", "best_variant_raw",
             "best_variant_joker_hit", "history_system_issue",
-            "lr_scheme_code", "lr_scheme_game", "system_label",
+            "lr_scheme_code", "lr_scheme_game", "lr_catalog_signature", "system_label",
             "expected_variant_count", "virtual_full_system",
         )})
         cached = self._lr_prize_cache.get(index)

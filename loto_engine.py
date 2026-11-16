@@ -471,7 +471,8 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         return matrix[:, 0].astype(np.int64, copy=False)
 
     def generate_predictions(
-        self, guarantee=4, max_variants=0, scores=None, condition=None
+        self, guarantee=4, max_variants=0, scores=None, condition=None,
+        lr_scheme_code=None,
     ):
         """Generează predicții bazate pe analiză.
 
@@ -479,8 +480,27 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         se aplică numai când cad `condition` numere din pool, cu mult mai puține
         bilete. None sau egal cu garanția = cover clasic (comportament neschimbat).
         """
+        # Each call owns its identity, including empty or rejected requests.
+        self.audit.pop("lr_scheme", None)
         if not hasattr(self, "hard_core") or not self.hard_core:
+            if lr_scheme_code is not None:
+                raise ValueError("Schema LR cere poolul complet de numere, dar poolul este gol")
             return [], 0.0
+        if lr_scheme_code is not None:
+            from covering.lr_selection import resolve_lr_scheme, lr_scheme_metadata, validate_lr_variants
+            from covering.lr_schemes import scheme_tickets
+            from covering.common import compute_coverage_pct
+
+            if getattr(self, "lottery", None) is not None and not self.lottery.is_romanian:
+                raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+            scheme = resolve_lr_scheme(self.game_type, lr_scheme_code, len(self.hard_core))
+            validate_lr_variants(scheme, max_variants)
+            variants = scheme_tickets(scheme, self.hard_core)
+            self.audit["lr_scheme"] = lr_scheme_metadata(scheme)
+            self.audit["lr_scheme"]["coverage_target"] = 4
+            coverage_pct = compute_coverage_pct(variants, self.hard_core, 4)
+            self._attach_joker(variants)
+            return variants, coverage_pct
         _cond = int(condition) if condition is not None else int(guarantee)
         if _cond != int(guarantee):
             from wheeling_methods import generate_wheel

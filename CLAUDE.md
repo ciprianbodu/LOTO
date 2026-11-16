@@ -1,6 +1,21 @@
 @AGENTS.md
 
-Lucrare curentă: verificare 4+/5+/6+ exclusiv pe scheme reduse LR (15.11.2026).
+Lucrare curentă: glisoare pe scheme LR și generare fizică (16.11.2026).
+Fiecare poziție RO este un cod oficial, inclusiv două coduri cu același pool;
+helperul afișează codul, numerele, variantele, costul și garanțiile exacte.
+Selecția după pool alege minimum de variante; selecția explicită păstrează
+codul. Pornirea rămâne la codurile 48/16/24, pooluri 9/8/10, pentru
+6/49/5/40/Joker.
+Configurația UI RO transmite lr_scheme_code; motorul și simularea folosesc
+exact rândurile LR în ordine numerică. Joburile legacy fără flag și jocurile
+străine rămân compatibile. Cache-urile și istoricul păstrează identitatea
+codului; sidebarul mutat ulterior nu schimbă sistemul evaluat. Garanțiile
+oficiale se afișează separat de metrica auxiliară la pragul 4.
+Testele noi/adaptate rămân locale. Validare finală: 7.312 teste trecute, 25 omise, zero eșecuri/erori, 220 fișiere, Python 3.15.2.
+  UI/worker real și verificare în browser trecute; testele rămân locale.
+Raport: scripts/analysis/lr_scheme_sliders_2026-11-16.md.
+
+Lucrare anterioară: verificare 4+/5+/6+ exclusiv pe scheme reduse LR (15.11.2026).
 Fluxul LR existent este păstrat pentru toate cele trei jocuri. Acțiunea separată
 cu 21 de variante simple și etapa specială non-LR sunt retrase integral.
 Pornirea folosește codurile confirmate: 6/49 Cod 48, pool 9, 12 variante;

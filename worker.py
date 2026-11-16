@@ -362,8 +362,29 @@ def _set_bench_hit_target(task: dict) -> None:
 
 def _task_norm(task: dict, lot) -> dict:
     """`_normalize_task` cu geometria și plafonul jocului din registru."""
+    scheme = None
+    if task.get("lr_scheme_code") is not None:
+        from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
+
+        if not lot.is_romanian:
+            raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
+        # Validate raw inputs before legacy normalization can truncate them.
+        scheme = resolve_lr_scheme(lot.geometry, task["lr_scheme_code"], task.get("pool_size", 12))
+        validate_lr_variants(scheme, task.get("max_variants", 0))
     cap = _RO_RESTRICT_BASE_CAP if lot.is_romanian else int(lot.max_n)
-    return _normalize_task(task, int(lot.pick_n), max_n=cap, pool_max=int(lot.max_pool))
+    norm = _normalize_task(task, int(lot.pick_n), max_n=cap, pool_max=int(lot.max_pool))
+    if scheme is not None:
+        from loto_enterprise.core.walk_forward_adapter import _effective_pool_size
+
+        # Reject a shortened LR pool before cache lookup, not after a job hit.
+        played_pool = _effective_pool_size(
+            norm["pool_size"], lot.geometry,
+            norm["restrict_base_max"], norm["restrict_base_min"],
+        )
+        resolve_lr_scheme(lot.geometry, scheme.code, played_pool)
+        norm.update(lr_scheme_code=scheme.code, guarantee=4,
+                    wheel_condition=4, max_variants=scheme.size)
+    return norm
 
 
 def _hedge_cache_semantics(lot, pool_size: int) -> str:
@@ -466,6 +487,7 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                         norm["guarantee"],
                         norm["wheel_condition"],
                         norm["max_variants"],
+                        **({"lr_scheme_code": norm["lr_scheme_code"]} if "lr_scheme_code" in norm else {}),
                     ).encode()
                 )
         # Decizia fiecărei țări străine din job (România: best_methods.json, mai sus).
@@ -547,12 +569,19 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
             [_resolve_task_lottery(task) for task in ds.get("tasks", [])]
             for ds in datasets_cfg
         ]
+        for ds, lotteries in zip(datasets_cfg, lotteries_cfg, strict=True):
+            for task, lot in zip(ds.get("tasks", []), lotteries, strict=True):
+                if task.get("lr_scheme_code") is not None:
+                    _task_norm(task, lot)
     except UnknownLotteryError as exc:
         fail_job(
             job_id,
             f"Țară sau joc necunoscut în registru: {exc}",
             worker_token=WORKER_TOKEN,
         )
+        return None
+    except ValueError as exc:
+        fail_job(job_id, f"Schemă LR invalidă: {exc}", worker_token=WORKER_TOKEN)
         return None
     cache_key = _pipeline_cache_key(input_hash, cfg) if use_cache else ""
 
@@ -706,6 +735,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
                         pure_bench_mode=norm["pure_bench_mode"],
+                        **({"lr_scheme_code": norm["lr_scheme_code"]} if "lr_scheme_code" in norm else {}),
                     )
                 )
                 effective_pool = (
@@ -743,6 +773,9 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "bench_key": lot.bench_key,
                     "geometry": lot.geometry,
                 }
+                if "lr_scheme_code" in norm:
+                    outputs[game_label]["lr_scheme_code"] = norm["lr_scheme_code"]
+                    outputs[game_label]["lr_scheme"] = audit["lr_scheme"]
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
                     logging.info(

@@ -151,6 +151,9 @@ def _wf_generation_options(data: dict) -> dict:
         "restrict_base_min": int(data.get("restrict_base_min") or 0),
         "max_consecutive_run": int(max_run or 0),
     }
+    lr_code = _result_lr_scheme_code(data)
+    if lr_code is not None:
+        opts["lr_scheme_code"] = lr_code
     # Identitatea jocului STRĂIN vine din ecoul rezultatului (worker v6), ca WF
     # să citească decizia țării lui. România (sau un rezultat fără ecou): dict-ul
     # de dinainte, fără chei noi.
@@ -184,19 +187,78 @@ _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_
 # 9 la 6/49 = Cod 48; 7 la 5/40 = Cod 15; 7 la Joker = Cod 45).
 _POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
 _POOL_DEFAULTS = {"6/49": 9, "5/40": 8, "joker": 10}
+_LR_CODE_KEYS = {label: f"lr_scheme_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
+_LR_CODE_DEFAULTS = {"6/49": 48, "5/40": 16, "joker": 24}
 
 
 def _pool_size_for(game) -> int:
     """Pool-ul următoarei generări pentru `game` (etichetă, fișier sau cheie de bench).
 
-    România: câmpul jocului; altă țară: câmpul comun. Plafonat la
-    minimul UI al jocului (`Lottery.min_pool`: cel mai mic cod LR oficial în
-    România, 6 în alte țări) .. maximul jocului (`ui.number` aplică min/max
-    abia la blur, deci valorile tranzitorii de la tastare ajung aici)."""
+    România: numai dimensiuni din catalogul LR; sliderul alege codul exact,
+    inclusiv când mai multe coduri folosesc aceeași dimensiune. O valoare
+    veche, păstrată numai ca număr, se apropie de o dimensiune LR disponibilă.
+    Alte țări: câmpul numeric comun rămâne plafonat la limitele jocului."""
     lot = _game_spec_for(game)
     key = _POOL_KEYS.get(lot.game_id) if lot.is_romanian else None
     raw = _int_setting(key) if key else _int_setting("pool_size_val")
+    if lot.is_romanian:
+        from covering.lr_selection import lr_pool_sizes
+
+        allowed = lr_pool_sizes(lot.geometry)
+        if not allowed:
+            raise ValueError(f"Nu există scheme reduse oficiale pentru {lot.name}.")
+        return min(allowed, key=lambda n: (abs(n - raw), n))
     return max(int(lot.min_pool), min(int(lot.max_pool), int(raw)))
+
+
+def _result_lr_scheme_code(data: dict):
+    code = data.get("lr_scheme_code")
+    if code is None:
+        code = ((data.get("audit") or {}).get("lr_scheme") or {}).get("code")
+    return code
+
+
+def _lr_scheme_for(game, pool_size=None):
+    """Keep the explicit slider code; legacy pool-only settings use cheapest."""
+    from covering.lr_selection import resolve_lr_scheme, select_lr_scheme
+
+    lot = _game_spec_for(game)
+    if not lot.is_romanian:
+        return None
+    size = _pool_size_for(game) if pool_size is None else int(pool_size)
+    code = SETTINGS.get(_LR_CODE_KEYS[lot.game_id])
+    if code is not None:
+        try:
+            return resolve_lr_scheme(lot.geometry, code, size)
+        except (TypeError, ValueError):
+            pass
+    return select_lr_scheme(lot.geometry, size, policy="cost")
+
+
+def _lr_selection_lines(game) -> tuple[str, str]:
+    lot = _game_spec_for(game)
+    scheme = _lr_scheme_for(game)
+    price = float(lot.price)
+    summary = (f"Cod {scheme.code} · {scheme.n} numere · {scheme.size} variante · "
+               f"{scheme.size * price:g} lei în variante; 0,50 lei/bilet, tarif standard.")
+    return summary, "Garanții condiționate: " + _lr_guarantee_text(scheme)
+
+
+def _lr_selection_change_text(game, previous_code, next_code) -> str:
+    from covering.lr_selection import resolve_lr_scheme, lr_scheme_transition
+
+    if previous_code == next_code:
+        return ""
+    geometry = _game_spec_for(game).geometry
+    change = lr_scheme_transition(resolve_lr_scheme(geometry, previous_code), resolve_lr_scheme(geometry, next_code))
+    lost = [f"{t}+: {100 * values['before']:.6f}% → {100 * values['after']:.6f}%"
+            for t, values in sorted(change["lost_odds"].items())]
+    lost += [f"cu {entry['pool_hits']} în pool, {entry['ticket_hits']} sigur → {100 * entry['new_probability']:.2f}%"
+             for entry in change["lost_sure_guarantees"]]
+    if not lost:
+        return ""
+    return (f"Față de Cod {previous_code}, Cod {next_code} reduce șansa pe cel puțin o variantă: "
+            + " · ".join(lost) + ". Un pool mai mare nu asigură șanse mai mari la fiecare prag.")
 
 
 def _large_pool_notes() -> list[str]:
@@ -315,6 +377,7 @@ UI_PERSIST_KEYS = [
     "bench_target_revision",
     "pool_size_val",
     *_POOL_KEYS.values(),
+    *_LR_CODE_KEYS.values(),
     "guarantee_val",
     "max_variants_val",
     "lookback_val",
@@ -346,6 +409,7 @@ UI_PERSIST_KEYS = [
 DEFAULTS = {
     "pool_size_val": 10,
     **{_POOL_KEYS[label]: size for label, size in _POOL_DEFAULTS.items()},
+    **{_LR_CODE_KEYS[label]: code for label, code in _LR_CODE_DEFAULTS.items()},
     "guarantee_val": 4,
     "max_variants_val": 0,
     # Lotto design „garanție dacă condiție": 0 = cover clasic (condiție = garanție).
@@ -501,6 +565,7 @@ def _load_settings() -> None:
     # Câmpurile rămân editabile pentru toată sesiunea și pentru toate paginile.
     for _label, _key in _POOL_KEYS.items():
         SETTINGS[_key] = _POOL_DEFAULTS[_label]
+        SETTINGS[_LR_CODE_KEYS[_label]] = _LR_CODE_DEFAULTS[_label]
 
     _sanitize_country_settings()
 

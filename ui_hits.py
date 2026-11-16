@@ -18,6 +18,7 @@ from ui_results import (
     _guarantee_gap_line,
     _hypergeo_params,
     _large_pool_wf_note,
+    _lr_history_lines,
     _method_from_bench,
     _partial_wf_note,
     _random_rate_hypergeo,
@@ -316,6 +317,8 @@ def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
                 "expected_variant_count": None,
                 "variant_prize_groups": getattr(p, "variant_prize_groups", None),
                 "virtual_full_system": bool(getattr(p, "virtual_full_system", False)),
+                "lr_scheme_code": ctx.get("lr_scheme_code"),
+                "lr_catalog_signature": ((ctx.get("audit") or {}).get("lr_scheme") or ctx.get("lr_scheme") or {}).get("catalog_signature"),
             }
         row = per[di]
         row["generated_variants"].append(getattr(p, "variant", None) or [])
@@ -392,7 +395,10 @@ def _lr_replay(per: dict, game_label: str) -> list[dict]:
     out = []
     for n, rows in sorted(by_n.items()):
         for scheme in lr_schemes(game_label, n):
-            best = [(d, best_hits(scheme, d["pool_numbers"], d["drawn"])) for d in rows]
+            used_rows = [d for d in rows if d.get("lr_scheme_code") in (None, scheme.code)]
+            if not used_rows:
+                continue
+            best = [(d, best_hits(scheme, d["pool_numbers"], d["drawn"])) for d in used_rows]
             odds = scheme_odds(scheme)
             out.append(
                 {
@@ -560,8 +566,11 @@ def _render_hits_4plus(
             "istoricul de mai jos aplică aceeași limită la fiecare pas, ca la "
             "pool-ul generat."
         ).classes("text-caption text-grey")
+    _lr_lines = _lr_history_lines(_game_label_for(game), meta)
+    for line in _lr_lines:
+        ui.label(line).classes("text-caption text-grey")
     _wg = (meta or {}).get("wheel_guarantee")
-    if _wg is not None:
+    if not _lr_lines and _wg is not None:
         _wc = (meta or {}).get("wheel_condition") or _wg
         _cap = int((meta or {}).get("max_variants") or 0)
         _cap_note = f"plafon {_cap} variante" if _cap else "fără plafon de variante"
@@ -574,7 +583,7 @@ def _render_hits_4plus(
                 f"Acoperirea de 100% garantează {_wg} pe un bilet numai de la {_wc} "
                 "numere în pool. Pentru rezultate, urmăriți coloana variantelor."
             ).classes("text-caption text-warning")
-    _cn = _wf_coverage_note(flat)
+    _cn = _wf_coverage_note(flat) if not _lr_lines else None
     if _cn:
         ui.label(_cn[1]).classes(_cn[0])
     if meta and meta.get("partial"):
@@ -696,7 +705,7 @@ def _render_hits_4plus(
             _hp[0],
             "compară separat hiturile pool-ului și ale variantelor",
         )
-        if _hp
+        if _hp and not _lr_lines
         else ""
     )
     if _gap:
