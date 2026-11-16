@@ -2070,6 +2070,47 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Glisoare pe coduri LR, generare fizică și istoric — 2026-11-16
+
+- La cererea explicită nouă a utilizatorului, fiecare poziție a glisoarelor RO
+  identifică un cod LR complet: 7 coduri la 6/49, 10 la Joker și 16 la 5/40.
+  Codurile sunt ordonate după pool, apoi după numărul variantelor și cod.
+  Două coduri pentru același pool sunt poziții distincte, cu helper pentru
+  cod, numere, variante, cost standard și garanțiile condiționate exacte.
+- Alegerea automată doar după pool folosește cel mai mic cost; alegerea
+  explicită din glisor păstrează exact codul, inclusiv unul mai scump.
+  Startupul rămâne 48/16/24 la 6/49/5/40/Joker, cu pooluri 9/8/10.
+- UI trimite `lr_scheme_code` în job și hash. Flagul este opțional pentru
+  compatibilitatea joburilor/API-ului legacy, dar noua generare UI RO îl
+  transmite întotdeauna. Acest lucru înlocuiește vechea limitare prin care
+  generatorul UI producea wheeluri generale și LR era doar o referință.
+  Fără flag, motorul general și jocurile străine își păstrează contractul.
+- Codul, țara, poolul complet și plafonul integral 0/size sunt validate;
+  rândurile provin numai din `scheme_tickets`, cu mapare numerică oficială.
+  Nu se trunchiază/completează schema și nu există fallback generic la o
+  cerere LR invalidă. O bază restrânsă prea mică produce o eroare clară.
+- Setările generice de garanție/condiție/plafon sunt ascunse în România,
+  păstrate pentru alte țări. Garanția LR este profilul oficial complet;
+  metrica auxiliară la pragul 4 nu poate fi prezentată drept «4 sigur dacă 4».
+  Cod 49 acoperă 195/210 grupe de patru, iar Cod 50 acoperă 210/210.
+- Workerul, WF serial/paralel și cache-urile păstrează codul și semnătura
+  rândurilor oficiale; Cod 49/Cod 50 pe pool 10 sunt sisteme distincte.
+  Rezultatele, raportul și premiile folosesc codul rulării, nu sidebarul
+  mutat ulterior și nici schema cea mai ieftină dedusă doar din pool.
+- Simularea fizică păstrează LR; referința separată completă virtuală omite
+  flagul și este etichetată ca referință. LR+virtual_full_system este refuzat.
+  Metadata este păstrată și în istoricul standard/simulat; profilul salvat
+  nu este înlocuit cu garanția generică din opțiunile ascunse.
+- Tarife standard confruntate cu pagina oficială la 16.11.2026: 8/7/5 lei pentru
+  6/49/Joker/5/40; 0,50 lei/bilet se adaugă separat. Tragerile speciale pot avea
+  alt tarif. Helperul spune «lei în variante», nu un total fizic necunoscut.
+- Schemele, metodele de scoring, istoricele și deciziile sunt păstrate.
+  Nu se promite o creștere monotonă a hiturilor: un cod mai ieftin poate
+  pierde unele praguri sau garanții; helperul arată schimbările reale.
+  Raport: `scripts/analysis/lr_scheme_sliders_2026-11-16.md`.
+  Validare finală: 7.312 teste trecute, 25 omise, zero eșecuri/erori, 220 fișiere, Python 3.15.2.
+  UI/worker real și verificare în browser trecute; testele rămân locale.
+
 ### Obiectiv 4+/5+/6+ exclusiv pe scheme LR — 2026-11-15
 
 Utilizatorul joacă numai schemele reduse oficiale LR la toate cele trei jocuri.
