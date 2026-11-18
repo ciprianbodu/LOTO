@@ -214,6 +214,57 @@ def scheme_odds(scheme: LRScheme) -> dict[int, float]:
     return {t: float(odds["ticket"][t]) for t in range(3, min(pick, draw_n) + 1)}
 
 
+@lru_cache(maxsize=16)
+def _joker_prize_counts(scheme: LRScheme) -> tuple[int, int, int]:
+    """Denominator and exact event counts for one shared Joker on every row.
+
+    Categories VII/VIII require exactly two/one main hits on a real variant.
+    A system may win several categories together, so exact-two cannot be
+    obtained by subtracting tails of its best variant.
+    """
+    if scheme.game != "joker":
+        raise ValueError("Probabilitățile Joker cer o schemă Joker.")
+    from itertools import combinations
+    from covering.probability import wheel_hit_profile
+
+    _, _, drawn, maximum = _GAMES[scheme.game]
+    counts = wheel_hit_profile(range(1, scheme.n + 1), scheme.variants)
+    outside = maximum - scheme.n
+
+    def tail_numerator(threshold):
+        return sum(
+            counts[h][threshold] * comb(outside, drawn - h)
+            for h in range(threshold, min(scheme.n, drawn) + 1)
+            if 0 <= drawn - h <= outside
+        )
+
+    # With J: any main hit wins. Without J: a variant needs at least three.
+    any_prize = tail_numerator(1) + 19 * tail_numerator(3)
+    exact_two = 0
+    masks = _position_masks(scheme)
+    for h in range(2, min(scheme.n, drawn) + 1):
+        rest = drawn - h
+        if not 0 <= rest <= outside:
+            continue
+        weight = comb(outside, rest)
+        for positions in combinations(range(scheme.n), h):
+            hit_mask = sum(1 << p for p in positions)
+            if any((ticket & hit_mask).bit_count() == 2 for ticket in masks):
+                exact_two += weight
+    return 20 * comb(maximum, drawn), any_prize, exact_two
+
+
+def scheme_joker_prize_odds(scheme: LRScheme) -> dict[str, float]:
+    """Uniform-draw odds of any prize and category VII on at least one row.
+
+    Assumes the same single Joker on every official variant. These are event
+    probabilities, not expected payouts or a claim of a played ticket.
+    """
+    denominator, any_prize, exact_two = _joker_prize_counts(scheme)
+    return {"any_prize": any_prize / denominator,
+            "exact_two_plus_joker": exact_two / denominator}
+
+
 @lru_cache(maxsize=64)
 def scheme_guarantees(scheme: LRScheme) -> dict[int, dict[int, float]]:
     """{k ieșite din cele n: {t: fracția cazurilor cu cel puțin t pe o variantă}}.

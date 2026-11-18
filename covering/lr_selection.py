@@ -128,5 +128,16 @@ def lr_scheme_transition(previous: LRScheme, current: LRScheme) -> dict:
             if p >= 1 - 1e-12 and new_g[h].get(t, 0) < 1 - 1e-12:
                 lost_sure.append({"pool_hits": h, "ticket_hits": t,
                                   "new_probability": new_g[h].get(t, 0)})
-    return dict(previous_code=previous.code, code=current.code,
-                lost_odds=lost, lost_sure_guarantees=lost_sure)
+    result = dict(previous_code=previous.code, code=current.code,
+                  lost_odds=lost, lost_sure_guarantees=lost_sure)
+    if previous.game == "joker":
+        from .lr_schemes import scheme_joker_prize_odds
+
+        old_prizes = scheme_joker_prize_odds(previous)
+        new_prizes = scheme_joker_prize_odds(current)
+        result["lost_joker_odds"] = {
+            key: {"before": value, "after": new_prizes[key]}
+            for key, value in old_prizes.items()
+            if new_prizes[key] < value - 1e-15
+        }
+    return result

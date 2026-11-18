@@ -255,10 +255,20 @@ def _lr_selection_change_text(game, previous_code, next_code) -> str:
             for t, values in sorted(change["lost_odds"].items())]
     lost += [f"cu {entry['pool_hits']} în pool, {entry['ticket_hits']} sigur → {100 * entry['new_probability']:.2f}%"
              for entry in change["lost_sure_guarantees"]]
+    joker_labels = {"any_prize": "orice premiu Joker",
+                    "exact_two_plus_joker": "exact 2 numere + J (categoria VII)"}
+    joker_losses = change.get("lost_joker_odds", {})
+    lost += [f"{joker_labels[key]}: {100 * values['before']:.6f}% → {100 * values['after']:.6f}%"
+             for key, values in joker_losses.items()]
     if not lost:
         return ""
+    note = (
+        " Mai multe variante sau un pool mai mare nu asigură șanse mai mari la fiecare categorie. "
+        "Calculele presupun aceeași bilă Joker pe toate variantele."
+        if joker_losses else " Un pool mai mare nu asigură șanse mai mari la fiecare prag."
+    )
     return (f"Față de Cod {previous_code}, Cod {next_code} reduce șansa pe cel puțin o variantă: "
-            + " · ".join(lost) + ". Un pool mai mare nu asigură șanse mai mari la fiecare prag.")
+            + " · ".join(lost) + "." + note)
 
 
 def _large_pool_notes() -> list[str]:

@@ -2070,6 +2070,19 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Predicții evaluate pe variantele LR efective — 2026-11-18
+
+- Modelul experimental pe perechi și două reguli EWMA de optimizare directă
+  au fost evaluate pe 5.810 extrageri românești la codurile 48/16/24. Modelul
+  pe perechi a fost verificat separat pe 30.288 extrageri din șase istorice
+  străine 6/49, cu aceeași geometrie Cod 48 simulată. Dovezile nu susțin
+  promovarea vreunui predictor. Parametrii și experimentul rămân în analiză.
+- La Joker, avertismentul de schimbare de cod include orice premiu și
+  categoria exactă 2+J. Reuniunile de două coduri LR cu pooluri disjuncte sunt
+  documentate prin enumerare și includ compromisurile 4+/5+ și taxele pe bilet.
+  Mailul separă costul variantelor generice de exemplele LR din catalog.
+- Raport: `scripts/analysis/audit_lr_predictii_2026-11-18.md`.
+
 ### Audit hituri și optimizare a generatorului generic 6/49 — 2026-11-18
 
 - Rafinare exactă după alegerea candidatului final, pentru hitcover generic

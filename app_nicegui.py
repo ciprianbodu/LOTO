@@ -3119,6 +3119,9 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
             primary = _primary_pool_data(raw_data)
             spec = _game_spec_for(game, primary)
             data = {key: deepcopy(primary[key]) for key in fields if key in primary}
+            variants = primary.get("variants")
+            if isinstance(variants, (list, tuple)):
+                data["generated_variant_count"] = len(variants)
             data.update(game_id=spec.game_id, country=spec.country)
             audit = primary.get("audit") or {}
             data["audit"] = {key: deepcopy(audit[key]) for key in audit_fields if key in audit}
@@ -3221,10 +3224,18 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
             draw = " ".join(str(x) for x in numbers) + (f" + joker {ball}" if ball is not None else "")
             lines.append(f"ultima extragere CSV: {day or '?'} → {draw}")
         lines.append("POOL:   " + _nums(primary.get("hard_core") or []) + (f"  | joker: {_nums(joker)}" if joker else ""))
+        played_lr = primary.get("lr_scheme_code") is not None
+        generated_count = primary.get("generated_variant_count")
+        if spec.is_romanian and not played_lr and generated_count is not None:
+            price = spec.price if spec.price is not None else PRICES.get(spec.geometry)
+            cost = (f" (≈ {_thousands(generated_count * price)} lei în variante; taxa pe bilet se adaugă separat)"
+                    if price is not None else " (tarif necunoscut)")
+            lines.append(f"VARIANTE GENERATE: {_thousands(generated_count)}{cost}")
         schemes = _lr_schemes_for(spec.game_id, primary)
         if schemes:
             price = spec.price if spec.price is not None else PRICES.get(spec.geometry, 8.0)
-            lines.append("SCHEMĂ LR: " + " sau ".join(
+            prefix = "SCHEMĂ LR: " if played_lr else "REFERINȚĂ LR: "
+            lines.append(prefix + " sau ".join(
                 f"{scheme.label} ({scheme.size} var. ≈ {_thousands(scheme.size * price)} lei în variante; taxa pe bilet se adaugă separat)"
                 for scheme in schemes
             ))
