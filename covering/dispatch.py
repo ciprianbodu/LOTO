@@ -122,7 +122,7 @@ def _canonical_classic(v: int, pick: int, guarantee: int, budget: int, draw_n, m
     """Wheel-ul clasic al motorului pe poziții 1..v (1 = cel mai bine clasat)."""
     pool = list(range(1, v + 1))
     scores = {n: float(v - i) for i, n in enumerate(pool)}
-    wheel, _ = generate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
+    wheel, _ = _generate_candidate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
     return tuple(tuple(sorted(int(n) for n in t)) for t in wheel)
 
 
@@ -162,7 +162,7 @@ def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel
     full = lotto_design_size(len(ordered), int(pick), int(guarantee), int(condition))
     classic = None
     if cap > 0 and (full is None or cap < full):
-        classic, _ = generate_wheel(
+        classic, _ = _generate_candidate_wheel(
             "hitcover", pool, pick, guarantee, cap, scores, None, draw_n, max_num
         )
     elif full is not None and len(tickets) == full:
@@ -191,6 +191,40 @@ def _improve_lotto(pool, pick, guarantee, condition, max_variants, scores, wheel
 
 
 def generate_wheel(
+    method: str,
+    pool,
+    pick,
+    guarantee,
+    max_variants=0,
+    scores=None,
+    condition: int | None = None,
+    draw_n: int | None = None,
+    max_num: int | None = None,
+):
+    """Build the complete wheel, then certify a bounded final profile search.
+
+    Internal portfolio candidates use ``_generate_candidate_wheel`` directly:
+    changing their search trajectory could undo gains in the previous final
+    result. Official LR geometries and other draw geometries are excluded.
+    """
+    wheel, cov = _generate_candidate_wheel(
+        method, pool, pick, guarantee, max_variants, scores, condition, draw_n, max_num
+    )
+    from covering.final_profile import final_profile_applies
+
+    if final_profile_applies(
+        len(pool), pick, guarantee, max_variants, condition, draw_n, max_num, method
+    ):
+        improved, audit = improve_hit_profile(
+            _sorted_pool(pool, scores), wheel, draw_n=6
+        )
+        if audit["applied"]:
+            wheel = _order_by_scores(improved, scores) if scores else improved
+            cov = _coverage_pct(wheel, pool, guarantee)
+    return wheel, cov
+
+
+def _generate_candidate_wheel(
     method: str,
     pool,
     pick,
@@ -285,7 +319,7 @@ def _generate_wheel(
         and max_num
         and budget_buys_complete_design(len(set(pool)), pick, guarantee, max_variants)
     ):
-        return generate_wheel(
+        return _generate_candidate_wheel(
             "lajolla", pool, pick, guarantee, 0, scores, None, draw_n, max_num
         )
     if fn is None:

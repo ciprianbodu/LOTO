@@ -357,6 +357,7 @@ def _wheel_sig(
     *,
     method_override: str | None = None,
     lr_scheme_code=None,
+    _final_refinement: bool = True,
 ) -> str:
     """Semnătura wheel-ului EFECTIV pe care îl va folosi walk-forward-ul.
 
@@ -440,7 +441,8 @@ def _wheel_sig(
             budget = cap if cap > 0 and (full is None or cap < full) else (full or 0)
             if budget > 0:
                 classic = _wheel_sig(
-                    pool_size, game_type, g, None, budget, method_override="hitcover"
+                    pool_size, game_type, g, None, budget, method_override="hitcover",
+                    _final_refinement=False,
                 )
                 extra += f"|lc1:{_sources_digest(classic)}"
             return f"lotto|{geometry}|cd{design_sig}|rt1|hp1{extra}"
@@ -484,7 +486,8 @@ def _wheel_sig(
             lower = ""
             if g >= pick:
                 candidates = [
-                    _wheel_sig(pool_size, game_type, t, None, cap, method_override="hitcover")
+                    _wheel_sig(pool_size, game_type, t, None, cap, method_override="hitcover",
+                               _final_refinement=False)
                     for t in range(pick - 1, 2, -1)
                 ]
                 lower = f"|lg2:{_sources_digest(*candidates)}"
@@ -504,7 +507,13 @@ def _wheel_sig(
                 return f"{method}|{geometry}|rt1|hp1|bc1{suffix}{lower}"
             # `sa1`: recoacerea pe șansa exactă (`covering.anneal_hits`) la
             # 1..64 de bilete, acceptată numai fără scădere la vreun prag.
-            return f"{method}|{geometry}|rt1|hp1|sa1{lower}"
+            from covering.final_profile import final_profile_applies
+
+            draw_n, max_num = _WF_DRAW_UNIVERSE.get(game_type, (pick, 0))
+            final = "|fp1" if _final_refinement and final_profile_applies(
+                pool_size, pick, g, cap, condition, draw_n, max_num, method
+            ) else ""
+            return f"{method}|{geometry}|rt1|hp1|sa1{lower}{final}"
         return f"{method}|{geometry}|rt1|hp1"
     except Exception as exc:  # noqa: BLE001
         logger.warning("[WALK-FWD] Nu pot semna covering-design-ul: %s", exc)

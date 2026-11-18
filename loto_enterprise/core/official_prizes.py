@@ -63,6 +63,7 @@ class PrizeCategory:
     amount_bani: int | None
     report_bani: int | None
     raw_value_bani: int | None
+    note: str | None = None  # Optional official footnote; old cache rows omit it.
 
 
 @dataclass(frozen=True)
@@ -116,9 +117,16 @@ def _money(value: str) -> int | None:
     text = re.sub(r"\s+", "", value).strip()
     if text in {"", "-", "–", "—"}:
         return None
-    if not re.fullmatch(r"(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?", text):
+    if re.fullmatch(r"(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?", text):
+        normalized = text.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{1,2}", text):
+        # Some official tables mix RO and English amounts in the same row.
+        # Require an explicit decimal point with 1-2 digits; a grouping-only
+        # dot remains Romanian, while ambiguous comma-only groups are refused.
+        normalized = text.replace(",", "")
+    else:
         raise ArchiveError(f"Invalid published prize value: {value!r}")
-    return int(Decimal(text.replace(".", "").replace(",", ".")) * 100)
+    return int(Decimal(normalized) * 100)
 
 
 class _Node:
@@ -239,8 +247,18 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
         tables = [n for n in block.nodes("table") if n.has_class("results-table")]
         if len(tables) != 1:
             raise ArchiveError("Official prize table is missing or ambiguous")
+        rows = list(tables[0].nodes("tr"))
+        notes = [" ".join(row.text().split()) for row in rows
+                 if row.has_class("total") and re.match(r"note\s*:\s*\*", _plain(row.text()))]
+        starred = [row for row in rows if any(
+            re.sub(r"\s+", "", cell.text()).upper() == "REPORT*"
+            for cell in list(row.nodes("td"))[1:2]
+        )]
+        # Map a unique star to a unique official note only. Other table notes
+        # must never be attributed to an unrelated category.
+        report_note = notes[0] if len(notes) == len(starred) == 1 else None
         categories = []
-        for row in tables[0].nodes("tr"):
+        for row in rows:
             cells = [n.text() for n in row.nodes("td")]
             if not cells or row.has_class("total"):
                 continue
@@ -248,7 +266,7 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
             if len(cells) != 4 or not category or category.group(1) not in _CATEGORY_ORDER:
                 raise ArchiveError("Unrecognized official prize category row")
             winner_text = re.sub(r"\s+", "", cells[1]).upper()
-            if winner_text == "REPORT":
+            if winner_text in {"REPORT", "REPORT*"}:
                 winners = 0
             elif re.fullmatch(r"(?:\d{1,3}(?:\.\d{3})+|\d+)", winner_text):
                 winners = int(winner_text.replace(".", ""))
@@ -260,6 +278,7 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
             categories.append(PrizeCategory(
                 category.group(1), category.group(2), winners,
                 raw if winners > 0 else None, _money(cells[3]), raw,
+                report_note if winner_text == "REPORT*" else None,
             ))
         names = [c.category for c in categories]
         expected_names = list(_CATEGORY_ORDER[:8 if game == "joker" else 3])

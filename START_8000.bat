@@ -42,7 +42,8 @@ set "LOGFILE=%RUNTIME_DIR%\startup_8000.log"
 REM Venv-ul sta in afara OneDrive (D:\_BUILD\_LOTO) ca sa nu fie sincronizat.
 set "VENV_DIR=D:\_BUILD\_LOTO\.venv"
 
-REM ---- Header log (overwrite la fiecare rulare; vizibil DOAR la eroare) ----
+REM Pastreaza diagnosticul pornirii anterioare.
+if exist "%LOGFILE%" copy /Y "%LOGFILE%" "%LOGFILE%.previous" >nul
 > "%LOGFILE%" echo === START_8000 LOG ===
 >> "%LOGFILE%" echo Time:     %DATE% %TIME%
 >> "%LOGFILE%" echo CWD:      %CD%
@@ -84,13 +85,13 @@ REM git push origin HEAD pe alta ramura era pierdut la urmatorul reset.
 REM Detectia Git este centralizata in helper, inclusiv cand lipseste din PATH.
 call :push_istoric
 
-REM ===== Launch phase (live, fara redirectare) =====
+REM ===== Launch phase (diagnosticul UI se salveaza separat) =====
 call :launch_phase
 set "LAUNCH_RC=%ERRORLEVEL%"
 
 if not "%LAUNCH_RC%"=="0" (
     echo/
-    echo [EROARE] Launch esuat RC=%LAUNCH_RC%.
+    echo [EROARE] Launch esuat RC=%LAUNCH_RC%. Log pornire: %LOGFILE%
     pause
     cmd /k
     exit /b %LAUNCH_RC%
@@ -205,8 +206,14 @@ REM Sesiune noua: UI-ul NU reia un job vechi si NU afiseaza «Job în rulare»
 REM pana nu apesi Genereaza / Auto-Pilot. Worker-ul NU primeste flag-ul
 REM (trebuie sa preia joburile pe care le trimitI TU dupa pornire).
 set "LOTO_FRESH_START=1"
-"%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%app_nicegui.py"
+set "UI_LOG=%RUNTIME_DIR%\ui_8000.log"
+if exist "!UI_LOG!" move /Y "!UI_LOG!" "!UI_LOG!.previous" >nul
+echo [UI] Log sesiune: !UI_LOG!
+>> "!UI_LOG!" echo === UI START !DATE! !TIME! ===
+"%VENV_DIR%\Scripts\python.exe" -u "%PROJECT_DIR%app_nicegui.py" >> "!UI_LOG!" 2>&1
 set "RC=!ERRORLEVEL!"
+>> "!UI_LOG!" echo === UI EXIT !DATE! !TIME! RC=!RC! ===
+>> "%LOGFILE%" echo [UI] Exit RC=!RC!. Log sesiune: !UI_LOG!
 endlocal & exit /b %RC%
 
 

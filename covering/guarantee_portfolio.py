@@ -44,11 +44,11 @@ def _canonical_candidate(
 
     `_sources` (amprentele fișierelor C, R, H ale acestei geometrii) intră în
     cheia memoriei: un fișier schimbat în timpul procesului reface candidatul."""
-    from covering.dispatch import generate_wheel
+    from covering.dispatch import _generate_candidate_wheel
 
     pool = list(range(1, v + 1))
     scores = {n: float(v - i) for i, n in enumerate(pool)}
-    wheel, _ = generate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
+    wheel, _ = _generate_candidate_wheel("hitcover", pool, pick, guarantee, budget, scores, None, draw_n, max_num)
     return tuple(tuple(sorted(int(n) for n in t)) for t in wheel)
 
 

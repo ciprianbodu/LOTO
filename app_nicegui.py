@@ -1787,7 +1787,7 @@ def _result_sources_from_job(job: dict) -> dict | None:
             # Identic workerului: datele DD-MM rămân string-uri până la
             # normalizarea cronologică; inferența pandas este month-first.
             frame = pd.read_json(
-                io.StringIO(dataset["df_json"]), orient="split", convert_dates=False
+                io.StringIO(dataset["df_json"]), orient="split", dtype=False
             )
             identities = {
                 (str(task.get("game_label") or ""), str(task.get("country") or _LOT.RO))
@@ -2351,7 +2351,7 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             jobs = []
             source_hashes = {}
             for dataset in config.get("datasets", []):
-                frame = pd.read_json(io.StringIO(dataset["df_json"]), orient="split", convert_dates=False)
+                frame = pd.read_json(io.StringIO(dataset["df_json"]), orient="split", dtype=False)
                 for task in dataset.get("tasks", []):
                     spec = _LOT.require_lottery(task["game_label"], task.get("country", _LOT.RO))
                     source_hashes[(dataset["fname"], spec.game_id)] = hashlib.sha256(dataset["df_json"].encode("utf-8")).hexdigest()

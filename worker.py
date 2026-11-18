@@ -613,12 +613,10 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
 
     for ds, ds_lotteries in zip(datasets_cfg, lotteries_cfg, strict=True):
         fname = str(ds.get("fname", "dataset.csv"))
-        # IMPORTANT: convert_dates=False — pandas altfel auto-detectează coloana
-        # "date" și o parsează cu inferență month-first (default), ceea ce strică
-        # formatul DD-MM-YYYY din CSV: "02-04-2026" devine 2026-02-04 (4 feb) în
-        # loc de 2026-04-02 (2 apr). Păstrăm string-ul original.
+        # Păstrăm textul DD-MM-YYYY. Conversia automată poate interpreta
+        # 02-04-2026 ca 4 februarie. Motorul parsează explicit datele.
         df = pd.read_json(
-            io.StringIO(str(ds["df_json"])), orient="split", convert_dates=False
+            io.StringIO(str(ds["df_json"])), orient="split", dtype=False
         )
         outputs = {}
 

@@ -2070,6 +2070,28 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Audit hituri și optimizare a generatorului generic 6/49 — 2026-11-18
+
+- Rafinare exactă după alegerea candidatului final, pentru hitcover generic
+  6/49, pool 7–12 și plafon 2–64, garanție clasică. Constructorii interni,
+  sistemele complete și schemele LR rămân pe traseele lor. Cache-ul worker/WF
+  include `fp1` doar pe traseul eligibil. Același număr de variante și niciun
+  prag în scădere. În 144 configurații, șase cresc strict cel puțin un prag.
+- Martorul pool 10, garanție 6, 32 variante a fost confirmat prin worker real:
+  7.230 → 7.386 rezultate favorabile 5+ din C(49,6), +2,16% relativ.
+  Catalogul LR: 53.557 comparații exacte fără diferențe și nicio alternativă
+  dominantă pentru schemele implicite la cost cel mult egal. Nicio promovare
+  de scoreri pe același istoric.
+- Parserul premiilor importă două luni oficiale anterior refuzate (`REPORT *`
+  și sume cu formatare mixtă), iar nota benchmark distinge Holm istoric de
+  p-ul brut. UI și worker păstrează datele din JSON prin `dtype=False`.
+  Lansatorul salvează fluxurile UI și codul de ieșire, cu sesiunea precedentă.
+- Validare pe 227 fișiere locale: 7.470 trecute, 25 omise după reluarea
+  grupurilor afectate de fixture. Worker pe 13 jocuri și toate cele 47 de
+  variante ale jobului 42 confruntate cu UI. Toate cele patru decizii sunt
+  `fresh`. Testele rămân în `_TESTE/`.
+- Raport: `scripts/analysis/audit_hits_2026-11-18.md`.
+
 ### Mail legat de job și ratinguri exacte — 2026-11-16
 
 - La finalul jobului se capturează numerele, codul LR, auditul, sursele,

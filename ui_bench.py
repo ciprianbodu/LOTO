@@ -309,25 +309,36 @@ def _candidates_text(n) -> str:
 
 
 def _multiplicity_note(entry: dict) -> str | None:
-    """Avertismentul pentru un avantaj care nu trece testul binomial brut.
+    """Describe the saved statistical verdict using its original correction.
 
-    `decision.multiplicity.proven` False: excesul metodei alese pe fereastra
-    completă nu trece testul binomial pe p-ul brut, fără corecție pentru
-    candidații pool-ului (corecția Holm a fost eliminată la cererea
-    utilizatorului, 2026-11-14). None când decizia nu are câmpul (bench vechi)
-    sau avantajul trece. La decizii vechi citește `holm_p` ca p de rezervă.
+    Current decisions mark ``correction="none"`` and store a raw p-value.
+    Older decisions used Holm and have no correction field. Preserve their
+    adjusted verdict rather than relabeling it as an unadjusted test.
     """
     mu = (entry or {}).get("multiplicity") or {}
-    if mu.get("proven") is not False:
+    if not isinstance(mu, dict) or mu.get("proven") is not False:
         return None
+    correction = mu.get("correction")
+    if correction == "none":
+        value = mu.get("p_value")
+        policy = "fără corecție"
+        missing = "valoarea p brută nu este disponibilă în decizia salvată"
+    elif correction in (None, "", "holm"):
+        value = mu.get("holm_p")
+        policy = "după corecția Holm din decizia istorică"
+        missing = "valoarea p ajustată Holm nu este disponibilă în decizia istorică"
+    else:
+        return "⚠️ Avantaj nedemonstrat: corecția testului din decizia salvată nu poate fi identificată."
     try:
-        p = float(mu.get("p_value", mu.get("holm_p")))
-    except (TypeError, ValueError):
-        return None
+        p = float(value)
+    except (TypeError, ValueError, OverflowError):
+        p = float("nan")
+    if not 0.0 <= p <= 1.0:
+        return f"⚠️ Avantaj nedemonstrat: {missing}."
     return (
         "⚠️ Avantaj nedemonstrat: excesul pe fereastra completă nu trece "
-        f"testul binomial (p = {p:.2f}, prag {mu.get('alpha', 0.05)}, fără "
-        f"corecție pentru {_candidates_text(mu.get('candidates'))}). Metoda "
+        f"testul binomial (p = {p:.2f}, prag {mu.get('alpha', 0.05)}, {policy} "
+        f"pentru {_candidates_text(mu.get('candidates'))}). Metoda "
         "aleasă poate fi doar cea mai norocoasă dintre ei."
     )
 
