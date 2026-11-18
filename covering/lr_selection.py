@@ -119,8 +119,10 @@ def lr_scheme_transition(previous: LRScheme, current: LRScheme) -> dict:
     if previous.game != current.game:
         raise ValueError("Comparația LR cere același joc.")
     before, after = scheme_odds(previous), scheme_odds(current)
+    # In 6/49 three main numbers on a ticket already win a prize.
+    first_threshold = 3 if previous.game == "6/49" else 4
     lost = {t: {"before": before[t], "after": after[t]}
-            for t in before if t >= 4 and after[t] < before[t] - 1e-15}
+            for t in before if t >= first_threshold and after[t] < before[t] - 1e-15}
     old_g, new_g = scheme_guarantees(previous), scheme_guarantees(current)
     lost_sure = []
     for h in old_g.keys() & new_g.keys():

@@ -79,6 +79,7 @@ from ui_hits import *  # noqa: F403
 from ui_gate import *  # noqa: F403
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
+from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
@@ -4698,6 +4699,8 @@ def main_page() -> None:
         gate_panel()
         history_windows_panel()
         nested_wfv_panel(_LOT.games_for_country(_cc)[0].bench_key, _lr_scheme_for)
+        if _LOT.games_for_country(_cc)[0].is_romanian:
+            lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
         ):

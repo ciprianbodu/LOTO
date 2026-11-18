@@ -252,8 +252,10 @@ def _lr_selection_change_text(game, previous_code, next_code) -> str:
         return ""
     geometry = _game_spec_for(game).geometry
     change = lr_scheme_transition(resolve_lr_scheme(geometry, previous_code), resolve_lr_scheme(geometry, next_code))
-    lost = [f"{t}+: {100 * values['before']:.6f}% → {100 * values['after']:.6f}%"
-            for t, values in sorted(change["lost_odds"].items())]
+    lost = []
+    for threshold, values in sorted(change["lost_odds"].items()):
+        label = "3+ (orice premiu la 6/49)" if geometry == "6/49" and threshold == 3 else f"{threshold}+"
+        lost.append(f"{label}: {100 * values['before']:.6f}% → {100 * values['after']:.6f}%")
     lost += [f"cu {entry['pool_hits']} în pool, {entry['ticket_hits']} sigur → {100 * entry['new_probability']:.2f}%"
              for entry in change["lost_sure_guarantees"]]
     joker_labels = {"any_prize": "orice premiu Joker",
@@ -266,7 +268,7 @@ def _lr_selection_change_text(game, previous_code, next_code) -> str:
     note = (
         " Mai multe variante sau un pool mai mare nu asigură șanse mai mari la fiecare categorie. "
         "Calculele presupun aceeași bilă Joker pe toate variantele."
-        if joker_losses else " Un pool mai mare nu asigură șanse mai mari la fiecare prag."
+        if joker_losses else " Mai multe variante sau un pool mai mare nu asigură șanse mai mari la fiecare prag."
     )
     return (f"Față de Cod {previous_code}, Cod {next_code} reduce șansa pe cel puțin o variantă: "
             + " · ".join(lost) + "." + note)

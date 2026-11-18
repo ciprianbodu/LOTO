@@ -2070,6 +2070,22 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Portofolii de scheme reduse la același buget — 2026-11-18
+
+- Panoul românesc „Compară schemele LR la același buget” folosește
+  `covering.lr_portfolio.compare_portfolios`. Pentru codul ales calculează
+  șansa de 4+/5+ pe cel puțin o variantă, costul cu taxa pe bilet și limita
+  superioară peste combinațiile de coduri oficiale complete. Optimul este
+  certificat numai când construcția realizabilă atinge limita.
+- La 6/49, în același buget de 528,50 lei, trei Cod 57 pe pooluri disjuncte
+  au șansă 5,363515% la 4+ față de 1,787838% pentru Cod 56. În fluxul de
+  generare se folosește codul ales de utilizator. La schimbarea codului 6/49
+  se afișează inclusiv orice scădere a șansei de premiu la 3+.
+- Rezultatele pe 13 jocuri pentru selecția după ratări la o bilă, după 4+/3+
+  și după suma scorurilor cu limită de consecutive, precum și reproducerea
+  celor 66 de comparații de scheme sunt în
+  `scripts/analysis/audit_portofolii_si_reguli_2026-11-18.md`.
+
 ### Validarea alegerii metodei și reluarea WF — 2026-11-18
 
 - Reluarea cu decizia de azi reconstruiește variantele și premiile acelei
