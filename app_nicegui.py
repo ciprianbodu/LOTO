@@ -78,6 +78,7 @@ from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
 from ui_gate import *  # noqa: F403
 from ui_history_windows import history_windows_panel
+from ui_nested_wfv import nested_wfv_panel
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
@@ -3341,6 +3342,8 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False, snapshot: dict 
                  f"aleatoare în {exact['beat']}/{exact['windows']} ferestre suprapuse (comparație descriptivă)")
         if _decision_low_confidence(entry) is True:
             line += "; încredere redusă: nicio metodă nu a trecut poarta de consistență"
+        if not urna2:
+            line += ". Rating calculat pe top-K brut, înainte de regulile de generare a poolului."
         lines[1] = line
     note = _multiplicity_note(entry)
     if note and _decision_low_confidence(entry) is not True:
@@ -4694,6 +4697,7 @@ def main_page() -> None:
         status_panel()
         gate_panel()
         history_windows_panel()
+        nested_wfv_panel(_LOT.games_for_country(_cc)[0].bench_key, _lr_scheme_for)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
         ):

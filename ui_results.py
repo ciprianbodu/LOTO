@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import time
+from collections import Counter
 from datetime import datetime as _dt, timezone as _tz
 from decimal import Decimal
 
@@ -1182,6 +1183,34 @@ def _scorer_fallback_reason(meta: dict | None) -> str:
     )
 
 
+def _wf_size_counts(flat, fallback=0):
+    """One actual pool size per draw, independently of ticket multiplicity."""
+    by_draw = {}
+    for entry in flat or ():
+        index = getattr(entry, "draw_index", None)
+        if index is None:
+            continue
+        if not by_draw.get(index):
+            pool = (getattr(entry, "ticket_context", None) or {}).get("hard_core") or ()
+            by_draw[index] = len(set(pool))
+    counts = Counter(by_draw.values())
+    if set(counts) == {0} and fallback:
+        return {int(fallback): counts[0]}
+    return counts
+
+
+def _wf_random_rate(game, counts, threshold):
+    if not counts or 0 in counts:
+        return None
+    total = 0.0
+    for size, draws in counts.items():
+        probability = _random_rate_hypergeo(game, size, threshold)
+        if probability is None:
+            return None
+        total += draws * probability
+    return total / sum(counts.values())
+
+
 def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str | None:
     if not flat:
         return None
@@ -1227,18 +1256,15 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
     # Ca panoul: rata la întâmplare a unui pool de aceeași mărime și limita
     # selecției (metoda din decizia de azi a fost aleasă pe aceste extrageri).
     rnd_txt = ""
-    sizes = [
-        len((getattr(p, "ticket_context", None) or {}).get("hard_core") or ())
-        for p in flat
-    ]
-    k_pool = max(set(sizes) - {0}, key=sizes.count, default=0) or int(
-        (data or {}).get("pool_size") or len((data or {}).get("hard_core") or ())
-    )
-    if game and k_pool:
-        rates = [_random_rate_hypergeo(game, k_pool, t) for t in (3, 4, 5)]
+    fallback = (data or {}).get("pool_size") or len((data or {}).get("hard_core") or ())
+    sizes = _wf_size_counts(flat, fallback)
+    if game and sizes:
+        description = (f"pool {next(iter(sizes))}" if len(sizes) == 1 else
+                       f"pooluri {min(sizes)}–{max(sizes)}, ponderat pe extrageri")
+        rates = [_wf_random_rate(game, sizes, t) for t in (3, 4, 5)]
         if None not in rates:
             rnd_txt = (
-                f" | la întâmplare (pool {k_pool}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
+                f" | la întâmplare ({description}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
                 f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
                 + (
                     " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"

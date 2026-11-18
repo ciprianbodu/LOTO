@@ -802,6 +802,8 @@ def decide_optimal_config_for_pool(
     draw_n: int,
     max_num: int | None = None,
     pick_n: int | None = None,
+    *,
+    hit_target: int | None = None,
 ) -> dict:
     """Run the decision algorithm for one (game, pool_size) pair.
 
@@ -828,7 +830,8 @@ def decide_optimal_config_for_pool(
     else:
         base_pool = int(pick_n or draw_n)
     # Ținta este în pool: 5/40 are minimum 4, Joker maximum 5, Urna 2 top-1.
-    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, BENCH_HIT_TARGET)
+    configured_target = BENCH_HIT_TARGET if hit_target is None else hit_target
+    target = 1 if int(draw_n) == 1 else game_hit_target(game_key, configured_target)
     target_label = "top-1 (1/1)" if target == 1 else f"{target}+"
     rate_target_col = f"rate_{target}plus_k{pool_size}"
     tiebreak_col = f"tiebreak_k{pool_size}"

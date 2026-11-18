@@ -26,6 +26,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from loto_engine import LotoEngine
+from loto_enterprise.benchmark.hit_target import current_bench_hit_target, fixed_replay_target
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import (
     chronological_history,
@@ -104,6 +105,12 @@ def _wf_worker_init(
     import pickle
 
     global _WF_SHARED
+    if identity is not None and "bench_hit_target" in identity:
+        # Spawned processes otherwise import the environment default, which
+        # may differ from the in-process probe or a setting changed during WF.
+        from loto_enterprise.benchmark import decision
+
+        decision.BENCH_HIT_TARGET = identity["bench_hit_target"]
     for _tv in (
         "OMP_NUM_THREADS",
         "MKL_NUM_THREADS",
@@ -925,6 +932,7 @@ class LotoBacktester:
 
         print("=" * 60 + "\n")
 
+    @fixed_replay_target()
     def run_retroactive_backtest(
         self,
         pool_size: int = 12,
@@ -1072,8 +1080,6 @@ class LotoBacktester:
                 }
                 for sim_idx in sim_indices
             ]
-            df_pickle = pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL)
-            draws_tuples = [tuple(d) for d in self.draws]
             done_count = 0
             cancelled = False
             batch_size = max(n_workers * 2, 8)
@@ -1167,11 +1173,12 @@ class LotoBacktester:
                         max_workers=n_workers,
                         initializer=_wf_worker_init,
                         initargs=(
-                            df_pickle,
+                            pickle.dumps(self.df, protocol=pickle.HIGHEST_PROTOCOL),
                             self.game_type,
-                            draws_tuples,
+                            [tuple(d) for d in self.draws],
                             self.dates,
-                            {"game_key": self.game_key, "country": self.country},
+                            {"game_key": self.game_key, "country": self.country,
+                             "bench_hit_target": current_bench_hit_target()},
                         ),
                     ) as ex:
                         for batch in batched(remaining, batch_size):

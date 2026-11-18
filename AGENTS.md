@@ -2070,6 +2070,22 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Validarea alegerii metodei și reluarea WF — 2026-11-18
+
+- Reluarea cu decizia de azi reconstruiește variantele și premiile acelei
+  metode. Panoul „Walk-forward cu alegerea metodei înainte de test” compară
+  separat selecția cronologică și selecția retrospectivă, pentru toate cele
+  13 jocuri și Urna 2. La jocurile românești folosește codul LR ales în UI.
+- Pe nouă metode și 12.339 de extrageri principale, alegerea după hiturile
+  pe variantă a obținut 10 rezultate de 5+ retrospectiv și 4 când s-a
+  făcut înainte de test. Frecvența simplă a obținut 6. Protocolul complet,
+  codurile, datele pe fiecare joc și comanda de reproducere se află în
+  `scripts/analysis/audit_logica_wfv_2026-11-18.md`.
+- Ținta WF este transmisă și proceselor Windows. Ferestrele 10/30/70/100%
+  pot reutiliza extragerile calculate cu aceeași configurație și același
+  istoric. Benchmarkul amestecat respectă granițele zilelor. În UI și TXT,
+  comparația cu hazardul ține cont de mărimea poolului la fiecare extragere.
+
 ### Lungimea istoricului de validare — 2026-11-18
 
 - Re-Bench testează implicit ferestrele 10/30/70/100% în CLI și UI. Deciziile

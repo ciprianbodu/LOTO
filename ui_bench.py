@@ -965,6 +965,8 @@ def _render_bench_leaderboard_slice(
         if has_target_rate
         else "medie hituri / extragere"
     )
+    if not _is_single_pick and has_target_rate:
+        label += " · top-K brut, înainte de regulile de generare a poolului"
     # Eticheta spune EXACT cât face ordonarea: „ca decizia" doar când și tie-break-ul
     # secundar e cel al deciziei (lift + consistență), altfel nu promite identitate.
     if _conf_ok and _lift_ok and _dec_low is True:

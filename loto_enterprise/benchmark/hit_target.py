@@ -7,6 +7,8 @@ container, worker, UI).
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from loto_enterprise.core.lotteries import (
     foreign_bench_draw_pick,
@@ -14,6 +16,28 @@ from loto_enterprise.core.lotteries import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_REPLAY_TARGET: ContextVar[int | None] = ContextVar("replay_target", default=None)
+
+
+def current_bench_hit_target() -> int:
+    target = _REPLAY_TARGET.get()
+    if target is None:
+        from .decision import BENCH_HIT_TARGET
+
+        return BENCH_HIT_TARGET
+    return target
+
+
+@contextmanager
+def fixed_replay_target():
+    """Bind one target to this replay thread, including its decision/cache lookup."""
+    token = _REPLAY_TARGET.set(current_bench_hit_target())
+    try:
+        yield
+    finally:
+        _REPLAY_TARGET.reset(token)
 
 
 def clamp_bench_hit_target(value, *, default: int = 3) -> int:

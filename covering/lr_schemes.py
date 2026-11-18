@@ -83,6 +83,13 @@ class LRScheme:
             for p in range(self.n)
         )
 
+    @cached_property
+    def four_number_coverage_pct(self) -> float:
+        """Coverage of four-position subsets, invariant under relabelling a whole scheme."""
+        from .common import compute_coverage_pct
+
+        return compute_coverage_pct(self.variants, list(range(1, self.n + 1)), 4)
+
     @property
     def label(self) -> str:
         return f"Cod {self.code}"

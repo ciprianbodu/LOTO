@@ -349,12 +349,12 @@ def _tail_target_fallback(game_key: str, entry: dict) -> dict | None:
     schimba în UI fără ca fișierul sau mtime-ul lui să se schimbe. Toate căile
     de scoring folosesc aceeași gardă; pentru țintele vechi 3/4 nu schimbă nimic.
     """
-    from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
-    from loto_enterprise.benchmark.hit_target import game_hit_target
+    from loto_enterprise.benchmark.hit_target import current_bench_hit_target, game_hit_target
 
-    if int(BENCH_HIT_TARGET) < 5 or _is_urna2_key(game_key):
+    requested = current_bench_hit_target()
+    if int(requested) < 5 or _is_urna2_key(game_key):
         return None
-    target = game_hit_target(game_key, BENCH_HIT_TARGET)
+    target = game_hit_target(game_key, requested)
     try:
         stored = int(entry.get("hit_target"))
     except (TypeError, ValueError, OverflowError):

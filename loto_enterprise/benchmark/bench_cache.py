@@ -143,6 +143,10 @@ def _fold_key(
     raw += method_cache_semantics(method)
     if _CACHE_VARIANT["block_size"] != _DEFAULT_BLOCK_SIZE:
         raw += f"::bs{_CACHE_VARIANT['block_size']}"
+    if is_random:
+        # Shuffled labels now retain the real training boundaries, including
+        # inside date-aware scorers. Older shuffled folds used row order only.
+        raw += "::shuffle_calendar1"
     if is_random and _CACHE_VARIANT["seed"] != _DEFAULT_SEED:
         raw += f"::seed{_CACHE_VARIANT['seed']}"
     # Prefixul de VERSIUNE in NUMELE fisierului (nu doar in hash): altfel

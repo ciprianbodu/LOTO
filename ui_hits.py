@@ -26,6 +26,8 @@ from ui_results import (
     _scorer_fallback_reason,
     _thousands,
     _ticket_pick,
+    _wf_random_rate,
+    _wf_size_counts,
 )
 from ui_bench import _render_bench_leaderboard, _render_last_csv_draw
 from ui_shared import PROJECT_ROOT, render_html_safe
@@ -263,24 +265,11 @@ def _wf_coverage_note(flat, label: str = "") -> tuple[str, str] | None:
 
 
 def _wf_pool_size(flat, fallback: int) -> int:
-    """Mărimea pool-ului jucat la pașii WF (cea mai frecventă), altfel `fallback`.
-
-    Pool-ul cerut poate fi mai mare decât intervalul restrâns: atunci fiecare pas
-    joacă mai puține numere, iar referința aleatoare trebuie calculată pe ele.
-    """
-    sizes: dict[int, int] = {}
-    seen: set = set()
-    for row in flat or ():
-        di = getattr(row, "draw_index", None)
-        if di in seen:
-            continue
-        seen.add(di)
-        hard_core = (getattr(row, "ticket_context", None) or {}).get("hard_core")
-        if hard_core:
-            sizes[len(hard_core)] = sizes.get(len(hard_core), 0) + 1
+    """Single effective pool size, or zero when no one size describes the run."""
+    sizes = _wf_size_counts(flat, fallback)
     if not sizes:
         return int(fallback or 0)
-    return max(sizes, key=lambda k: (sizes[k], k))
+    return next(iter(sizes)) if len(sizes) == 1 else 0
 
 
 def _wf_per_draw_stats(flat, game_type: str | None = None) -> dict:
@@ -611,13 +600,14 @@ def _render_hits_4plus(
     # Pool-ul REAL (nu string fix „din 16"): mărimea jucată la pașii WF (o bază
     # restrânsă mai îngustă decât pool-ul o micșorează), apoi meta WF, apoi
     # rezultatul pasat de apelant (pool_size / len(hard_core)); 0 = necunoscut.
-    _pn = _wf_pool_size(flat, int((meta or {}).get("pool_size") or pool_n or 0))
+    sizes = _wf_size_counts(flat, (meta or {}).get("pool_size") or pool_n or 0)
+    _pn = next(iter(sizes)) if len(sizes) == 1 else 0
     n_tick = sum(int(getattr(row, "variant_count", None) or 1) for row in flat)
     tick_avg = (n_tick / n) if n else 0.0
 
     # Baseline-ul PUR aleator: Pool = K numere (hipergeometric).
     def _rnd(t):
-        return _threshold_pct(t, _random_rate_hypergeo(gk, _pn, t) if _pn else None)
+        return _threshold_pct(t, _wf_random_rate(gk, sizes, t))
 
     # Un rând pe prag: pe telefon încap toate coloanele (înainte, 735 px).
     pool_k = {4: pool4, 5: pool5}
@@ -713,24 +703,25 @@ def _render_hits_4plus(
         ui.label(_gap).classes("text-caption text-grey")
     # Rata WF observată la pragul afișat vs baseline-ul PUR aleator —
     # dacă nu-l bate, spune EXPLICIT (nu lăsa o rată „~10%" să pară edge).
-    _tt_checks = [("Pool", sum(1 for d in per.values() if d["pool"] >= _TT), n, _pn)]
     _losers, _winners = [], []
-    for _lbl3, _cnt, _den, _K in _tt_checks:
-        _b = _random_rate_hypergeo(gk, _K, _TT) if _K else None
-        if _b is None or not _den:
-            continue
-        if (_cnt / _den) <= _b:
-            _losers.append(
-                f"{_lbl3}: {_cnt / _den * 100:.2f}% ≤ random {_b * 100:.2f}%"
-            )
+    baseline = _wf_random_rate(gk, sizes, _TT)
+    if baseline is not None and n:
+        observed = pool4 / n
+        if observed <= baseline:
+            _losers.append(f"Pool: {observed * 100:.2f}% ≤ random {baseline * 100:.2f}%")
         else:
-            from scipy.stats import binom
+            comparison = f"Pool: {observed * 100:.2f}% față de random {baseline * 100:.2f}%"
+            if len(sizes) == 1:
+                from scipy.stats import binom
 
-            _p = float(binom.sf(_cnt - 1, _den, _b))
-            _winners.append(
-                f"{_lbl3}: {_cnt / _den * 100:.2f}% față de random {_b * 100:.2f}% "
-                f"(p = {_p:.2f}, test binomial unilateral)"
-            )
+                p = float(binom.sf(pool4 - 1, n, baseline))
+                comparison += f" (p = {p:.2f}, test binomial unilateral)"
+            _winners.append(comparison)
+    if len(sizes) > 1:
+        text = ("Lipsesc dimensiunile unor pooluri istorice pentru comparația cu hazardul." if 0 in sizes else
+                f"Poolurile au avut între {min(sizes)} și {max(sizes)} numere. "
+                "Referința aleatoare este media probabilităților pe extragere.")
+        ui.label(text).classes("text-caption")
     if _winners:
         # Peste hazard nu înseamnă validat: metoda a fost aleasă pe aceste extrageri.
         ui.label(
@@ -749,7 +740,7 @@ def _render_hits_4plus(
         ui.label(
             f"⚠️ Onestitate (≥{_TT}): "
             + " · ".join(_losers)
-            + " — pe fereastra validată metoda NU a bătut hazardul (diferența e zgomot)."
+            + " — rata observată pe această perioadă nu a depășit referința aleatoare."
         ).classes("text-caption text-warning text-bold")
 
     # (2) DATELE prinderii — numai 4+ la toate jocurile.

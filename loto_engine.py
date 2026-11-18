@@ -489,7 +489,6 @@ class LotoEngine(PipelineMixin, ScoringMixin):
         if lr_scheme_code is not None:
             from covering.lr_selection import resolve_lr_scheme, lr_scheme_metadata, validate_lr_variants
             from covering.lr_schemes import scheme_tickets
-            from covering.common import compute_coverage_pct
 
             if getattr(self, "lottery", None) is not None and not self.lottery.is_romanian:
                 raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
@@ -498,9 +497,8 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             variants = scheme_tickets(scheme, self.hard_core)
             self.audit["lr_scheme"] = lr_scheme_metadata(scheme)
             self.audit["lr_scheme"]["coverage_target"] = 4
-            coverage_pct = compute_coverage_pct(variants, self.hard_core, 4)
             self._attach_joker(variants)
-            return variants, coverage_pct
+            return variants, scheme.four_number_coverage_pct
         _cond = int(condition) if condition is not None else int(guarantee)
         if _cond != int(guarantee):
             from wheeling_methods import generate_wheel

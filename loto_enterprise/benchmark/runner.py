@@ -28,7 +28,7 @@ import logging
 import math
 import os
 import time
-from dataclasses import dataclass, field, asdict, replace
+from dataclasses import dataclass, field, asdict
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -474,7 +474,11 @@ def _evaluate_fold(
             # O singură sondă: dacă scorul e deja plat, bucla pe fiecare
             # extragere ar eșua la fel și ar marca fold-ul failed. Dacă sonda
             # are varianță, metoda chiar se evaluează — lista nu e o excludere.
-            probe_hist = train_draws if len(train_draws) else test_draws
+            first_cutoff = (
+                game.history_cutoffs[len(train_draws)]
+                if game.history_cutoffs and n_test else len(train_draws)
+            )
+            probe_hist = train_draws[:first_cutoff]
             probe, _probe_t = call_method(method_name, probe_hist, game.max_num)
             if not has_usable_score_variance(probe):
                 raise RuntimeError(
@@ -501,9 +505,8 @@ def _evaluate_fold(
         n_eval = 0  # nr. total extrageri evaluate
         blocks = 0
         unusable_blocks = 0  # Empty/flat/non-finite scorer output (silent failure)
-        bl_sizes_seen: list[int] = []
+        blacklist_size_sum = 0
         all_draws = np.concatenate([train_draws, test_draws], axis=0)
-        history = train_draws
         uses_day_context = method_meta(method_name).get("uses_history_cutoffs", False)
         pos = 0
         while pos < n_test:
@@ -511,6 +514,12 @@ def _evaluate_fold(
             prefix_end = len(train_draws) + pos
             if game.history_cutoffs:
                 prefix_end = game.history_cutoffs[prefix_end]
+            # Every draw on a date receives the same deterministic ranking. Keep
+            # all original targets (and their weights in fold diagnostics).
+            if block_size == 1 and game.history_cutoffs:
+                while end < n_test and game.history_cutoffs[len(train_draws) + end] == prefix_end:
+                    end += 1
+            block_weight = end - pos if block_size == 1 else 1
             history = all_draws[:prefix_end]
             # Preserve complete-day exclusions inside experimental meta-scorers.
             # Keep the original call contract for every existing scorer.
@@ -519,26 +528,26 @@ def _evaluate_fold(
                 if uses_day_context else {}
             )
             scores, _t = call_method(method_name, history, game.max_num, **context)
-            blocks += 1
+            blocks += block_weight
 
             if not has_usable_score_variance(scores):
                 # Benchmark-ul si productia trebuie sa accepte exact aceleasi
                 # scoruri. Un dict plat ori cu NaN/inf nu contine informatie de
                 # ranking; tie-break-ul l-ar transforma intr-un rezultat aparent
                 # valid, desi engine-ul cade apoi pe fallback-ul de frecventa.
-                unusable_blocks += 1
+                unusable_blocks += block_weight
                 pos = end
                 continue
 
             # Pre-compute top-K WITHOUT blacklist
-            ranked = _top_k(scores, max(pool_sizes) + 1)
+            ranked = _top_k(scores, len(scores))
             top_sets = {k: set(ranked[:k]) for k in pool_sizes}
             # Taietura top-K cade intr-un grup de scoruri egale? Atunci membrii
             # de la granita au fost alesi de tie-break („numarul mare intai").
-            _sorted_vals = sorted((float(v) for v in scores.values()), reverse=True)
+            _sorted_vals = [float(scores[n]) for n in ranked]
             for k in pool_sizes:
                 if len(_sorted_vals) > k and _sorted_vals[k - 1] == _sorted_vals[k]:
-                    per_pool_tie[k] += 1
+                    per_pool_tie[k] += block_weight
 
             # Blacklist = numere "moarte" (absente din ultimele K extrageri).
             # Semnal INDEPENDENT de scorerul curent — analog produsului de
@@ -550,11 +559,10 @@ def _evaluate_fold(
             recent_slice = history[-recent_window:]
             seen_recent = set(int(v) for row in recent_slice for v in row)
             blacklist = {n for n in range(1, game.max_num + 1) if n not in seen_recent}
-            bl_sizes_seen.append(len(blacklist))
+            blacklist_size_sum += len(blacklist) * block_weight
 
             # Top-K WITH blacklist: exclude blacklisted, then take top-K
-            filtered_scores = {n: s for n, s in scores.items() if n not in blacklist}
-            ranked_bl = _top_k(filtered_scores, max(pool_sizes))
+            ranked_bl = [n for n in ranked if n not in blacklist]
             top_sets_bl = {k: set(ranked_bl[:k]) for k in pool_sizes}
 
             for j in range(pos, end):
@@ -611,7 +619,7 @@ def _evaluate_fold(
         fr.rate_5plus = fr.rates_5plus_per_pool[f"k{game.base_k}"]
         fr.rate_6plus = fr.rates_6plus_per_pool[f"k{game.base_k}"]
         fr.rate_1plus = fr.rates_1plus_per_pool.get(f"k{game.base_k}", 0.0)
-        fr.blacklist_size = int(np.mean(bl_sizes_seen)) if bl_sizes_seen else 0
+        fr.blacklist_size = blacklist_size_sum // _usable_blocks
         fr.blocks = blocks
     except Exception as exc:
         fr.failed = True
@@ -679,7 +687,7 @@ def _methods_for_game(
     lista este goală.
     """
     if methods_per_game is None or game_key not in methods_per_game:
-        return list(methods)
+        return list(dict.fromkeys(methods))
     allowed = set(methods)
     return list(dict.fromkeys(m for m in methods_per_game[game_key] if m in allowed))
 
@@ -761,17 +769,17 @@ def run_benchmark(
     # Estimarea aplică ACEEAȘI regulă de skip ca pre-pass-ul (n_train < 80) —
     # altfel numărătorul [N/M] și bara de progres nu ajungeau niciodată la M pe
     # istorii scurte (ferestrele 90/100% sărite erau totuși numărate).
-    _n_by_game: dict[str, int] = {}
+    loaded_games: list[tuple[GameDef, np.ndarray]] = []
+    load_failed: list[str] = []
     for game in games:
         try:
-            _n_by_game[game.key] = len(load_draws(game))
-        except Exception:  # noqa: BLE001 — CSV-ul va eșua la fel și în pre-pass
-            pass
+            loaded_games.append((game, load_draws(game)))
+        except Exception as exc:
+            logger.error("[%s] CSV load failed: %s", game.key, exc)
+            load_failed.append(game.key)
     total_folds_est = 0
-    for game in games:
-        _n_g = _n_by_game.get(game.key)
-        if not _n_g:
-            continue
+    for game, draws in loaded_games:
+        _n_g = len(draws)
         for m in _methods_for_game(methods, methods_per_game, game.key):
             meta = method_meta_map[m]
             if not meta["available"]:
@@ -932,28 +940,19 @@ def run_benchmark(
         if progress_cb:
             progress_cb(done_global, total_folds_est, fr, game)
 
-    # ── PRE-PASS: încarcă TOATE jocurile, construiește task-urile, rezolvă cache-ul.
+    # ── Construiește task-urile pe istoricele validate la numărarea foldurilor.
     # Adunăm TOATE task-urile (din toate jocurile) într-un singur pool global de procese.
     all_cpu_compute = []  # (method, train, test, game, block_size, pct, is_random, csv_hash)
     # Jocurile al căror istoric nu s-a încărcat: decizia nu se rescrie dintr-un
     # bench fără ele (bench_all_methods, `games_load_failed` din report.json).
-    load_failed: list[str] = []
-
-    for game in games:
-        try:
-            draws = load_draws(game)
-        except Exception as exc:
-            logger.error("[%s] CSV load failed: %s", game.key, exc)
-            load_failed.append(game.key)
-            continue
+    for game, draws in loaded_games:
         n = len(draws)
         logger.info("[%s] %d draws loaded from %s", game.key, n, game.csv_path)
         # hash DETERMINIST per joc (hash() built-in e randomizat per proces → cache miss).
-        _game_seed = int(_hl.md5(game.key.encode()).hexdigest()[:8], 16) % 9973
-        rng = np.random.default_rng(random_seed + _game_seed)
-        idx = np.arange(n)
-        rng.shuffle(idx)
-        shuffled_draws = draws[idx]
+        if shuffled_control:
+            _game_seed = int(_hl.md5(game.key.encode()).hexdigest()[:8], 16) % 9973
+            rng = np.random.default_rng(random_seed + _game_seed)
+            shuffled_draws = draws[rng.permutation(n)]
 
         csv_hash_game = None
         if use_cache and _cache_ok:
@@ -1030,7 +1029,7 @@ def run_benchmark(
                             method,
                             src[:n_train],
                             src[n_train : n_train + n_test],
-                            replace(game, history_cutoffs=()) if is_random else game,
+                            game,  # permutation changes the draws, not the calendar
                             block_size,
                             pct,
                             is_random,
@@ -1143,7 +1142,7 @@ def run_benchmark(
     _stall_timeout = (
         float(_stall_env)
         if _stall_env
-        else default_stall_timeout(max(_n_by_game.values(), default=0))
+        else default_stall_timeout(max((len(draws) for _, draws in loaded_games), default=0))
     )
     _hung = False
     if fut_kind:

@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import shutil
+from collections import Counter
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from loto_enterprise.benchmark import VALIDATION_PERCENTILES
+from loto_enterprise.benchmark.hit_target import current_bench_hit_target, fixed_replay_target
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.history import canonical_history_columns, simulation_indices
 from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
@@ -691,7 +694,6 @@ def _decision_sig(
     compact_sfx = "|compact-wf1" if _wheel_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16) else ""
     try:
         from loto_enterprise.core.method_selector import recommend_optimal_config
-        from loto_enterprise.benchmark.decision import BENCH_HIT_TARGET
         from loto_enterprise.benchmark.hit_target import game_hit_target
 
         cfg_path = None
@@ -710,6 +712,11 @@ def _decision_sig(
         _cp = {} if cfg_path is None else {"config_path": cfg_path}
         c = recommend_optimal_config(gk, int(pool_size), **_cp)
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
+        # Older process pools could import a different hit target and silently
+        # replace the selected scorer with frequency, or vice versa.
+        pure_frequency = _ens_sig in ("", _ensemble_sig([{"method": "frequency", "weight": 1.0}]))
+        pinned = "|fixed-target1" if (c.get("scorer") != "frequency" or c.get("target_mismatch")
+                                      or not pure_frequency) else ""
         urna2_sig = ""
         if game_type == "joker":
             u2_key = (
@@ -728,12 +735,12 @@ def _decision_sig(
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (
             f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-            f"{game_hit_target(gk, BENCH_HIT_TARGET)}|{_ens_sig}{urna2_sig}|"
+            f"{game_hit_target(gk, current_bench_hit_target())}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(_wheel_pool, game_type, guarantee, wheel_condition, max_variants, **({'lr_scheme_code': lr_scheme_code} if lr_scheme_code is not None else {}))}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
-            f"{foreign_sfx}{_scorer_semantics(c)}{compact_sfx}"
+            f"{foreign_sfx}{_scorer_semantics(c)}{compact_sfx}{pinned}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -756,6 +763,7 @@ def _decision_sig(
                     + _consecutive_sig(max_consecutive_run)
                     + foreign_sfx
                     + compact_sfx
+                    + f"|fixed-target1={current_bench_hit_target()}"
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -1044,6 +1052,62 @@ def _previous_history_steps(
     return None
 
 
+def _other_depth_steps(cache_file, meta, dates, missing):
+    """Read complete draw groups for the same history/decision at other standard depths."""
+    depth = float(meta["backtest_depth_percent"])
+    suffix = f"_d{depth.hex()}_{meta['decision_sig']}.pkl"
+    if not missing or not cache_file.name.endswith(suffix):
+        return []
+    stem = cache_file.name.removesuffix(suffix)
+    # A containing window may cover all missing targets in one read. Otherwise
+    # start with the largest shorter window to cover as much of the suffix as possible.
+    candidates = sorted((p for p in VALIDATION_PERCENTILES if p != depth),
+                        key=lambda p: (p < depth, abs(p - depth)))
+    reused = []
+    for pct in candidates:
+        # Skip even a large cached suffix if every missing target precedes it.
+        first_possible = len(dates) - max(1, int(len(dates) * pct / 100))
+        if max(missing) < first_possible:
+            continue
+        other = cache_file.with_name(f"{stem}_d{float(pct).hex()}_{meta['decision_sig']}.pkl")
+        if not other.is_file():
+            continue
+        try:
+            old = pickle_load_path(other)
+            if (old.get("csv_hash") != meta["csv_hash"]
+                    or old.get("decision_sig") != meta["decision_sig"]
+                    or old.get("backtest_depth_percent") != pct
+                    or old.get("decision_changed")):
+                continue
+            flat = old["flat"]
+            counts = Counter(r.draw_index for r in flat)
+            if len(counts) != old["n_test_draws"]:
+                continue
+            invalid = steps_without_ticket_context(flat)
+            # A reduced scheme has a known row count per draw. A compact draw
+            # has one representative carrying the multiplicity of all variants.
+            lr_count = (meta.get("lr_scheme") or {}).get("variant_count")
+            if lr_count is not None:
+                for row in flat:
+                    represented = getattr(row, "variant_count", None)
+                    complete = (counts[row.draw_index] == lr_count if represented is None
+                                else counts[row.draw_index] == 1 and represented == lr_count)
+                    if not complete:
+                        invalid.add(row.draw_index)
+            groups = [r for r in flat if r.draw_index in missing and r.draw_index not in invalid]
+            if any(str(r.target_draw_date) != str(dates[r.draw_index]) for r in groups):
+                continue
+        except Exception as exc:  # An unreadable sibling must not prevent a fresh computation.
+            logger.warning("[WALK-FWD] cache la %s%% ignorat (%s): %s", pct, other, exc)
+            continue
+        reused.extend(groups)
+        missing.difference_update(r.draw_index for r in groups)
+        if not missing:
+            break
+    return reused
+
+
+@fixed_replay_target()
 def run_honest_walk_forward(
     df_source: pd.DataFrame,
     game_type: str,
@@ -1251,6 +1315,8 @@ def run_honest_walk_forward(
                     f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
                     f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
                 )
+                if _decision_file_stamp(wf_country) != _decision_before:
+                    meta["decision_changed"] = True
                 return cached["flat"], meta
             # PARȚIAL → NU-l servim orbește: re-rulăm ca să EXTINDEM acoperirea
             # (altfel un parțial rămâne înghețat până se schimbă CSV-ul, iar mărirea
@@ -1296,6 +1362,8 @@ def run_honest_walk_forward(
         meta["partial"] = bool(cached.get("partial", False))
         meta["newest_missing"] = bool(cached.get("newest_missing", False))
         meta["wheel_coverage"] = wheel_coverage_summary(flat_c)
+        if _decision_file_stamp(wf_country) != _decision_before:
+            meta["decision_changed"] = True
         return flat_c, meta
 
     # Cache miss → rulează walk-forward genuin
@@ -1324,6 +1392,17 @@ def run_honest_walk_forward(
         if reused:
             cached = {"flat": reused}
             meta["reused_previous_history"] = len({int(r.draw_index) for r in reused})
+    window = simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
+    if use_cache and not force_refresh:
+        known = (cached or {}).get("flat") or []
+        covered = {r.draw_index for r in known} - steps_without_ticket_context(known)
+        reused = _other_depth_steps(cache_file, meta, bt.dates, set(window) - covered)
+        if reused:
+            replaced = {r.draw_index for r in reused}
+            # A legacy incomplete context for the same draw is replaced as a
+            # whole group, preserving the multiplicities of real variants.
+            cached = {"flat": [r for r in known if r.draw_index not in replaced] + reused}
+            meta["reused_other_depth"] = len(replaced)
     # Pașii recitesc decizia la fiecare extragere. Dacă fișierul se rescrie în
     # timpul rulării (Re-Bench terminat, ținta 3+/4+ schimbată), pașii de după
     # folosesc alt scorer decât cheia `dec_sig` calculată la început
@@ -1364,7 +1443,6 @@ def run_honest_walk_forward(
     # rând invalid în CSV, backtester-ul simulează len(draws)*depth pași, deci un
     # n_expected calculat din len(df_source) era de neatins → cache-ul rămânea
     # marcat „partial" pentru totdeauna și se re-rula la fiecare Auto-Pilot.
-    window = simulation_indices(bt.df.attrs["training_cutoffs"], backtest_depth_percent)
     n_expected = len(window)
     flat = expand_predictions_to_flat(predictions, game_type)
     meta["n_predictions"] = len(predictions)
