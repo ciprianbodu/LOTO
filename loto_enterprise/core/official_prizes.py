@@ -44,6 +44,7 @@ _ALIASES = {
 _HEADINGS = {"loto_6_49": "6/49", "loto_5_40": "5/40", "joker": "joker"}
 _CATEGORY_ORDER = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII")
 _MAX_RESPONSE_BYTES = 2_000_000
+_PARSER_CACHE_REVISION = 1
 _HTTP_SLOTS = threading.BoundedSemaphore(2)
 
 
@@ -214,7 +215,10 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
         if not headings:
             continue
         heading = " ".join(headings[0].text().split())
-        pattern = rf"detalii castiguri\s+la\s+{re.escape(_HEADINGS[game])}\s+din\s+(\d{{2}}[.\-/]\d{{2}}[.\-/]\d{{4}})"
+        pattern = (
+            rf"detalii castiguri\s+(?:extrageri speciale\s+)?la\s+{re.escape(_HEADINGS[game])}"
+            rf"\s+din\s+(\d{{2}}[.\-/]\d{{2}}[.\-/]\d{{4}})"
+        )
         match = re.search(pattern, _plain(heading))
         if not match:
             continue  # The companion Noroc game has a separate prize table.
@@ -383,6 +387,14 @@ class PrizeCache:
                                 PRIMARY KEY (game, year, month)
                             );
                         """)
+                        if connection.execute("PRAGMA user_version").fetchone()[0] < _PARSER_CACHE_REVISION:
+                            connection.execute("BEGIN IMMEDIATE")
+                            if connection.execute("PRAGMA user_version").fetchone()[0] < _PARSER_CACHE_REVISION:
+                                # Older parsers ignored the special-draw heading. Make a missing
+                                # draw eligible for refresh while retaining every verified payout.
+                                connection.execute("UPDATE prize_months SET retry_after=0 WHERE status='complete'")
+                                connection.execute(f"PRAGMA user_version = {_PARSER_CACHE_REVISION}")
+                            connection.commit()
                         self._initialized = True
             return connection
         except BaseException:

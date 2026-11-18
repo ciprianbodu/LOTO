@@ -1260,7 +1260,7 @@ def _render_analysis_menu(results_bundle, res_prefix: str = "") -> None:
                     for fname, game, data in old:
                         pool = _primary_pool_data(data)
                         size = _result_pool_size(pool)
-                        title = "Rezultatul recuperat" if STATE.get("results_recovered") else "Rezultatul generat anterior"
+                        title = "Rezultatul recuperat" if STATE.get("results_recovered") else "Rezultatul ultimei generări"
                         suffix = f" · pool {size}" if size else ""
                         with ui.expansion(f"📁 {title}{suffix}", value=False).classes("w-full"):
                             _render_game_analysis(fname, game, data, res_prefix)

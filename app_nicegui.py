@@ -2520,6 +2520,12 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             fatal_error = True
             logger.error("[WF VIRTUAL] analiza a eșuat: %s", exc)
         finally:
+            over_budget = time.monotonic() >= deadline
+            cancelled = _VIRTUAL_WF_CANCEL_REQUESTED.is_set()
+            complete = (len(records) == len(jobs) and not fatal_error and not decision_changed
+                        and not cancelled and not over_budget
+                        and all(r.get("flat") and not r.get("error") and not r.get("meta", {}).get("partial")
+                                and not r.get("meta", {}).get("large_pool_wf_skipped") for r in records))
             with STATE_LOCK:
                 STATE["virtual_wf_running"] = False
                 # Fără un istoric anterior, arătăm eșecurile pe filele jocurilor;
@@ -2527,15 +2533,20 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                 if not published and records and not STATE.get("virtual_wf_results"):
                     STATE["virtual_wf_results"] = list(records)
                     STATE["virtual_wf_previous"] = False
-                if automatic and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
+                if automatic and not cancelled:
                     STATE["analysis_expanded"] = True
+                analysis_label = "Analiza istorică" if simulated else "Analiza virtuală"
                 STATE["virtual_wf_status"] = (
-                    ("Analiză istorică anulată." if simulated else "Analiză virtuală anulată.") if _VIRTUAL_WF_CANCEL_REQUESTED.is_set()
-                    else "Analiza istorică s-a oprit: decizia de bench sau ținta s-a schimbat. Reia analiza." if decision_changed
-                    else "Analiza istorică a eșuat; vezi jurnalul." if fatal_error
-                    else ("Analiză istorică oprită de buget." if simulated else "Analiză virtuală oprită de buget.") if time.monotonic() >= deadline
-                    else ("Analiză istorică încheiată." if simulated else "Analiză virtuală încheiată.")
+                    f"{analysis_label} a fost anulată." if cancelled
+                    else f"{analysis_label} s-a oprit: decizia de bench sau ținta s-a schimbat. Reia analiza." if decision_changed
+                    else f"{analysis_label} a eșuat; vezi jurnalul." if fatal_error
+                    else f"{analysis_label} s-a oprit la limita de timp." if over_budget
+                    else f"{analysis_label} s-a încheiat." if complete
+                    else f"{analysis_label} s-a încheiat cu rezultate parțiale." if published
+                    else f"{analysis_label} s-a încheiat fără extrageri validate."
                 )
+                if published and not complete and (cancelled or decision_changed or fatal_error or over_budget):
+                    STATE["virtual_wf_status"] += " Istoricul afișat este parțial."
                 if failure_notes:
                     STATE["virtual_wf_status"] += " " + " | ".join(failure_notes)
                 STATE["virtual_wf_dirty"] = True
@@ -2544,11 +2555,7 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                         and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set()):
                     STATE["_autopilot_after_virtual"] = (auto_generate_config, countries, initial_decision)
             if published:
-                complete = (len(records) == len(jobs) and not fatal_error and not decision_changed
-                            and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set() and time.monotonic() < deadline
-                            and all(r.get("flat") and not r.get("error") and not r.get("meta", {}).get("partial")
-                                    and not r.get("meta", {}).get("large_pool_wf_skipped") for r in records))
-                persist(final_status if complete else final_status + " Istoricul afișat este parțial.", complete=complete)
+                persist(final_status, complete=complete)
 
     threading.Thread(target=worker, daemon=True).start()
     ui.notify("Calculez istoricul sistemelor selectate." if simulated else "Calculez istoricul sistemului complet virtual.", type="positive")
@@ -2570,7 +2577,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
     with ui.card().classes("w-full"):
         with ui.expansion(heading, value=True).classes("w-full"):
             if STATE.get("virtual_wf_previous"):
-                ui.label("Istoric din rularea precedentă; cel mai recent Re-Bench nu are un istoric nou disponibil.").classes("text-caption text-warning")
+                ui.label("Istoric din rularea precedentă. Clasamentul poate folosi un Re-Bench mai nou.").classes("text-caption text-warning")
             ui.label(
                 "Metoda aleasă de bench poate folosi unele dintre extragerile evaluate, "
                 "astfel că rezultatul nu dovedește un avantaj predictiv."
@@ -2629,6 +2636,14 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         f"Prima extragere validată: {dates[0].strftime('%d-%m-%Y')}; "
                         f"ultima: {dates[-1].strftime('%d-%m-%Y')}."
                     ).classes("text-caption")
+                    loaded = next((df for name, df in STATE.get("datasets", ())
+                                   if name == record.get("source")), None)
+                    latest = _parse_draw_date(_csv_last_date(loaded))
+                    if latest is not None and latest > dates[-1]:
+                        ui.label(
+                            f"CSV-ul încărcat ajunge la {latest:%d-%m-%Y}. "
+                            "Această validare se oprește înainte de ultima extragere."
+                        ).classes("text-caption text-warning")
                 # Datele compacte au un rând pe extragere; cache-urile complete
                 # pot avea mai multe variante. Numitorul rămâne numărul extragerilor.
                 per_draw = {}
@@ -2658,7 +2673,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
                         "lr_reference_only": bool(record.get("lr_reference_only")),
                     })
-                has_lr = any(d.get("lr_scheme_code") is not None for d in played.values())
+                has_lr = any(d.get("lr_scheme_game") is not None for d in played.values())
                 if not has_lr:
                     ui.label(
                         ("Variante simulate pentru fiecare extragere pe baza datelor anterioare; "

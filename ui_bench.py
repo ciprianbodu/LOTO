@@ -804,12 +804,13 @@ def _render_bench_leaderboard_slice(
         _structural_fail = {}
         for item in _current_dec.get("incomplete_methods", []):
             windows = ", ".join(f"{p}%" for p in item.get("missing_windows", []))
-            reason = (
-                "extrageri neevaluate în ferestrele de istoric"
-                if item.get("reason") == "unevaluated_draws"
-                else "ferestre lipsă"
-            )
-            _structural_fail[item["method"]] = f"{reason}: {windows}"
+            if item.get("reason") == "unevaluated_draws":
+                note = f"extrageri neevaluate în fereastra de {windows} din istoric"
+                if len(item.get("missing_windows", [])) != 1:
+                    note = f"extrageri neevaluate în ferestrele de {windows} din istoric"
+            else:
+                note = f"ferestre lipsă: {windows}"
+            _structural_fail[item["method"]] = note
         for item in _current_dec.get("tiebreak_dependent", []):
             frac = item.get("tiebreak_fraction")
             _structural_fail[item["method"]] = (
