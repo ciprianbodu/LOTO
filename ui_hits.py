@@ -1174,6 +1174,9 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
             "📜 Istoric hits 4+ (walk-forward)",
             value=True,
         ).classes("w-full"):
+            depth = _skip.get("backtest_depth_percent")
+            if depth is not None:
+                ui.label(f"Fereastră de validare cerută la generare: {depth:g}%.").classes("text-caption")
             _render_hits_4plus(
                 flat,
                 game,

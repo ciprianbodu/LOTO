@@ -2070,6 +2070,19 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Lungimea istoricului de validare — 2026-11-18
+
+- Re-Bench testează implicit ferestrele 10/30/70/100% în CLI și UI. Deciziile
+  salvate păstrează grila cu care au fost măsurate. Reluarea istorică acceptă
+  aceleași patru procente, cu implicitul 30% și procentul fixat în cererea de
+  generare. Istoricul de antrenare se stabilește separat.
+- Panoul „Cât istoric ajută?” compară rezultatele pe 13 jocuri și pe bila
+  Joker. La 5+ pe variantele oficiale din România, selecția după 10% obține
+  2 evenimente pe perioada finală, iar 30/70/100% câte zero. Datele nu
+  justifică alegerea automată a unei ferestre pentru predicție.
+- Metodologie, numărători pe joc și comenzi de reproducere în
+  `scripts/analysis/audit_ferestre_istoric_2026-11-18.md`.
+
 ### Predicții evaluate pe variantele LR efective — 2026-11-18
 
 - Modelul experimental pe perechi și două reguli EWMA de optimizare directă

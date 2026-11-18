@@ -550,6 +550,7 @@ def _job_cancelled(job_id: int) -> bool:
 
 
 def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
+    from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
     from loto_enterprise.core.lotteries import UnknownLotteryError
 
     cfg = json.loads(job["config_json"])
@@ -557,6 +558,11 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
     use_cache = bool(cfg.get("use_cache", True))
     datasets_cfg = list(cfg.get("datasets", []))
     job_id = int(job["id"])
+
+    depth = cfg.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT)
+    if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
+        fail_job(job_id, f"Fereastră de validare necunoscută: {depth!r}.", worker_token=WORKER_TOKEN)
+        return None
 
     if not datasets_cfg:
         fail_job(job_id, "Job fără CSV — nimic de generat.", worker_token=WORKER_TOKEN)
@@ -771,6 +777,8 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "bench_key": lot.bench_key,
                     "geometry": lot.geometry,
                 }
+                if "wf_depth_pct" in cfg:
+                    outputs[game_label]["wf_depth_pct"] = depth
                 if "lr_scheme_code" in norm:
                     outputs[game_label]["lr_scheme_code"] = norm["lr_scheme_code"]
                     outputs[game_label]["lr_scheme"] = audit["lr_scheme"]

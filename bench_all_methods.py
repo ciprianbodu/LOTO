@@ -5,7 +5,7 @@ Specul:
     • teste pe FIECARE joc: 6/49, 5/40, Joker (Urna 1 = 5/45, Urna 2 = 1/20)
     • metodele eligibile din registry; cu curare activă rulează matricea
       `per_game` + baseline-urile structurale, nu uniunea completă pe fiecare joc
-    • walk-forward regresiv pe 10, 20, 30, ..., 90, 100 % din istoric
+    • walk-forward pe ultimele 10%, 30%, 70% și pe întregul istoric evaluabil
     • Top-K hits pentru pool-uri DRAW_SIZE .. DRAW_SIZE + 14 (Urna 1), plus
       rata țintei +3/+4; Urna 2 este evaluată separat top-1 (1/20)
     • telemetrie: CPU% peak/avg, RAM peak
@@ -60,6 +60,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
+from loto_enterprise.benchmark import VALIDATION_PERCENTILES, validate_percentiles
 from loto_enterprise.benchmark.hardware import snapshot as hw_snapshot
 from loto_enterprise.benchmark.methods import METHODS, list_methods, method_meta
 from loto_enterprise.benchmark.reporting import (
@@ -321,8 +322,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--percentiles",
-        default="10,20,30,40,50,60,70,80,90,100",
-        help="Ferestre walk-forward, default 10..100 cu pas 10",
+        default=",".join(map(str, VALIDATION_PERCENTILES)),
+        help="Procente distincte de extrageri recente pentru validare. Implicit %(default)s.",
     )
     parser.add_argument(
         "--block-size",
@@ -372,6 +373,11 @@ def main() -> int:
         "de producție cu low_confidence/frequency peste tot.",
     )
     args = parser.parse_args()
+    try:
+        pcts = [int(value.strip()) for value in args.percentiles.split(",")]
+        validate_percentiles(pcts)
+    except ValueError as exc:
+        parser.error(f"--percentiles: {exc}")
     try:
         country, args.out, decision_file = resolve_bench_paths(
             args.country, args.out, args.decision
@@ -434,7 +440,6 @@ def main() -> int:
         print(f"Available     : {list_methods()}", file=sys.stderr)
         return 2
 
-    pcts = [int(x) for x in args.percentiles.split(",") if x.strip()]
     console = Console(force_terminal=not args.no_rich)
 
     hw = hw_snapshot()

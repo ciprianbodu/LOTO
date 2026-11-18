@@ -77,6 +77,7 @@ from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
 from ui_gate import *  # noqa: F403
+from ui_history_windows import history_windows_panel
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
@@ -227,9 +228,12 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         )
         h.update(fname.encode("utf-8"))
         h.update(hashlib.sha256(df_json.encode("utf-8")).hexdigest().encode("ascii"))
-    return json.dumps(
-        {"input_hash": h.hexdigest(), "use_cache": False, "datasets": datasets_cfg}
-    )
+    config = {"use_cache": False, "datasets": datasets_cfg}
+    depth = _int_setting("wf_depth_pct")
+    if depth != DEFAULT_REPLAY_PERCENT:
+        config["wf_depth_pct"] = depth
+        h.update(f"wf_depth_pct={depth}".encode("ascii"))
+    return json.dumps({"input_hash": h.hexdigest(), **config})
 
 
 def submit_generation(
@@ -604,11 +608,7 @@ def _launch_bench(args: list[str], label: str) -> None:
     _refresh_status()
 
 
-_PCTS = (
-    "10,30,60,100"  # 4 ferestre: 10% (zona unde 4+ a ieșit cel mai sus în măsurători)
-)
-# + 30/60/100 (scurt-mediu-lung). NOTĂ: 10% e cea mai SCUMPĂ (antrenare pe ~90%% din istoric
-# → rețelele grele fac 25-30 min/fold); 100% e cea mai ieftină. Tunabil aici.
+_PCTS = ",".join(map(str, VALIDATION_PERCENTILES))
 
 
 def _log_notify(message, type: str = "info", **_kw) -> None:  # noqa: A002
@@ -788,11 +788,16 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
                     scheme = select_lr_scheme(gid, task["pool_size"], policy="cost")
                 task.update(lr_scheme_code=scheme.code, max_variants=scheme.size,
                             guarantee=4, wheel_condition=0)
-    if merged == current.get("datasets"):
+    depth = initial.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT)
+    if merged == current.get("datasets") and depth == current.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT):
         return current_text
     current["datasets"] = merged
-    # Nu partajăm o cheie de pipeline pentru date sau pooluri diferite.
-    current["input_hash"] = hashlib.sha256(json.dumps(merged, sort_keys=True).encode("utf-8")).hexdigest()
+    current.pop("wf_depth_pct", None)
+    if depth != DEFAULT_REPLAY_PERCENT:
+        current["wf_depth_pct"] = depth
+    # Include the launch depth even if the selection changed during Re-Bench.
+    payload = [merged, depth] if depth != DEFAULT_REPLAY_PERCENT else merged
+    current["input_hash"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return json.dumps(current)
 
 
@@ -1810,7 +1815,7 @@ def _wf_run_kwargs(g_label: str, data: dict) -> dict:
         # GEOMETRIA (străin: din ecoul rezultatului); România: eticheta.
         "game_type": _game_spec_for(g_label, data).geometry,
         "pool_size": int(data.get("pool_size_requested") or data.get("pool_size") or 10),
-        "backtest_depth_percent": WF_DEPTH_PERCENT,
+        "backtest_depth_percent": data.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT),
         "lookback_percent": _effective_lookback_pct(data),
         **_wf_generation_options(data),
     }
@@ -1826,6 +1831,7 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "decision_changed": bool(meta.get("decision_changed")),
             "n_test_draws": meta.get("n_test_draws"),
             "n_expected": meta.get("n_expected"),
+            "backtest_depth_percent": meta.get("backtest_depth_percent"),
             "from_cache": bool(meta.get("from_cache")),
             # pool-ul REAL cu care a rulat WF (pt afișare corectă în istoric)
             "pool_size": meta.get("pool_size"),
@@ -1899,6 +1905,7 @@ def _generation_used_engine_reserve(g_label: str, data: dict) -> str:
         if not (
             info.get("fallback")
             and not info.get("no_decision")
+            and not info.get("target_mismatch")
             and info.get("method") == "frequency"
             and info.get("attempted") in (None, now)
         ):
@@ -2363,9 +2370,9 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                     jobs.append((dataset["fname"], spec, frame, dict(task), guarantee))
             if not jobs:
                 raise ValueError("Încarcă istoricul jocurilor selectate.")
-            depth = int(STATE.get("virtual_wf_depth") or 30)
-            if depth not in (30, 100):
-                raise ValueError("Alege adâncimea 30% sau 100%.")
+            depth = config.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT)
+            if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
+                raise ValueError(f"Fereastră de validare necunoscută: {depth!r}.")
             budget = max(60.0, float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"]) * 60.0)
             countries = tuple(spec.country for _, spec, _, _, _ in jobs)
             initial_decision = _virtual_decision_fingerprint(countries)
@@ -2760,11 +2767,12 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
 
 
 def _render_virtual_controls() -> None:
-    STATE.setdefault("virtual_wf_depth", 30)
-    ui.select(
-        {30: "Ultimele 30%", 100: "Întreg istoricul evaluabil (100%)"},
-        value=STATE["virtual_wf_depth"], label="Adâncime istoric virtual",
-    ).bind_value(STATE, "virtual_wf_depth").classes("w-full")
+    options = {pct: f"Ultimele {pct}%" for pct in VALIDATION_PERCENTILES}
+    options[100] = "Întreg istoricul evaluabil (100%)"
+    selector = ui.select(options, value=_int_setting("wf_depth_pct"),
+                         label="Istoric de validare pentru următoarea rulare").classes("w-full")
+    selector.bind_value(SETTINGS, "wf_depth_pct")
+    selector.on_value_change(lambda: _save_settings())
     ui.label(
         "Istoricul hits se calculează automat după Re-Bench, pentru setările și istoricele curente. "
         "Bugetul walk-forward poate opri calculul înainte de toate extragerile."
@@ -3618,13 +3626,30 @@ def _new_draws_summary():
 @ui.refreshable
 def _bench_freshness_panel(country: str) -> None:
     """Actualizează numai mesajele bench, fără a recrea rezultatele sau controalele."""
+    from loto_enterprise.core.method_selector import _load_config
+
+    next_windows = ", ".join(f"{value}%" for value in VALIDATION_PERCENTILES)
+    ui.label(f"Următorul Re-Bench validează metodele pe {next_windows} din istoric. "
+             "Fereastra de 100% începe după primele 80 de extrageri.").classes("text-caption")
+    decision_path = _LOT.decision_path_for(country, PROJECT_ROOT)
+    meta = _load_config(str(decision_path)).get("_meta")
+    saved = meta.get("percentiles") if isinstance(meta, dict) else None
+    windows_changed = False
+    if isinstance(saved, list) and saved and all(type(p) is int and 1 <= p <= 100 for p in saved):
+        ui.label("Ferestrele deciziei salvate: " + ", ".join(f"{p}%" for p in saved) + ".").classes("text-caption")
+        windows_changed = set(saved) != set(VALIDATION_PERCENTILES)
+        if windows_changed:
+            missing = [f"{p}%" for p in VALIDATION_PERCENTILES if p not in saved]
+            detail = " Următorul Re-Bench evaluează și " + ", ".join(missing) + "." if missing else ""
+            ui.label("Noua combinație de ferestre nu a fost evaluată în decizia salvată."
+                     + detail).classes("text-caption text-warning")
     stale_target = _decision_target_text(country)
     if stale_target:
         # Persistent: dispare numai când decizia ajunge pe ținta selectată.
         ui.label(stale_target).classes("text-caption text-negative")
     if _LOT.normalize_country(country) != _LOT.RO:
         text = _country_bench_texts(country)["freshness"]
-        if stale_target and text.startswith("✅"):
+        if (stale_target or windows_changed) and text.startswith("✅"):
             return  # „la zi” ar contrazice avertismentul despre țintă
         color = "text-positive" if text.startswith("✅") else "text-warning"
         ui.label(text).classes("text-caption " + color)
@@ -3655,8 +3680,8 @@ def _bench_freshness_panel(country: str) -> None:
             "⚠️ Benchmarkul nu mai corespunde datelor sau metodelor curente. "
             "Rulează Re-Bench pentru actualizare."
         ).classes("text-caption text-warning")
-    elif stale_target:
-        pass  # „la zi” ar contrazice avertismentul despre țintă de mai sus
+    elif stale_target or windows_changed:
+        pass  # Avertismentul de mai sus identifică ținta sau ferestrele care diferă.
     elif _target_data_ready():
         ui.label(
             "✅ Benchmark la zi pentru istoricul și metodele curente. "
@@ -4501,9 +4526,8 @@ def main_page() -> None:
         )
         ui.label(
             "Fereastra de mai sus e telemetrie Auto-Pilot (unde avg_hits a picat pe bench). "
-            "NU filtrează numere și NU schimbă biletele. Walk-forward validează ultimele "
-            f"{int(WF_DEPTH_PERCENT)}% din istoric. «Ultimele X% extrageri» taie CSV-ul de producție "
-            "(0 = tot istoricul)."
+            "«Analizează doar ultimele X% extrageri» limitează istoricul disponibil metodei "
+            "(0 = tot istoricul). În «Analiză & Clasament» alegi cât istoric se validează."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes(
@@ -4556,9 +4580,8 @@ def main_page() -> None:
             "5+ este ținta principală, iar 6+ este raportat separat unde jocul permite."
         ).classes("text-caption text-grey")
         ui.label(
-            f"Validarea pool-ului (pe ultimele {int(WF_DEPTH_PERCENT)}% din istoric): "
-            "Joker → 5/40 → 6/49 (6/49 ultim). "
-            "WF paralel (~80% CPU) — de obicei minute, nu ore. Bugetul e plafon de siguranță."
+            "Validarea folosește istoricul și fereastra din cererea de generare. "
+            "Bugetul walk-forward limitează timpul de calcul."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete"
@@ -4670,6 +4693,7 @@ def main_page() -> None:
     with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
         gate_panel()
+        history_windows_panel()
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
         ):

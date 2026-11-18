@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
+from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
 from loto_enterprise.core import lotteries as _LOT
 
 logger = logging.getLogger("app_nicegui")
@@ -23,7 +24,7 @@ REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 # se oprește PARȚIAL și pipeline-ul continuă (mail + shutdown).
 WF_TOTAL_BUDGET_S = 90 * 60
 # Adâncime walk-forward: ultimele X% din istoric simulate onest (fără lookahead).
-WF_DEPTH_PERCENT = 30.0
+WF_DEPTH_PERCENT = float(DEFAULT_REPLAY_PERCENT)
 
 
 def _effective_lookback_pct(from_data: dict | None = None) -> float:
@@ -414,6 +415,7 @@ UI_PERSIST_KEYS = [
     "autopilot_after_bench",
     "mail_on_complete",
     "wf_budget_min",
+    "wf_depth_pct",
     "bench_hit_target",
 ]
 DEFAULTS = {
@@ -468,6 +470,7 @@ DEFAULTS = {
     # cu WF paralel (~80% CPU) validarea completă la 30% depth durează minute, nu ore.
     # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
     "wf_budget_min": 90,
+    "wf_depth_pct": DEFAULT_REPLAY_PERCENT,
     "bench_hit_target": 5,
     "bench_target_revision": 1,
 }
@@ -558,6 +561,9 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
+    depth = SETTINGS.get("wf_depth_pct")
+    if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
+        SETTINGS["wf_depth_pct"] = DEFAULT_REPLAY_PERCENT
     # La prima pornire a noii politici, vechiul selector 3/4 trece pe 5+.
     # Revizia se salveaza: o alegere explicita ulterioara 3/4/6 ramane persistenta.
     if isinstance(data, dict) and data and data.get("bench_target_revision") != 1:

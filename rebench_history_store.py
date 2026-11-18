@@ -13,6 +13,7 @@ import sqlite3
 import time
 from pathlib import Path
 
+from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from runtime_paths import RUNTIME_ROOT
 
 STORE_FILE = RUNTIME_ROOT / "rebench_history.sqlite3"
@@ -174,8 +175,10 @@ def _validate_payload(payload, run_id):
         spec = lotteries.lottery_by_id(str(record.get("game_id") or ""))
         if spec is None or spec.geometry != record.get("game") or type(record.get("pool")) is not int or not 1 <= record["pool"] <= spec.max_n:
             raise ValueError("identitate sau pool invalid în istoric")
-        if type(record.get("guarantee")) is not int or not 3 <= record["guarantee"] <= spec.pick_n or record.get("depth") not in (30, 100):
+        if type(record.get("guarantee")) is not int or not 3 <= record["guarantee"] <= spec.pick_n:
             raise ValueError("setări invalide în istoric")
+        if type(record.get("depth")) is not int or record["depth"] not in VALIDATION_PERCENTILES:
+            raise ValueError("fereastră de validare invalidă în istoric")
         if "error" in record:
             if not isinstance(record["error"], str):
                 raise ValueError("eroare invalidă în istoric")

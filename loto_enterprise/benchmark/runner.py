@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import validate_percentiles
 from .methods import call_method, method_meta
 from .hw_sampler import HwSampler, HwSnapshot
 from loto_enterprise.core.ranking import rank_by_score
@@ -748,6 +749,7 @@ def run_benchmark(
     păstrează toate metodele, pentru compatibilitate și siguranță.
 
     Nu se pierde nimic din decizia de producție."""
+    validate_percentiles(percentiles)
     out_path = Path(out_dir)
     out_path.mkdir(exist_ok=True, parents=True)
 
@@ -1279,7 +1281,7 @@ def _aggregate(
     method_meta_map: dict[str, dict],
     pool_keys_per_game: dict[str, list[str]],
 ) -> dict:
-    # Ferestrele walk-forward au dimensiuni diferite (10/30/60/100%). O medie
+    # Ferestrele walk-forward au dimensiuni diferite (sufixe suprapuse). O medie
     # simplă le-ar acorda aceeași greutate și ar supra-pondera ferestrele mici.
     # Folosim aceeași agregare canonică pe n_eval/n_test ca decizia și UI-ul.
     from .decision import pooled_mean

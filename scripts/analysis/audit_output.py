@@ -23,7 +23,6 @@ import pandas as pd
 import app_nicegui as app_ui
 from job_queue import DB_PATH
 from loto_enterprise.benchmark import decision
-from loto_enterprise.core.py314_io import pickle_load_path
 from loto_enterprise.core import walk_forward_adapter as wf
 from ui_shared import atomic_write_text, decode_queue_result
 from wheeling_methods import compute_coverage_pct
@@ -226,10 +225,14 @@ def audit_cached_hits(flat, source, lot, guarantee, condition):
         assert prediction.hits == len(nums & actual[prediction.draw_index]), (
             lot.game_id, prediction.draw_index, prediction.hits,
         )
+        pool = (getattr(prediction, "ticket_context", None) or {}).get("hard_core")
+        if pool is not None:
+            assert prediction.hits_union == len(set(pool) & actual[prediction.draw_index])
         unions.setdefault(prediction.draw_index, set()).update(nums)
         complete[prediction.draw_index] = (
             complete.get(prediction.draw_index, True)
             and prediction.wheel_coverage == 100.0
+            and getattr(prediction, "variant_count", None) is None
         )
     for index, nums in unions.items():
         played_hits = len(nums & actual[index])
@@ -261,48 +264,10 @@ def audit_bundle(bundle, sources=None):
             assert all(len(v) == len(set(v)) == lot.pick_n and set(v) <= set(pool) for v in wheel)
             cov = compute_coverage_pct(wheel, pool, guarantee, condition)
             assert abs(cov - float(data["context"]["coverage_pct"])) < 1e-8
-            rp = audit.get("recent_penalty") or {}
-            # Geometria wheel-ului (garanție/condiție/plafon) trebuie in cheie
-            # EXACT ca in productie (_wf_generation_options din app_nicegui.py),
-            # altfel un job cu lotto design "t daca p" sau plafon de bilete
-            # calculeaza o cheie diferita de cea reala si raporteaza "fara cache"
-            # pe un cache care exista, sau — mai rau — citeste tacit cache-ul
-            # unei geometrii NEPOTRIVITE (default guarantee=guarantee).
-            max_variants = int(
-                data.get(
-                    "max_variants", (data.get("context") or {}).get("max_variants")
-                )
-                or 0
-            )
-            # Opțiunile de compoziție (bază restrânsă, limită de consecutive) din
-            # rezultat, ca la pornirea WF din UI; fără ele cheia ar citi tacit
-            # cache-ul configurației nerestrânse.
-            opts = app_ui._wf_generation_options(data)
-            sig = wf._decision_sig(
-                lot.geometry,
-                len(pool),
-                audit.get("lookback_pct") or 100,
-                rp.get("draws") or 0,
-                rp.get("factor", 0.5),
-                guarantee=guarantee,
-                wheel_condition=condition,
-                max_variants=max_variants,
-                restrict_base_max=opts["restrict_base_max"],
-                restrict_base_min=opts["restrict_base_min"],
-                max_consecutive_run=opts["max_consecutive_run"],
-                game_key=opts.get("game_key"),
-                country=opts.get("country"),
-            )
-            # Adâncimea intră în nume ca `float(...).hex()`, ca în
-            # `run_honest_walk_forward`; cu `30` simplu cheia nu se potrivea niciodată.
-            cache = wf._cache_path(
-                lot.geometry,
-                wf._csv_hash(source, lot.geometry),
-                len(pool),
-                float(app_ui.WF_DEPTH_PERCENT).hex(),
-                sig,
-                game_key=opts.get("game_key"),
-                country=opts.get("country"),
+            # Use the production cache reader for the saved window, scheme and geometry.
+            flat, cached = wf.run_honest_walk_forward(
+                df_source=source, use_cache=True, cache_only=True,
+                **app_ui._wf_run_kwargs(game, data),
             )
             item = {
                 "game": game,
@@ -310,9 +275,7 @@ def audit_bundle(bundle, sources=None):
                 "variants": len(variants),
                 "coverage": cov,
             }
-            if cache.exists():
-                cached = pickle_load_path(cache)
-                flat = cached["flat"]
+            if cached.get("from_cache") and flat:
                 per = audit_cached_hits(flat, source, lot, guarantee, condition)
                 assert len(per) == cached["n_test_draws"]
                 item["wf_draws_checked"] = len(per)

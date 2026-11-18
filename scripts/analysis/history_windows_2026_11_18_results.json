@@ -1,0 +1,832 @@
+{
+  "date": "18.11.2026",
+  "percentages": [
+    10,
+    30,
+    70,
+    100
+  ],
+  "source_sha256": {
+    "_ISTORIC/loto_6_49.csv": "3c9ef63e716cb80f79bcdfcabb41ffd18f5dd21fa8fea5a0f181e6550415b1eb",
+    "_ISTORIC/joker.csv": "b084566a5ccb23d8420d5f5871602f1df33d390ae847eb25874beac43f423cf4",
+    "_ISTORIC/loto_5_40.csv": "43aa4f61210549d4bc7070941fada2700b0a808097bafeb465f44877c1263139",
+    "_ISTORIC/externe/germania_lotto_6aus49.csv": "9c107fe8b7f840f31f621c08c48d40f4614323f1f23a4d4be2685ffdb08f42f8",
+    "_ISTORIC/externe/polonia_lotto_6din49.csv": "228cfae8d88353692540186dc7dfcbfec0a06d89c22676d0ddf2fbc64322fcea",
+    "_ISTORIC/externe/spania_la_primitiva_6din49.csv": "d6f1028f035701a41abdaf8f993b3e524f4f3b68877e5281394a8ad61fa2c599",
+    "_ISTORIC/externe/austria_lotto_6aus45.csv": "21a5f79fe47739b35949e7bddbbb22693ece5583deb21fb1a900d360b4aa661a",
+    "_ISTORIC/externe/belgia_lotto_6din45.csv": "6ed0d88f9d7223b9cabe047fef2cc8b8dc54991c89d3cd4f6ecd5e9bec00f6c6",
+    "_ISTORIC/externe/ungaria_hatoslotto_6din45.csv": "9321793299915fb246a7c07ccf3818e591d6ca8df0a96f24159c67aa90c778f6",
+    "_ISTORIC/externe/cehia_sportka_6din49.csv": "8c2b8248ca7e8b10458e4efc16f142e42bddde244416e143d4a5b3bd4b96558e",
+    "_ISTORIC/externe/slovacia_loto_6din49.csv": "a94b885d12211dd4ffbb73156cc072954f97f0ec2930f8c453e6cb7794daa5a7",
+    "_ISTORIC/externe/bulgaria_toto2_6din49.csv": "8232ab6cfdc2b44c87d7ed389ddf8b076a30d7abbd555af0a9b628a8b5df4ed6",
+    "_ISTORIC/externe/euromillions_5din50_stele.csv": "818aa7f89acad9d1c605cbcef30e921f62631b7f8c9e3aa4e2ea58c3f711e0d8"
+  },
+  "experiments": {
+    "tickets": {
+      "title": "Validare după hiturile pe variantă",
+      "description": "Studiul compară zilnic 9–10 metode din registru după 5+ pe o variantă, apoi după 4+ și media hiturilor. În România s-au folosit codurile oficiale. În străinătate s-a simulat aceeași schemă la toate cele patru procente.",
+      "games": [
+        {
+          "label": "RO · Loto 6/49 · Cod 48",
+          "n": 686,
+          "selected": 30,
+          "primary": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            12,
+            8,
+            7,
+            4
+          ]
+        },
+        {
+          "label": "RO · Joker · Cod 24",
+          "n": 561,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            1,
+            1,
+            3,
+            2
+          ]
+        },
+        {
+          "label": "RO · Joker · Urna 2 · top-1",
+          "n": 561,
+          "selected": 100,
+          "primary": [
+            37,
+            34,
+            38,
+            32
+          ],
+          "secondary": [
+            37,
+            34,
+            38,
+            32
+          ]
+        },
+        {
+          "label": "RO · Loto 5/40 · Cod 16",
+          "n": 434,
+          "selected": 30,
+          "primary": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            2,
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "label": "DE · Lotto 6aus49 · Cod 49 simulat",
+          "n": 1641,
+          "selected": 10,
+          "primary": [
+            2,
+            1,
+            1,
+            0
+          ],
+          "secondary": [
+            23,
+            19,
+            20,
+            19
+          ]
+        },
+        {
+          "label": "PL · Lotto · Cod 49 simulat",
+          "n": 1837,
+          "selected": 70,
+          "primary": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            18,
+            21,
+            25,
+            25
+          ]
+        },
+        {
+          "label": "ES · La Primitiva · Cod 49 simulat",
+          "n": 1159,
+          "selected": 30,
+          "primary": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "secondary": [
+            13,
+            6,
+            9,
+            9
+          ]
+        },
+        {
+          "label": "AT · Lotto 6 aus 45 · Cod 49 simulat",
+          "n": 1006,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            16,
+            15,
+            12,
+            14
+          ]
+        },
+        {
+          "label": "BE · Lotto · Cod 49 simulat",
+          "n": 368,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            4,
+            5,
+            5,
+            5
+          ]
+        },
+        {
+          "label": "HU · Hatoslottó · Cod 49 simulat",
+          "n": 454,
+          "selected": 10,
+          "primary": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            8,
+            8,
+            8,
+            8
+          ]
+        },
+        {
+          "label": "CZ · Sportka · Cod 49 simulat",
+          "n": 2164,
+          "selected": 70,
+          "primary": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            28,
+            23,
+            26,
+            27
+          ]
+        },
+        {
+          "label": "SK · Loto · Cod 49 simulat",
+          "n": 1426,
+          "selected": 70,
+          "primary": [
+            0,
+            1,
+            1,
+            2
+          ],
+          "secondary": [
+            22,
+            23,
+            24,
+            23
+          ]
+        },
+        {
+          "label": "BG · Toto 2 6/49 · Cod 49 simulat",
+          "n": 108,
+          "selected": 30,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            1,
+            1,
+            2,
+            1
+          ]
+        },
+        {
+          "label": "EU · EuroMillions · Cod 24 simulat",
+          "n": 495,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            1,
+            0,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "pool": {
+      "title": "Validare după hiturile în pool",
+      "description": "Studiul compară zilnic 9–10 metode din registru după 5+ în pool, apoi după 4+ și media hiturilor. Tabelul măsoară numerele extrase care au intrat în pool.",
+      "games": [
+        {
+          "label": "RO · Loto 6/49 · pool 9",
+          "n": 686,
+          "selected": 10,
+          "primary": [
+            2,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            11,
+            8,
+            7,
+            9
+          ]
+        },
+        {
+          "label": "RO · Joker · pool 10",
+          "n": 561,
+          "selected": 30,
+          "primary": [
+            0,
+            1,
+            0,
+            0
+          ],
+          "secondary": [
+            4,
+            5,
+            3,
+            4
+          ]
+        },
+        {
+          "label": "RO · Joker · Urna 2 · top-1",
+          "n": 561,
+          "selected": 100,
+          "primary": [
+            37,
+            34,
+            38,
+            32
+          ],
+          "secondary": [
+            37,
+            34,
+            38,
+            32
+          ]
+        },
+        {
+          "label": "RO · Loto 5/40 · pool 8",
+          "n": 434,
+          "selected": 30,
+          "primary": [
+            2,
+            1,
+            1,
+            0
+          ],
+          "secondary": [
+            2,
+            1,
+            2,
+            2
+          ]
+        },
+        {
+          "label": "DE · Lotto 6aus49 · pool 10",
+          "n": 1641,
+          "selected": 100,
+          "primary": [
+            1,
+            4,
+            4,
+            3
+          ],
+          "secondary": [
+            21,
+            34,
+            34,
+            25
+          ]
+        },
+        {
+          "label": "PL · Lotto · pool 10",
+          "n": 1837,
+          "selected": 70,
+          "primary": [
+            2,
+            2,
+            3,
+            2
+          ],
+          "secondary": [
+            15,
+            20,
+            16,
+            16
+          ]
+        },
+        {
+          "label": "ES · La Primitiva · pool 10",
+          "n": 1159,
+          "selected": 10,
+          "primary": [
+            2,
+            3,
+            2,
+            2
+          ],
+          "secondary": [
+            15,
+            8,
+            8,
+            8
+          ]
+        },
+        {
+          "label": "AT · Lotto 6 aus 45 · pool 10",
+          "n": 1006,
+          "selected": 30,
+          "primary": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            21,
+            22,
+            15,
+            11
+          ]
+        },
+        {
+          "label": "BE · Lotto · pool 10",
+          "n": 368,
+          "selected": 30,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            3,
+            5,
+            4,
+            5
+          ]
+        },
+        {
+          "label": "HU · Hatoslottó · pool 10",
+          "n": 454,
+          "selected": 30,
+          "primary": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            8,
+            10,
+            7,
+            9
+          ]
+        },
+        {
+          "label": "CZ · Sportka · pool 10",
+          "n": 2164,
+          "selected": 70,
+          "primary": [
+            4,
+            3,
+            0,
+            2
+          ],
+          "secondary": [
+            27,
+            28,
+            24,
+            24
+          ]
+        },
+        {
+          "label": "SK · Loto · pool 10",
+          "n": 1426,
+          "selected": 30,
+          "primary": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "secondary": [
+            22,
+            20,
+            22,
+            24
+          ]
+        },
+        {
+          "label": "BG · Toto 2 6/49 · pool 10",
+          "n": 108,
+          "selected": 100,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            1,
+            1,
+            1,
+            0
+          ]
+        },
+        {
+          "label": "EU · EuroMillions · pool 10",
+          "n": 495,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            2,
+            4,
+            4,
+            3
+          ]
+        }
+      ]
+    },
+    "frequency": {
+      "title": "Antrenare cu metoda frequency",
+      "description": "Metoda frequency a primit doar procentul indicat din zilele anterioare. Tabelul măsoară cea mai bună variantă oficială în România și poolul de 10 numere în străinătate.",
+      "games": [
+        {
+          "label": "RO · Loto 6/49 · Cod 48",
+          "n": 718,
+          "selected": 30,
+          "primary": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "secondary": [
+            4,
+            4,
+            5,
+            6
+          ]
+        },
+        {
+          "label": "RO · Joker · Cod 24",
+          "n": 592,
+          "selected": 100,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            3,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "label": "RO · Joker · Urna 2 · top-1",
+          "n": 592,
+          "selected": 70,
+          "primary": [
+            22,
+            21,
+            19,
+            17
+          ],
+          "secondary": [
+            22,
+            21,
+            19,
+            17
+          ]
+        },
+        {
+          "label": "RO · Loto 5/40 · Cod 16",
+          "n": 465,
+          "selected": 100,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            5,
+            6,
+            7,
+            3
+          ]
+        },
+        {
+          "label": "DE · Lotto 6aus49 · pool 10",
+          "n": 1671,
+          "selected": 10,
+          "primary": [
+            1,
+            1,
+            3,
+            1
+          ],
+          "secondary": [
+            29,
+            26,
+            21,
+            21
+          ]
+        },
+        {
+          "label": "PL · Lotto · pool 10",
+          "n": 1867,
+          "selected": 10,
+          "primary": [
+            2,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            17,
+            23,
+            20,
+            15
+          ]
+        },
+        {
+          "label": "ES · La Primitiva · pool 10",
+          "n": 1189,
+          "selected": 70,
+          "primary": [
+            1,
+            1,
+            0,
+            2
+          ],
+          "secondary": [
+            15,
+            10,
+            10,
+            11
+          ]
+        },
+        {
+          "label": "AT · Lotto 6 aus 45 · pool 10",
+          "n": 1036,
+          "selected": 30,
+          "primary": [
+            2,
+            1,
+            1,
+            0
+          ],
+          "secondary": [
+            22,
+            16,
+            19,
+            15
+          ]
+        },
+        {
+          "label": "BE · Lotto · pool 10",
+          "n": 398,
+          "selected": 10,
+          "primary": [
+            2,
+            2,
+            2,
+            1
+          ],
+          "secondary": [
+            10,
+            10,
+            13,
+            10
+          ]
+        },
+        {
+          "label": "HU · Hatoslottó · pool 10",
+          "n": 484,
+          "selected": 30,
+          "primary": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            6,
+            3,
+            5,
+            7
+          ]
+        },
+        {
+          "label": "CZ · Sportka · pool 10",
+          "n": 2148,
+          "selected": 10,
+          "primary": [
+            1,
+            2,
+            4,
+            3
+          ],
+          "secondary": [
+            26,
+            17,
+            26,
+            22
+          ]
+        },
+        {
+          "label": "SK · Loto · pool 10",
+          "n": 1412,
+          "selected": 70,
+          "primary": [
+            4,
+            3,
+            1,
+            2
+          ],
+          "secondary": [
+            16,
+            17,
+            17,
+            14
+          ]
+        },
+        {
+          "label": "BG · Toto 2 6/49 · pool 10",
+          "n": 138,
+          "selected": 30,
+          "primary": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            2,
+            3,
+            2,
+            2
+          ]
+        },
+        {
+          "label": "EU · EuroMillions · pool 10",
+          "n": 525,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            3,
+            2,
+            4,
+            3
+          ]
+        }
+      ]
+    },
+    "mail_scorers": {
+      "title": "Antrenare cu metodele din recomandarea din 16 noiembrie",
+      "description": "Cele patru metode din recomandarea românească au fost fixate înaintea comparației. Procentul stabilește cât trecut a primit fiecare metodă.",
+      "games": [
+        {
+          "label": "RO · Loto 6/49 · Cod 48 · naive_bayes_last",
+          "n": 718,
+          "selected": 10,
+          "primary": [
+            0,
+            1,
+            0,
+            1
+          ],
+          "secondary": [
+            9,
+            7,
+            7,
+            12
+          ]
+        },
+        {
+          "label": "RO · Joker · Cod 24 · runs_persistence",
+          "n": 592,
+          "selected": 10,
+          "primary": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "secondary": [
+            1,
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "label": "RO · Joker · Urna 2 · top-1 · ridge_pooled_feats",
+          "n": 592,
+          "selected": 70,
+          "primary": [
+            33,
+            39,
+            41,
+            41
+          ],
+          "secondary": [
+            33,
+            39,
+            41,
+            41
+          ]
+        },
+        {
+          "label": "RO · Loto 5/40 · Cod 16 · croston_interval",
+          "n": 465,
+          "selected": 30,
+          "primary": [
+            0,
+            1,
+            1,
+            1
+          ],
+          "secondary": [
+            2,
+            4,
+            4,
+            4
+          ]
+        }
+      ]
+    }
+  }
+}
