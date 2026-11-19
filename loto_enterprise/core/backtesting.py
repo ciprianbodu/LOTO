@@ -152,6 +152,8 @@ def _retroactive_step_stateless(
     compact_variants: bool = False,
     virtual_full_system: bool = False,
     lr_scheme_code=None,
+    dynamic_method: bool = False,
+    dynamic_selection=None,
 ) -> RetroactivePrediction | None:
     """Un pas walk-forward — un singur loc pentru "un pas", folosit atât de
     calea paralelă/stateless (parametrii de stare rămân la implicit) cât și
@@ -184,6 +186,9 @@ def _retroactive_step_stateless(
         eng._build_draw_matrix()
         eng._adaptive_mode = adaptive_mode
         eng._adaptive_event = adaptive_event
+        dynamic = dynamic_method and lr_scheme_code is not None
+        if dynamic and dynamic_selection is not None:
+            eng._dynamic_selection = dynamic_selection
         out_lines, _, _, _, _ctx, audit = eng.run_institutional_pipeline(
             progress_cb=None,
             pool_size=pool_size,
@@ -200,6 +205,7 @@ def _retroactive_step_stateless(
             max_consecutive_run=max_consecutive_run,
             **({"_pool_analysis_only": True} if virtual_full_system else {}),
             **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
+            **({"dynamic_method": True} if dynamic else {}),
         )
         return eng, out_lines, (_ctx or {}), audit
 
@@ -292,7 +298,7 @@ def _retroactive_step_stateless(
 
 
 # Auditul pasului păstrat împreună cu pool-ul istoric.
-_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base", "lr_scheme")
+_TICKET_AUDIT_KEYS = ("timesfm_predictions", "consecutive_limit", "restrict_base", "lr_scheme", "dynamic_selection")
 
 
 def _ticket_context(engine, audit, actual) -> dict:
@@ -955,6 +961,7 @@ class LotoBacktester:
         compact_variants: bool = False,
         virtual_full_system: bool = False,
         lr_scheme_code=None,
+        dynamic_method: bool = False,
     ) -> list[RetroactivePrediction]:
         """
         Backtesting Retroactiv: Genereaza previziuni pentru fiecare punct istoric.
@@ -1045,6 +1052,49 @@ class LotoBacktester:
             if not sim_indices:
                 return []
 
+        dynamic = dynamic_method and lr_scheme_code is not None
+        prepared = {}
+        cutoffs = self.df.attrs["training_cutoffs"]
+        if dynamic and lookback_percent in (0, 100) and sim_indices:
+            from loto_enterprise.core.dynamic_winner import dynamic_forecasts
+
+            # All origins use the same expanding archive. A shorter lookback
+            # starts from a different row at each origin and runs in the engine.
+            origins = sorted({cutoffs[i] for i in sim_indices})
+            end = origins[-1]
+            interrupted = False
+
+            def cancelled_during_preparation():
+                nonlocal interrupted
+                try:
+                    interrupted = interrupted or bool(should_cancel())
+                except Exception:  # same optional callback contract as the simulation loop
+                    pass
+                return interrupted
+
+            _wf_report_progress(progress_cb, 0, len(sim_indices))
+            prepared = dynamic_forecasts(
+                np.asarray(self.draws[:end], dtype=np.int64), cutoffs[:end], scheme, origins,
+                max_run=max_consecutive_run, restrict_min=restrict_base_min,
+                restrict_max=restrict_base_max, penalty_draws=recent_penalty_draws,
+                penalty_factor=recent_penalty_factor,
+                **({"should_cancel": cancelled_during_preparation} if should_cancel is not None else {}),
+            )
+            if len(prepared) != len(origins):
+                if not interrupted:
+                    raise RuntimeError("Selecție dinamică incompletă pentru originile solicitate")
+                # Preparation proceeds chronologically and may only have reached
+                # older dates. Preserve the normal first outstanding prediction
+                # (newest when stateless), then let partial-cache merging resume.
+                sim_indices = sim_indices[:1]
+
+        def dynamic_args(i):
+            if not dynamic:
+                return {}
+            if cutoffs[i] in prepared:
+                return {"dynamic_method": True, "dynamic_selection": prepared[cutoffs[i]]}
+            return {"dynamic_method": True}
+
         # ── Paralel pe ~80% nuclee când pașii sunt independenți (walk-forward UI) ──
         if _stateless and len(sim_indices) > 1:
             import os
@@ -1077,6 +1127,7 @@ class LotoBacktester:
                     **({"compact_variants": True} if compact_variants else {}),
                     **({"virtual_full_system": True} if virtual_full_system else {}),
                     **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
+                    **dynamic_args(sim_idx),
                 }
                 for sim_idx in sim_indices
             ]
@@ -1371,6 +1422,7 @@ class LotoBacktester:
                     **({"compact_variants": True} if compact_variants else {}),
                     **({"virtual_full_system": True} if virtual_full_system else {}),
                     **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
+                    **dynamic_args(sim_idx),
                     adaptive_mode=active_mode,
                     adaptive_event=(
                         adaptive_history[-1].get("event") if adaptive_history else None

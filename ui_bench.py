@@ -1015,6 +1015,9 @@ def _render_bench_leaderboard_slice(
     # stale din best_methods.json eliminat din METHODS). Un audit vechi care
     # numește un filtru EXCLUDED nu are voie să devină 🎯.
     _gen_early = _last_generation_bench_info(folds_game_key, pool)
+    dynamic = (_gen_early or {}).get("dynamic_selection")
+    if dynamic:
+        _gen_early = {}  # This table describes the static Re-Bench decision.
     _gen_usable = (
         isinstance(_gen_early, dict)
         and _gen_early.get("method")
@@ -1100,6 +1103,9 @@ def _render_bench_leaderboard_slice(
 
     title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
+        if dynamic:
+            ui.label(f"Ultima generare a folosit selecția dinamică LR ({dynamic.get('method')}). "
+                     "Tabelul de mai jos prezintă alternativa cu decizie fixă din Re-Bench.").classes("text-caption")
         ui.label(
             "🏆 = primul în clasamentul eligibil; 🎯 = metoda din ultima generare sau decizia salvată. "
             "⛔ = exclusă din decizie: date incomplete sau scoruri egale la limita top-K "

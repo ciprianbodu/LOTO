@@ -51,6 +51,7 @@ class PipelineMixin:
         max_consecutive_run=0,
         _pool_analysis_only=False,
         lr_scheme_code=None,
+        dynamic_method=False,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -69,6 +70,9 @@ class PipelineMixin:
         `pure_bench_mode` rămâne acceptat pentru compatibilitatea contractului
         UI↔worker, la fel ca `should_use_blacklist`: telemetrie, nu buton de
         configurare activ.
+
+        dynamic_method: pentru un cod LR explicit, alege metoda urnei principale
+            din istoricul disponibil la fiecare predicție, inclusiv în walk-forward.
 
         recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
             extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
@@ -117,6 +121,11 @@ class PipelineMixin:
             producția îl pasează tot False (worker.py).
         """
         self.audit.pop("lr_scheme", None)
+        if self.audit.pop("dynamic_selection", None) is not None:
+            self.audit.get("bench_winner", {}).pop(self._bench_game_key(), None)
+        # Selecția pregătită de walk-forward aparține exclusiv pasului curent.
+        prepared_selection = vars(self).pop("_dynamic_selection", None)
+        use_dynamic = dynamic_method and lr_scheme_code is not None
         if lr_scheme_code is not None:
             from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
 
@@ -309,17 +318,35 @@ class PipelineMixin:
         if progress_cb:
             progress_cb("Analiza frecvenței...", 30)
 
-        # 4. Calcul scoruri per număr (câștigătorul bench CPU / ensemble)
-        tfm_scores = {}
         total_draws = len(self.data) if self.data is not None else 0
         actual_lookback = total_draws
         self.audit["effective_rows_used"] = total_draws
         self.audit["lookback_pct"] = lookback
 
-        # Etichetă progres = metoda REALĂ de scoring (câștigătorul bench dacă
-        # use_bench_winner e ON), altfel „frecvență".
+        start_score = time.perf_counter()
         _score_lbl = "frecvență"
-        if self.use_bench_winner:
+        if use_dynamic:
+            if prepared_selection is None:
+                from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
+                from loto_enterprise.core.history import training_cutoffs
+
+                if progress_cb:
+                    progress_cb(f"Aleg metoda pentru Codul LR {scheme.code} pe extragerile anterioare...", 35)
+                prepared_selection = choose_dynamic_winner(
+                    self._draw_matrix, training_cutoffs(self.data), scheme,
+                    max_run=max_consecutive_run, restrict_min=restrict_base_min,
+                    restrict_max=restrict_base_max, penalty_draws=recent_penalty_draws,
+                    penalty_factor=recent_penalty_factor,
+                )
+            tfm_scores, details = prepared_selection
+            _score_lbl = details["method"]
+            self.audit["dynamic_selection"] = {**details, "history_rows": total_draws}
+            self.audit.setdefault("bench_winner", {})[self._bench_game_key()] = {
+                "method": _score_lbl, "pool_hint": scheme.n, "source": "dynamic_selection",
+                "family": details.get("family", "dynamic"),
+                "dynamic_selection": self.audit["dynamic_selection"],
+            }
+        elif self.use_bench_winner:
             try:
                 from loto_enterprise.core.method_selector import (
                     get_winner_name,
@@ -341,13 +368,13 @@ class PipelineMixin:
             except Exception:  # noqa: BLE001
                 pass
         if progress_cb:
-            progress_cb(f"Scoring: {_score_lbl} (ctx={actual_lookback})...", 15)
+            progress_cb(f"Scoring: {_score_lbl} (ctx={actual_lookback})...", 40 if use_dynamic else 15)
 
         self._tfm_window_cb = None
 
-        start_score = time.perf_counter()
         try:
-            tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+            if not use_dynamic:
+                tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
         finally:
             self._tfm_window_cb = None  # Cleanup ca să nu polueze apeluri viitoare
         score_time = (time.perf_counter() - start_score) * 1000
@@ -361,6 +388,7 @@ class PipelineMixin:
             "penalized": {},
         }
         if _rp_n > 0 and tfm_scores:
+            unpenalized_scores = tfm_scores
             tfm_scores, _pen = self.apply_recent_penalty(
                 tfm_scores,
                 self._draw_matrix,
@@ -372,7 +400,7 @@ class PipelineMixin:
                 logging.warning(
                     "[PIPELINE] Penalizarea recentă a aplatizat scorurile — o ignor."
                 )
-                tfm_scores = self._get_timesfm_scores(context_len=actual_lookback)
+                tfm_scores = unpenalized_scores
                 self.audit["recent_penalty"]["skipped_flat"] = True
             else:
                 self.audit["recent_penalty"]["penalized"] = {

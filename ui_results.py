@@ -1267,6 +1267,8 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
                 f" | la întâmplare ({description}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
                 f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
                 + (
+                    " | selecție dinamică pe variante LR, refăcută doar din zilele anterioare fiecărei extrageri"
+                    if _result_uses_dynamic_method(data) else
                     " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
                     " cuprind aceste extrageri: nu e o validare externă"
                     if _method_from_bench(data)
@@ -1638,6 +1640,50 @@ def _consecutive_pool_warning(
     )
 
 
+def _dynamic_selection_lines(selection: dict) -> list[str]:
+    """Dovezile din momentul generării, inclusiv comparatorul pe aceleași extrageri."""
+    draws = int(selection.get("validation_draws") or 0)
+    days = int(selection.get("validation_days") or 0)
+    candidates = int(selection.get("candidate_count") or 0)
+    lines = [
+        f"Selecție dinamică LR · {selection.get('method') or 'frequency'} · "
+        f"{candidates} metode candidate · {draws} extrageri din {days} zile anterioare."
+    ]
+    ingredients = {
+        "frequency_cumulative": "frecvență cumulată", "ewma_10": "frecvență cu înjumătățire la 10 extrageri",
+        "ewma_120": "frecvență cu înjumătățire la 120 de extrageri", "trend_24_96": "tendință pe 24 și 96 de extrageri",
+        "gap_age": "timp de la ultima apariție", "gap_z": "interval standardizat", "gap_bayes": "hazard bayesian",
+        "weibull_085": "hazard Weibull (0,85)", "phase_2": "fază cu perioadă 2", "phase_3": "fază cu perioadă 3",
+        "markov_120": "tranziții Markov", "context_kernel_256": "similaritatea ultimelor 256 de contexte",
+        "holt_damped": "tendință Holt amortizată", "cusum_6": "sumă cumulată CUSUM",
+        "block_entropy_100": "entropie pe 100 de extrageri", "logistic_online": "regresie logistică online",
+    }
+    if weights := selection.get("weights"):
+        formula = " ".join(f"{w:+d} × {ingredients.get(k, k)}" for k, w in weights.items())
+        lines.append("Scor calculat din rangurile semnalelor: " + formula.lstrip("+") + ".")
+    hits = selection.get("hits") or {}
+    random = selection.get("random_hits") or {}
+    if draws and hits:
+        values = [
+            f"{t}+ {hits[str(t)]} față de {random.get(str(t), '—')}"
+            for t in (4, 5, 6) if str(t) in hits
+        ]
+        if values:
+            lines.append("Extrageri cu acest prag pe cel puțin o variantă LR "
+                         "(metoda aleasă față de martorul aleator): " + ", ".join(values) + ".")
+    reasons = {
+        "insufficient_history": "Rezervă frequency până la 26 de zile de validare cu cel puțin 250 de extrageri anterioare.",
+        "no_gain_over_random": "Rezervă frequency. Nicio metodă nu a îmbunătățit un prag păstrând celelalte praguri la nivelul martorului.",
+        "unusable_current_scores": "Rezervă frequency. Metoda selectată nu a produs scoruri utilizabile pentru această extragere.",
+        "winner": "Metoda îmbunătățește cel puțin un prag față de martor și îl egalează sau îl depășește la celelalte. Ordinea de departajare este 5+, 6 dacă este posibil, apoi 4+.",
+    }
+    if reason := reasons.get(selection.get("reason")):
+        lines.append(reason)
+    lines.append("Numărătorile provin din fereastra folosită pentru alegere. "
+                 "Istoricul walk-forward verifică metoda aleasă înaintea fiecărei extrageri.")
+    return lines
+
+
 def _decision_notes(bw: dict, game_key: str, pool_fallback) -> list[str]:
     """Nota de încredere a deciziei, pe fiecare urnă din `bench_winner`.
 
@@ -1654,6 +1700,9 @@ def _decision_notes(bw: dict, game_key: str, pool_fallback) -> list[str]:
     for key in keys:
         info = bw.get(key) or {}
         method = info.get("method")
+        if info.get("dynamic_selection"):
+            notes.extend(_dynamic_selection_lines(info["dynamic_selection"]))
+            continue
         if info.get("fallback"):
             continue
         hint = info.get("pool_hint") or (1 if info.get("single_pick") else pool_fallback)

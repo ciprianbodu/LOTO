@@ -1,0 +1,462 @@
+{
+  "analysis": "Analiză secundară exploratorie pe perioadele finale folosite în studiul anterior.",
+  "selector_version": "dynamic-lr-v1",
+  "competing_methods": 1011,
+  "joker_bonus_comparator": "registered frequency for all three strategies",
+  "settings": {
+    "max_run": 2,
+    "penalty_draws": 0
+  },
+  "games": {
+    "loto_6_49": {
+      "first_date": "2019-11-07",
+      "last_date": "2026-11-15",
+      "draws": 718,
+      "days": 685,
+      "sha256_source_csv_at_replay": "3c9ef63e716cb80f79bcdfcabb41ffd18f5dd21fa8fea5a0f181e6550415b1eb",
+      "lr_signature": "lr1-559778bf4c8bb9728a1de36d5b25dff6e8cc6638063222cdac76a40fb9c85504",
+      "lr_code": 48,
+      "pool_size": 9,
+      "tickets_per_draw": 12,
+      "outcomes_by_draw": {
+        "dynamic": {
+          "pool": {
+            "4": 10,
+            "5": 0,
+            "6": 0
+          },
+          "ticket": {
+            "4": 10,
+            "5": 0,
+            "6": 0
+          }
+        },
+        "frequency": {
+          "pool": {
+            "4": 6,
+            "5": 1,
+            "6": 0
+          },
+          "ticket": {
+            "4": 6,
+            "5": 1,
+            "6": 0
+          }
+        },
+        "random": {
+          "pool": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "ticket": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          }
+        }
+      },
+      "paired_ticket_vs_random": {
+        "4": {
+          "dynamic_only": 10,
+          "random_only": 2,
+          "both": 0,
+          "neither": 706
+        },
+        "5": {
+          "dynamic_only": 0,
+          "random_only": 0,
+          "both": 0,
+          "neither": 718
+        },
+        "6": {
+          "dynamic_only": 0,
+          "random_only": 0,
+          "both": 0,
+          "neither": 718
+        }
+      },
+      "uniform_ticket_probabilities": {
+        "4": 0.007394548097600827,
+        "5": 0.00021195931067742883,
+        "6": 8.58134861042222e-07
+      },
+      "method_changes_between_days": 25,
+      "distinct_effective_methods": 21,
+      "method_days": {
+        "C0536": 2,
+        "C0459": 92,
+        "C0256": 47,
+        "C0485": 27,
+        "C0249": 54,
+        "C0428": 3,
+        "naive_bayes_last": 43,
+        "C0239": 5,
+        "C0053": 7,
+        "C0212": 113,
+        "C0662": 4,
+        "C0882": 2,
+        "C0513": 24,
+        "C0374": 102,
+        "C0926": 8,
+        "C0186": 9,
+        "C0039": 24,
+        "C0020": 104,
+        "C0316": 3,
+        "C0529": 2,
+        "C0228": 10
+      },
+      "reason_days": {
+        "winner": 685
+      },
+      "fallback_days": 0,
+      "fallback_draws": 0,
+      "next_forecast_after_archive": {
+        "version": "dynamic-lr-v1",
+        "method": "C0228",
+        "weights": {
+          "gap_z": 1,
+          "gap_bayes": 1
+        },
+        "selected_method": "C0228",
+        "reason": "winner",
+        "candidate_count": 1011,
+        "history_rows": 2602,
+        "window_days": 104,
+        "validation_days": 104,
+        "validation_draws": 108,
+        "hits": {
+          "4": 3,
+          "5": 1,
+          "6": 0
+        },
+        "random_hits": {
+          "4": 0,
+          "5": 0,
+          "6": 0
+        }
+      },
+      "live_parity_checks": [
+        {
+          "prefix_rows": 1884,
+          "method": "C0536",
+          "seconds": 1.345
+        },
+        {
+          "prefix_rows": 2602,
+          "method": "C0228",
+          "seconds": 1.567
+        }
+      ],
+      "random_tickets_match_frozen_counts": true,
+      "optional_archive_references_checked": [
+        "frequency",
+        "random"
+      ],
+      "batch_seconds_including_next_forecast": 7.596,
+      "validation_seconds_including_parity": 10.947
+    },
+    "loto_5_40": {
+      "first_date": "2022-03-27",
+      "last_date": "2026-11-15",
+      "draws": 465,
+      "days": 446,
+      "sha256_source_csv_at_replay": "43aa4f61210549d4bc7070941fada2700b0a808097bafeb465f44877c1263139",
+      "lr_signature": "lr1-d399cf75cb625aae4b4cbb012e693a772db2146e1eca9492dde9ab96c1e47716",
+      "lr_code": 16,
+      "pool_size": 8,
+      "tickets_per_draw": 21,
+      "outcomes_by_draw": {
+        "dynamic": {
+          "pool": {
+            "4": 6,
+            "5": 1,
+            "6": 0
+          },
+          "ticket": {
+            "4": 6,
+            "5": 0
+          }
+        },
+        "frequency": {
+          "pool": {
+            "4": 3,
+            "5": 0,
+            "6": 0
+          },
+          "ticket": {
+            "4": 3,
+            "5": 0
+          }
+        },
+        "random": {
+          "pool": {
+            "4": 5,
+            "5": 0,
+            "6": 0
+          },
+          "ticket": {
+            "4": 5,
+            "5": 0
+          }
+        }
+      },
+      "paired_ticket_vs_random": {
+        "4": {
+          "dynamic_only": 5,
+          "random_only": 4,
+          "both": 1,
+          "neither": 455
+        },
+        "5": {
+          "dynamic_only": 0,
+          "random_only": 0,
+          "both": 0,
+          "neither": 465
+        }
+      },
+      "uniform_ticket_probabilities": {
+        "4": 0.009519641098588468,
+        "5": 0.000182368603421235
+      },
+      "method_changes_between_days": 20,
+      "distinct_effective_methods": 16,
+      "method_days": {
+        "C0445": 4,
+        "C0989": 27,
+        "C0172": 65,
+        "C0335": 20,
+        "C0156": 9,
+        "C0885": 59,
+        "C0606": 98,
+        "C0244": 5,
+        "C0293": 8,
+        "C0374": 2,
+        "C0208": 2,
+        "C0712": 3,
+        "C0464": 100,
+        "C0958": 4,
+        "C0173": 10,
+        "C0862": 30
+      },
+      "reason_days": {
+        "winner": 446
+      },
+      "fallback_days": 0,
+      "fallback_draws": 0,
+      "next_forecast_after_archive": {
+        "version": "dynamic-lr-v1",
+        "method": "C0862",
+        "weights": {
+          "frequency_cumulative": 1,
+          "ewma_10": 3,
+          "ewma_120": -3,
+          "block_entropy_100": 2,
+          "logistic_online": 1
+        },
+        "selected_method": "C0862",
+        "reason": "winner",
+        "candidate_count": 1011,
+        "history_rows": 1753,
+        "window_days": 104,
+        "validation_days": 104,
+        "validation_draws": 108,
+        "hits": {
+          "4": 3,
+          "5": 1
+        },
+        "random_hits": {
+          "4": 1,
+          "5": 0
+        }
+      },
+      "live_parity_checks": [
+        {
+          "prefix_rows": 1288,
+          "method": "C0445",
+          "seconds": 0.898
+        },
+        {
+          "prefix_rows": 1753,
+          "method": "C0862",
+          "seconds": 1.116
+        }
+      ],
+      "random_tickets_match_frozen_counts": true,
+      "optional_archive_references_checked": [
+        "frequency",
+        "random"
+      ],
+      "batch_seconds_including_next_forecast": 3.628,
+      "validation_seconds_including_parity": 5.939
+    },
+    "joker": {
+      "first_date": "2021-04-04",
+      "last_date": "2026-11-15",
+      "draws": 592,
+      "days": 568,
+      "sha256_source_csv_at_replay": "b084566a5ccb23d8420d5f5871602f1df33d390ae847eb25874beac43f423cf4",
+      "lr_signature": "lr1-a7df7394508853ef68e03a23079b025f451e278d15986540a1b7a1b1ce4f3e4d",
+      "lr_code": 24,
+      "pool_size": 10,
+      "tickets_per_draw": 14,
+      "outcomes_by_draw": {
+        "dynamic": {
+          "pool": {
+            "4": 3,
+            "5": 0
+          },
+          "ticket": {
+            "4": 1,
+            "5": 0
+          },
+          "ticket_with_joker": {
+            "4": 0,
+            "5": 0
+          }
+        },
+        "frequency": {
+          "pool": {
+            "4": 6,
+            "5": 1
+          },
+          "ticket": {
+            "4": 3,
+            "5": 0
+          },
+          "ticket_with_joker": {
+            "4": 0,
+            "5": 0
+          }
+        },
+        "random": {
+          "pool": {
+            "4": 4,
+            "5": 0
+          },
+          "ticket": {
+            "4": 3,
+            "5": 0
+          },
+          "ticket_with_joker": {
+            "4": 1,
+            "5": 0
+          }
+        }
+      },
+      "paired_ticket_vs_random": {
+        "4": {
+          "dynamic_only": 1,
+          "random_only": 3,
+          "both": 0,
+          "neither": 588
+        },
+        "5": {
+          "dynamic_only": 0,
+          "random_only": 0,
+          "both": 0,
+          "neither": 592
+        }
+      },
+      "uniform_ticket_probabilities": {
+        "4": 0.00221156545603511,
+        "5": 1.1458888373238912e-05
+      },
+      "method_changes_between_days": 19,
+      "distinct_effective_methods": 17,
+      "method_days": {
+        "C0179": 69,
+        "C0544": 24,
+        "C0285": 19,
+        "C0318": 32,
+        "C0222": 98,
+        "C0206": 6,
+        "runs_persistence": 53,
+        "C0048": 10,
+        "C0010": 45,
+        "C0196": 1,
+        "C0208": 32,
+        "C0952": 9,
+        "C0580": 9,
+        "C0769": 103,
+        "C0661": 1,
+        "C0689": 55,
+        "C0851": 2
+      },
+      "reason_days": {
+        "winner": 568
+      },
+      "fallback_days": 0,
+      "fallback_draws": 0,
+      "next_forecast_after_archive": {
+        "version": "dynamic-lr-v1",
+        "method": "C0851",
+        "weights": {
+          "frequency_cumulative": 4,
+          "weibull_085": 2,
+          "phase_2": 2,
+          "cusum_6": 2,
+          "block_entropy_100": 3
+        },
+        "selected_method": "C0851",
+        "reason": "winner",
+        "candidate_count": 1011,
+        "history_rows": 2205,
+        "window_days": 104,
+        "validation_days": 104,
+        "validation_draws": 108,
+        "hits": {
+          "4": 1,
+          "5": 1
+        },
+        "random_hits": {
+          "4": 1,
+          "5": 0
+        }
+      },
+      "live_parity_checks": [
+        {
+          "prefix_rows": 1613,
+          "method": "C0179",
+          "seconds": 1.195
+        },
+        {
+          "prefix_rows": 2205,
+          "method": "C0851",
+          "seconds": 1.339
+        }
+      ],
+      "random_tickets_match_frozen_counts": true,
+      "optional_archive_references_checked": [
+        "frequency",
+        "random"
+      ],
+      "batch_seconds_including_next_forecast": 5.709,
+      "validation_seconds_including_parity": 8.611
+    }
+  },
+  "all_games_ticket_endpoints": {
+    "4": {
+      "paired_vs_registered_random": {
+        "dynamic_only": 16,
+        "random_only": 9,
+        "both": 1,
+        "neither": 1749
+      },
+      "dynamic_observed": 17,
+      "uniform_expected": 11.045165394893818,
+      "uniform_upper_tail": 0.05688878255025753
+    },
+    "5": {
+      "paired_vs_registered_random": {
+        "dynamic_only": 0,
+        "random_only": 0,
+        "both": 0,
+        "neither": 1775
+      },
+      "dynamic_observed": 0,
+      "uniform_expected": 0.2437718475742256,
+      "uniform_upper_tail": 1.0
+    }
+  }
+}

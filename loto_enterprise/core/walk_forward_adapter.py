@@ -668,6 +668,7 @@ def _decision_sig(
     game_key: str | None = None,
     country: str | None = None,
     lr_scheme_code=None,
+    dynamic_method: bool = False,
 ) -> str:
     """Semnătură scurtă a deciziei bench (scorer + target + ensemble + wheel +
     lookback) pentru (joc, pool). La Joker include şi Urna 2, fiindcă bila ei
@@ -683,6 +684,7 @@ def _decision_sig(
         pool_size, game_type, restrict_base_max, restrict_base_min
     )
     lot = _wf_lottery(game_type, game_key, country)
+    dynamic_version = ""
     if lr_scheme_code is not None:
         from covering.lr_selection import resolve_lr_scheme, validate_lr_variants
 
@@ -690,6 +692,10 @@ def _decision_sig(
             raise ValueError("Schemele oficiale LR sunt disponibile numai pentru România")
         scheme = resolve_lr_scheme(game_type, lr_scheme_code, _wheel_pool)
         validate_lr_variants(scheme, max_variants)
+        if dynamic_method:
+            from loto_enterprise.core.dynamic_winner import DYNAMIC_VERSION
+
+            dynamic_version = DYNAMIC_VERSION
     foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
     compact_sfx = "|compact-wf1" if _wheel_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16) else ""
     try:
@@ -710,13 +716,17 @@ def _decision_sig(
             }.get(game_type, "loto_6_49")
         # România: apelul de dinainte, fără argument nou.
         _cp = {} if cfg_path is None else {"config_path": cfg_path}
-        c = recommend_optimal_config(gk, int(pool_size), **_cp)
+        # Only the second Joker urn still uses the current benchmark decision
+        # when the main urn elects its scorer from each historical prefix.
+        c = ({"scorer": dynamic_version} if dynamic_version
+             else recommend_optimal_config(gk, int(pool_size), **_cp))
         _ens_sig = _ensemble_sig(c.get("ensemble") or [])
         # Older process pools could import a different hit target and silently
         # replace the selected scorer with frequency, or vice versa.
         pure_frequency = _ens_sig in ("", _ensemble_sig([{"method": "frequency", "weight": 1.0}]))
-        pinned = "|fixed-target1" if (c.get("scorer") != "frequency" or c.get("target_mismatch")
-                                      or not pure_frequency) else ""
+        pinned = "|fixed-target1" if not dynamic_version and (
+            c.get("scorer") != "frequency" or c.get("target_mismatch") or not pure_frequency
+        ) else ""
         urna2_sig = ""
         if game_type == "joker":
             u2_key = (
@@ -730,12 +740,13 @@ def _decision_sig(
                 f"{_ensemble_sig(c2.get('ensemble') or [])}{_scorer_semantics(c2)}"
             )
         lb = lookback_pct(lookback_percent)
+        target = dynamic_version or game_hit_target(gk, current_bench_hit_target())
         # `use_blacklist` e INERT în producție (engine: blacklist=set()) — nu
         # intra în cheie, altfel un toggle de telemetrie invalida tot cache-ul WF
         # fără să schimbe pool-ul sau wheel-ul.
         raw = (
             f"{c.get('scorer', '?')}|{c.get('sim_depth_pct', 0)}|"
-            f"{game_hit_target(gk, current_bench_hit_target())}|{_ens_sig}{urna2_sig}|"
+            f"{target}|{_ens_sig}{urna2_sig}|"
             f"{_wheel_sig(_wheel_pool, game_type, guarantee, wheel_condition, max_variants, **({'lr_scheme_code': lr_scheme_code} if lr_scheme_code is not None else {}))}|lb{lb}"
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
@@ -763,7 +774,7 @@ def _decision_sig(
                     + _consecutive_sig(max_consecutive_run)
                     + foreign_sfx
                     + compact_sfx
-                    + f"|fixed-target1={current_bench_hit_target()}"
+                    + (dynamic_version or f"|fixed-target1={current_bench_hit_target()}")
                 ).encode()
             ).hexdigest()[:6]
         )
@@ -1134,6 +1145,7 @@ def run_honest_walk_forward(
     virtual_full_system: bool = False,
     compact_results: bool = False,
     lr_scheme_code=None,
+    dynamic_method: bool = False,
 ) -> tuple[list[WalkForwardResult], dict]:
     """Run walk-forward backtest (or load from cache).
 
@@ -1176,6 +1188,8 @@ def run_honest_walk_forward(
     wf_key = lot.bench_key if lot is not None else None
     wf_country = lot.country if lot is not None else None
     lr_metadata = None
+    dynamic = bool(dynamic_method and lr_scheme_code is not None)
+    selection_validation = "dynamic_walk_forward" if dynamic else "fixed_current_decision"
     if lr_scheme_code is not None:
         from covering.lr_selection import resolve_lr_scheme, lr_scheme_metadata, validate_lr_variants
 
@@ -1222,14 +1236,15 @@ def run_honest_walk_forward(
                 "wheel_guarantee": g0, "wheel_condition": condition0,
                 "max_variants": cap0, "from_cache": False,
                 "n_predictions": 0, "n_test_draws": 0, "partial": True,
-                "selection_validation": "fixed_current_decision",
+                "selection_validation": selection_validation,
                 "large_pool_wf_skipped": True, "skip_reason": "resource_limit",
                 "skip_detail": str(exc),
             }
     csv_hash = _csv_hash(df_source, game_type)
     # Amprenta deciziei ÎNAINTE de semnătură: o rescriere oricând după acest punct
     # (inclusiv în timpul căutării pașilor refolosibili) se vede la final.
-    _decision_before = _decision_file_stamp(wf_country)
+    uses_bench_decision = not dynamic or game_type == "joker"
+    _decision_before = _decision_file_stamp(wf_country) if uses_bench_decision else None
     dec_sig = _decision_sig(
         game_type,
         pool_size,
@@ -1245,6 +1260,7 @@ def run_honest_walk_forward(
         game_key=wf_key,
         country=wf_country,
         **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
+        **({"dynamic_method": True} if dynamic else {}),
     )
     if virtual_full_system:
         # The representative ticket is a mathematical witness, not the first
@@ -1281,7 +1297,8 @@ def run_honest_walk_forward(
         "wheel_condition": condition,
         "max_variants": cap,
         "max_consecutive_run": int(max_consecutive_run or 0),
-        "selection_validation": "fixed_current_decision",
+        "selection_validation": selection_validation,
+        **({"dynamic_method": True} if dynamic else {}),
         **({"virtual_full_system": True} if virtual_full_system else {}),
         # Rândurile istoricului validat: o extragere nouă găsește direct prefixul.
         "history_rows": int(len(df_source)),
@@ -1315,7 +1332,7 @@ def run_honest_walk_forward(
                     f"[WALK-FWD] Cache hit pentru {game_type} pool={pool_size} "
                     f"hash={csv_hash} dec={dec_sig} ({len(cached['flat'])} entries)"
                 )
-                if _decision_file_stamp(wf_country) != _decision_before:
+                if uses_bench_decision and _decision_file_stamp(wf_country) != _decision_before:
                     meta["decision_changed"] = True
                 return cached["flat"], meta
             # PARȚIAL → NU-l servim orbește: re-rulăm ca să EXTINDEM acoperirea
@@ -1362,7 +1379,7 @@ def run_honest_walk_forward(
         meta["partial"] = bool(cached.get("partial", False))
         meta["newest_missing"] = bool(cached.get("newest_missing", False))
         meta["wheel_coverage"] = wheel_coverage_summary(flat_c)
-        if _decision_file_stamp(wf_country) != _decision_before:
+        if uses_bench_decision and _decision_file_stamp(wf_country) != _decision_before:
             meta["decision_changed"] = True
         return flat_c, meta
 
@@ -1436,6 +1453,7 @@ def run_honest_walk_forward(
         **({"compact_variants": True} if compact_variants else {}),
         **({"virtual_full_system": True} if virtual_full_system else {}),
         **({"lr_scheme_code": lr_scheme_code} if lr_scheme_code is not None else {}),
+        **({"dynamic_method": True} if dynamic else {}),
     )
 
     # Câte simulări „ar fi trebuit" (pentru a marca validarea ca PARȚIALĂ în UI).
@@ -1449,7 +1467,7 @@ def run_honest_walk_forward(
     meta["n_test_draws"] = len(set(p.draw_index for p in predictions))
     meta["n_expected"] = n_expected
     meta["partial"] = meta["n_test_draws"] < n_expected
-    if _decision_file_stamp(wf_country) != _decision_before:
+    if uses_bench_decision and _decision_file_stamp(wf_country) != _decision_before:
         meta["decision_changed"] = True
 
     # Cache PARȚIAL existent → REUNIUNE, nu „câștigă cel mai lung": nicio extragere

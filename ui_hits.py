@@ -728,6 +728,8 @@ def _render_hits_4plus(
             f"ℹ️ Peste hazard (≥{_TT}): "
             + " · ".join(_winners)
             + (
+                ". Metoda pentru schema LR a fost aleasă înaintea fiecărei zile, folosind numai extragerile anterioare."
+                if (meta or {}).get("selection_validation") == "dynamic_walk_forward" else
                 ". Metoda e cea din decizia de azi, aleasă de bench pe ferestre care "
                 "cuprind și aceste extrageri, deci nu e o validare externă; un p mic "
                 "aici nu dovedește un avantaj."
@@ -992,6 +994,8 @@ def _render_hits_4plus(
     with ui.tab_panels(tabs=_hit_tabs, value="pool").classes("w-full"):
         with ui.tab_panel("pool"):
             _chosen_txt = (
+                "metoda pentru schema LR se alege din nou, folosind doar zilele anterioare extragerii"
+                if (meta or {}).get("selection_validation") == "dynamic_walk_forward" else
                 "metoda e cea din decizia de azi, aleasă pe ferestre bench care cuprind și "
                 "aceste extrageri"
                 if method_from_bench
