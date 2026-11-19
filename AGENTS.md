@@ -2070,6 +2070,14 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Selecția dinamică a metodei pentru scheme LR — 2026-11-19
+
+În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.
+
+Motorul compară 1.000 de combinații de semnale și 11 metode din registru, pe variantele codului LR ales. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea oricare dintre rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Un candidat se califică dacă atinge cel puțin numărătorile martorului `random` la toate pragurile posibile pe variante (4+, 5+, 6) și îl depășește la cel puțin unul. Dintre candidații calificați, prioritățile sunt 5+, apoi 6 unde este posibil, apoi 4+. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează metoda, ponderile pentru combinații, motivul alegerii și numărătorile ambelor metode din fereastra de selecție.
+
+Validarea istorică pe 1.775 de extrageri până la 15 noiembrie a dat 17 evenimente 4+ pe variante pentru regula dinamică, 10 pentru `random` și 12 pentru `frequency`. La 5+ și 6, atât regula dinamică, cât și `random` au obținut zero. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
+
 ### Portofolii de scheme reduse la același buget — 2026-11-18
 
 - Panoul românesc „Compară schemele LR la același buget” folosește

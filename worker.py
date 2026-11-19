@@ -382,6 +382,11 @@ def _task_norm(task: dict, lot) -> dict:
             norm["restrict_base_max"], norm["restrict_base_min"],
         )
         resolve_lr_scheme(lot.geometry, scheme.code, played_pool)
+        dynamic = task.get("dynamic_method", False)
+        if not isinstance(dynamic, bool):
+            raise ValueError("dynamic_method trebuie să fie boolean")
+        if dynamic:
+            norm["dynamic_method"] = True
         norm.update(lr_scheme_code=scheme.code, guarantee=4,
                     wheel_condition=4, max_variants=scheme.size)
     return norm
@@ -467,6 +472,9 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                if norm.get("dynamic_method"):
+                    from loto_enterprise.core.dynamic_winner import DYNAMIC_VERSION
+                    digest.update(DYNAMIC_VERSION.encode())
                 digest.update(_hedge_cache_semantics(lot, norm["pool_size"]).encode())
                 previous_cap = 19 if lot.geometry == "5/40" else 16
                 large_pool = large_pool or (
@@ -739,6 +747,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         sim_depth_pct=norm["sim_depth_pct"],
                         enable_adaptive_persistence=False,
                         pure_bench_mode=norm["pure_bench_mode"],
+                        **({"dynamic_method": True} if norm.get("dynamic_method") else {}),
                         **({"lr_scheme_code": norm["lr_scheme_code"]} if "lr_scheme_code" in norm else {}),
                     )
                 )
@@ -782,6 +791,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                 if "lr_scheme_code" in norm:
                     outputs[game_label]["lr_scheme_code"] = norm["lr_scheme_code"]
                     outputs[game_label]["lr_scheme"] = audit["lr_scheme"]
+                    outputs[game_label]["dynamic_method"] = norm.get("dynamic_method", False)
             except Exception as e:
                 if "STOP_REQUESTED" in str(e):
                     logging.info(

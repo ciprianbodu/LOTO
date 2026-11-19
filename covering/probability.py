@@ -95,13 +95,8 @@ def _single_ticket_counts(v: int, pick: int):
     return tuple(counts)
 
 
-def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
-    """Același tabel întreg ca bucla Python, pentru pool-uri de 9..20 de numere.
-
-    Familia submulțimilor biletelor (închidere în jos), apoi maximul pe
-    submulțimi (propagare în sus, câte o dimensiune), apoi histograma
-    (mărimea submulțimii, cele mai multe numere pe un bilet). Numai întregi.
-    """
+def subset_hit_table(v: int, masks: tuple[int, ...]):
+    """Cardinality and maximum hits on a single ticket, indexed by positional mask."""
     import numpy as np
 
     size = 1 << v
@@ -115,6 +110,19 @@ def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
     for i in range(v):  # best[m] = cel mai mare popcount al unei submulțimi din familie
         view = best.reshape(-1, 2, 1 << i)
         np.maximum(view[:, 1, :], view[:, 0, :], out=view[:, 1, :])
+    return popcount, best
+
+
+def _hit_counts_numpy(v: int, masks: tuple[int, ...]):
+    """Același tabel întreg ca bucla Python, pentru pool-uri de 9..20 de numere.
+
+    Familia submulțimilor biletelor (închidere în jos), apoi maximul pe
+    submulțimi (propagare în sus, câte o dimensiune), apoi histograma
+    (mărimea submulțimii, cele mai multe numere pe un bilet). Numai întregi.
+    """
+    import numpy as np
+
+    popcount, best = subset_hit_table(v, masks)
     hist = np.bincount(
         # The largest index is v*(v+1)+v <= 440. int16 avoids the two
         # full-size int64 operands; bincount performs its own index conversion.

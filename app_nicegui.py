@@ -217,6 +217,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             scheme = _lr_scheme_for(g_label)
             task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
                         max_variants=scheme.size)
+            if SETTINGS.get("dynamic_method_enabled_val", True):
+                task["dynamic_method"] = True
+                h.update(b"dynamic_method=1")
             h.update(lr_scheme_signature(g_label, scheme.code, scheme.n).encode("utf-8"))
         if not _spec.is_romanian:
             task["country"] = _spec.country
@@ -749,9 +752,11 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
     selected = {g.game_id for g in _selected_games()}
     original_by_game = {}
     original_lr_codes = {}
+    original_dynamic = {}
     for dataset in initial.get("datasets", []):
         for task in dataset.get("tasks", []):
             original_by_game.setdefault(task.get("game_label"), []).append(dataset)
+            original_dynamic[task["game_label"]] = task.get("lr_scheme_code") is not None and task.get("dynamic_method") is True
             if task.get("lr_scheme_code") is not None:
                 original_lr_codes[task["game_label"]] = task["lr_scheme_code"]
     merged = []
@@ -781,6 +786,11 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
             if task.get("lr_scheme_code") is not None:
                 from covering.lr_selection import resolve_lr_scheme, select_lr_scheme
 
+                if gid in original_dynamic:
+                    if original_dynamic[gid]:
+                        task["dynamic_method"] = True
+                    else:
+                        task.pop("dynamic_method", None)
                 code = original_lr_codes.get(gid, task["lr_scheme_code"])
                 try:
                     scheme = resolve_lr_scheme(gid, code, task["pool_size"])
@@ -830,7 +840,7 @@ def _on_bench_finished(*, context=None, config_json=None) -> None:
         # finalizarea lui și verificăm din nou datele și decizia.
         try:
             cfg = json.loads(cfg_text)
-            countries = tuple(task.get("country", _LOT.RO) for ds in cfg.get("datasets", []) for task in ds.get("tasks", []))
+            countries = _history_decision_keys((task for ds in cfg.get("datasets", []) for task in ds.get("tasks", [])), simulated=True)
             STATE["_bench_history_pending"] = (cfg_text, countries, _virtual_decision_fingerprint(countries))
             STATE["_bench_history_snapshot"] = context is not None or config_json is not None
         except Exception as exc:  # noqa: BLE001
@@ -1846,7 +1856,8 @@ def _store_wf_result(rk: str, flat, meta: dict) -> None:
             "lr_scheme": deepcopy(meta.get("lr_scheme")),
         }
         for key in (
-            "large_pool_wf_skipped", "skip_reason", "skip_detail", "estimated_rows", "row_limit"
+            "large_pool_wf_skipped", "skip_reason", "skip_detail", "estimated_rows", "row_limit",
+            "dynamic_method", "selection_validation",
         ):
             if key in meta:
                 STATE["retro_meta"][rk][key] = meta[key]
@@ -1882,6 +1893,8 @@ def _decision_methods_now(g_label: str, data: dict):
         keys.append((lot.bench_key_urna2 or f"{lot.bench_key}_urna2", 1))
     used = (data.get("audit") or {}).get("bench_winner") or {}
     for key, hint in keys:
+        if key == lot.bench_key and _result_uses_dynamic_method(data):
+            continue  # The main scorer is chosen again from prior draws at each WF step.
         now = "frequency"
         if has_decision(key, cfg):
             ens = get_ensemble_for_game(
@@ -2321,12 +2334,31 @@ def _romanian_guarantee_text() -> str:
     return "Garanția cerută pe joc: " + " · ".join(parts) + ". Depinde de acoperirea variantelor."
 
 
+def _history_decision_keys(tasks, *, simulated: bool) -> tuple:
+    """Deciziile de care depinde simularea: țările cu metode fixe și urna secundară Joker."""
+    keys = []
+    for task in tasks:
+        if simulated and task.get("lr_scheme_code") is not None and task.get("dynamic_method") is True:
+            if task["game_label"] == "joker":
+                keys.append("joker_urna2")
+        else:
+            keys.append(task.get("country", _LOT.RO))
+    return tuple(keys)
+
+
 def _virtual_decision_fingerprint(countries) -> tuple:
     """Ținta curentă și conținutul fiecărei decizii, inclusiv modificări externe."""
     from loto_enterprise.core.method_selector import decision_path_for
 
     fingerprints = []
     for country in sorted(set(countries)):
+        if country == "joker_urna2":
+            from loto_enterprise.core.method_selector import recommend_optimal_config
+
+            choice = recommend_optimal_config("joker_urna2", 1)
+            selection = [choice.get(key) for key in ("scorer", "hit_target", "ensemble")]
+            fingerprints.append((country, json.dumps(selection, sort_keys=True)))
+            continue
         try:
             content = Path(decision_path_for(country)).read_bytes()
         except FileNotFoundError:
@@ -2334,7 +2366,8 @@ def _virtual_decision_fingerprint(countries) -> tuple:
         else:
             digest = hashlib.sha256(content).hexdigest()
         fingerprints.append((country, digest))
-    return _clamped_bench_target(), tuple(fingerprints)
+    target = _clamped_bench_target() if any(k != "joker_urna2" for k in countries) else None
+    return target, tuple(fingerprints)
 
 
 def _start_virtual_history(*, auto_generate_config: str | None = None, automatic: bool = False, simulated: bool = False,
@@ -2376,10 +2409,12 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
                 raise ValueError(f"Fereastră de validare necunoscută: {depth!r}.")
             budget = max(60.0, float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"]) * 60.0)
-            countries = tuple(spec.country for _, spec, _, _, _ in jobs)
+            countries = _history_decision_keys((task for _, _, _, task, _ in jobs), simulated=simulated)
             initial_decision = _virtual_decision_fingerprint(countries)
-            if any(int(task.get("bench_hit_target", initial_decision[0])) != initial_decision[0]
-                   for _, _, _, task, _ in jobs):
+            if initial_decision[0] is not None and any(
+                int(task.get("bench_hit_target", initial_decision[0])) != initial_decision[0]
+                for _, _, _, task, _ in jobs if _history_decision_keys([task], simulated=simulated) not in ((), ("joker_urna2",))
+            ):
                 raise ValueError("Ținta de bench s-a schimbat; pornește analiza din nou.")
         except (ValueError, TypeError, KeyError, OverflowError, OSError) as exc:
             ui.notify(str(exc), type="warning")
@@ -2426,7 +2461,7 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                     STATE["virtual_wf_dirty"] = True
 
         def decision_moved():
-            if _VIRTUAL_WF_DECISION_CHANGED.is_set():
+            if initial_decision[0] is not None and _VIRTUAL_WF_DECISION_CHANGED.is_set():
                 return True
             try:
                 return _virtual_decision_fingerprint(countries) != initial_decision
@@ -2480,6 +2515,8 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
                     kw.update(game_key=spec.bench_key, country=spec.country)
                 if job_simulated and task.get("lr_scheme_code") is not None:
                     kw["lr_scheme_code"] = task["lr_scheme_code"]
+                    if task.get("dynamic_method") is True:
+                        kw["dynamic_method"] = True
                 meta = {}
                 try:
                     flat, meta = run_honest_walk_forward(**kw)
@@ -2600,6 +2637,8 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                 ui.label(f"{record['name']} · pool cerut {record['pool']} · {system_note} · fereastră cerută {record['depth']}%").classes("text-bold")
                 for line in lr_lines:
                     ui.label(line).classes("text-caption")
+                if lr_lines and (record.get("task") or {}).get("dynamic_method") is True:
+                    ui.label("Metoda LR a fost realeasă din zilele anterioare fiecărei extrageri.").classes("text-caption")
                 ui.label(
                     "Istoricul nu stabilește că au fost jucate. "
                     + ("Codul LR păstrat în rulare este reconstituit pe pool-ul de atunci. " if lr_lines else
@@ -3134,7 +3173,7 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
     }
     if not snapshot["valid"]:
         return snapshot
-    fields = ("hard_core", "hard_core_joker", "pool_size", "pool_size_requested", "lr_scheme_code")
+    fields = ("hard_core", "hard_core_joker", "pool_size", "pool_size_requested", "lr_scheme_code", "dynamic_method")
     audit_fields = ("bench_winner", "recent_penalty", "lookback_pct", "restrict_base", "consecutive_limit")
     for fname, outs in results[0]:
         if fname not in snapshot["sources"]:
@@ -3163,6 +3202,8 @@ def _freeze_mail_ratings(snapshot: dict) -> dict:
         spec, data = record["spec"], record["data"]
         for urna2 in (False, True) if data.get("hard_core_joker") else (False,):
             key, pool, info, method = _mail_method_context(spec, data, urna2=urna2)
+            if info.get("dynamic_selection"):
+                continue
             identity = (key, pool)
             if identity not in snapshot["decisions"]:
                 snapshot["decisions"][identity] = deepcopy(_decision_entry(key, pool)) if pool else {}
@@ -3328,6 +3369,8 @@ def _mail_method_lines(spec, data: dict, *, urna2: bool = False, snapshot: dict 
     where = "pe Urna 2, top-1" if urna2 else f"la pool {pool}"
     if not method:
         return [f"METODĂ{tag}: necunoscută (rezultat fără audit de metodă)"]
+    if info.get("dynamic_selection"):
+        return _dynamic_selection_lines(info["dynamic_selection"])
     if info.get("no_decision") or info.get("fallback"):
         why = (
             f"metoda din decizie, {info['attempted']}, nu a putut fi folosită"
@@ -4328,6 +4371,11 @@ def main_page() -> None:
         # Alte țări: câmpul numeric comun de dinainte.
         _pool_inputs = []
         if _cc == _LOT.RO:
+            _bind_save(ui.checkbox("Alege dinamic metoda pentru schema LR"), "dynamic_method_enabled_val")
+            ui.label(
+                "La fiecare generare și la fiecare pas walk-forward, metodele sunt comparate pe "
+                "variantele schemei folosind extragerile anterioare. Debifează pentru metoda fixă din Re-Bench."
+            ).classes("text-caption text-grey")
             for _plabel, _ptitle in (
                 ("6/49", "Pool Loto 6/49"),
                 ("5/40", "Pool Loto 5/40"),

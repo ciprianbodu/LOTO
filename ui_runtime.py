@@ -155,6 +155,8 @@ def _wf_generation_options(data: dict) -> dict:
     lr_code = _result_lr_scheme_code(data)
     if lr_code is not None:
         opts["lr_scheme_code"] = lr_code
+        if _result_uses_dynamic_method(data):
+            opts["dynamic_method"] = True
     # Identitatea jocului STRĂIN vine din ecoul rezultatului (worker v6), ca WF
     # să citească decizia țării lui. România (sau un rezultat fără ecou): dict-ul
     # de dinainte, fără chei noi.
@@ -217,6 +219,17 @@ def _result_lr_scheme_code(data: dict):
     if code is None:
         code = ((data.get("audit") or {}).get("lr_scheme") or {}).get("code")
     return code
+
+
+def _result_uses_dynamic_method(data: dict | None) -> bool:
+    if not data or _result_lr_scheme_code(data) is None:
+        return False
+    if "dynamic_method" in data:
+        return data["dynamic_method"] is True
+    audit = data.get("audit") or {}
+    return bool(audit.get("dynamic_selection")) or any(
+        info.get("dynamic_selection") for info in (audit.get("bench_winner") or {}).values() if info
+    )
 
 
 def _lr_scheme_for(game, pool_size=None):
@@ -388,6 +401,7 @@ def _clamped_bench_target(value=None) -> int:
 
 UI_PERSIST_KEYS = [
     "bench_target_revision",
+    "dynamic_method_enabled_val",
     "pool_size_val",
     *_POOL_KEYS.values(),
     *_LR_CODE_KEYS.values(),
@@ -475,6 +489,7 @@ DEFAULTS = {
     "wf_depth_pct": DEFAULT_REPLAY_PERCENT,
     "bench_hit_target": 5,
     "bench_target_revision": 1,
+    "dynamic_method_enabled_val": True,
 }
 
 # --------------------------------------------------------------------------- #
