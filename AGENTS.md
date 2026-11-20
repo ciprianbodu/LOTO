@@ -2072,7 +2072,7 @@ Ramase de decis (nu s-au schimbat):
 
 ### Pool informativ pentru Joker Urna 2 — 2026-11-20
 
-În setările pentru România, „Pool Joker (Urna 2)” controlează câte bile din clasamentul urnei a doua apar în rezultat. Setarea acceptă 1–20 și pornește de la 5. Lista și frecvențele candidaților se calculează din istoricul Urnei 2. Prima bilă din listă este cea atașată fiecărei variante a schemei LR. Costul, premiile și verificarea walk-forward se calculează pe combinațiile jucate.
+În setările pentru România, glisorul „Pool Joker (Urna 2)” controlează câte bile din clasamentul urnei a doua apar în rezultat. Setarea acceptă 1–20 și pornește de la 5. Lista și frecvențele candidaților se calculează din istoricul Urnei 2. Prima bilă din listă este cea atașată fiecărei variante a schemei LR. Costul, premiile și verificarea walk-forward se calculează pe combinațiile jucate.
 
 ### Actualizarea arhivei Loto 5/40 — 2026-11-20
 
