@@ -217,6 +217,11 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             scheme = _lr_scheme_for(g_label)
             task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
                         max_variants=scheme.size)
+            if _spec.bench_key_urna2:
+                joker_pool_size = min(20, max(1, _int_setting("joker_pool_size_val")))
+                if joker_pool_size > 1:
+                    task["joker_pool_size"] = joker_pool_size
+                    h.update(f"joker_pool_size={joker_pool_size}".encode("utf-8"))
             if SETTINGS.get("dynamic_method_enabled_val", True):
                 task["dynamic_method"] = True
                 h.update(b"dynamic_method=1")
@@ -4382,6 +4387,14 @@ def main_page() -> None:
                 ("joker", "Pool Joker (Urna 1)"),
             ):
                 _pool_inputs.append(_render_lr_pool_input(_plabel, _ptitle))
+            _pool_inputs.append(_bind_save(
+                ui.number("Pool Joker (Urna 2)", min=1, max=20, step=1).classes("w-full"),
+                "joker_pool_size_val",
+            ))
+            ui.label(
+                "Numere afișate în ordinea scorului Urnei 2. Prima bilă se folosește pe toate "
+                "variantele schemei LR."
+            ).classes("text-caption text-grey")
             ui.label(
                 "Fiecare poziție a sliderului alege un cod LR oficial complet. Codurile cu "
                 "același număr de numere au poziții distincte, în ordinea costului. "

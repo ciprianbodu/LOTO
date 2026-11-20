@@ -373,6 +373,11 @@ def _task_norm(task: dict, lot) -> dict:
         validate_lr_variants(scheme, task.get("max_variants", 0))
     cap = _RO_RESTRICT_BASE_CAP if lot.is_romanian else int(lot.max_n)
     norm = _normalize_task(task, int(lot.pick_n), max_n=cap, pool_max=int(lot.max_pool))
+    if lot.is_romanian and lot.geometry == "joker":
+        size = task.get("joker_pool_size", 1)
+        if type(size) is not int or not 1 <= size <= lot.geo.second.max_n:
+            raise ValueError("joker_pool_size trebuie să fie un număr întreg între 1 și 20.")
+        norm["joker_pool_size"] = size
     if scheme is not None:
         from loto_enterprise.core.walk_forward_adapter import _effective_pool_size
 
@@ -472,6 +477,9 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
                 if not lot.is_romanian:
                     foreign_countries.add(lot.country)
                 norm = _task_norm(task, lot)
+                if norm.get("joker_pool_size", 1) > 1:
+                    # Older workers ignored this option even when present in a task.
+                    digest.update(b"joker-shortlist-v1")
                 if norm.get("dynamic_method"):
                     from loto_enterprise.core.dynamic_winner import DYNAMIC_VERSION
                     digest.update(DYNAMIC_VERSION.encode())
@@ -578,6 +586,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
 
     # Identitatea fiecărui task, ÎNAINTE de orice calcul: o țară sau un joc
     # necunoscut oprește jobul cu mesaj explicit, nu rulează ca România.
+    validation_error = "Schemă LR invalidă"
     try:
         lotteries_cfg = [
             [_resolve_task_lottery(task) for task in ds.get("tasks", [])]
@@ -585,7 +594,10 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         ]
         for ds, lotteries in zip(datasets_cfg, lotteries_cfg, strict=True):
             for task, lot in zip(ds.get("tasks", []), lotteries, strict=True):
-                if task.get("lr_scheme_code") is not None:
+                official_scheme = task.get("lr_scheme_code") is not None
+                shortlist = lot.is_romanian and lot.geometry == "joker" and "joker_pool_size" in task
+                if official_scheme or shortlist:
+                    validation_error = "Schemă LR invalidă" if official_scheme else "Configurație Joker invalidă"
                     _task_norm(task, lot)
     except UnknownLotteryError as exc:
         fail_job(
@@ -595,7 +607,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
         )
         return None
     except ValueError as exc:
-        fail_job(job_id, f"Schemă LR invalidă: {exc}", worker_token=WORKER_TOKEN)
+        fail_job(job_id, f"{validation_error}: {exc}", worker_token=WORKER_TOKEN)
         return None
     cache_key = _pipeline_cache_key(input_hash, cfg) if use_cache else ""
 
@@ -748,6 +760,7 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                         enable_adaptive_persistence=False,
                         pure_bench_mode=norm["pure_bench_mode"],
                         **({"dynamic_method": True} if norm.get("dynamic_method") else {}),
+                        **({"joker_pool_size": norm["joker_pool_size"]} if norm.get("joker_pool_size", 1) > 1 else {}),
                         **({"lr_scheme_code": norm["lr_scheme_code"]} if "lr_scheme_code" in norm else {}),
                     )
                 )
@@ -786,6 +799,12 @@ def _run_pipeline_job_inner(job: dict, monitor: ResourceMonitor) -> str | None:
                     "bench_key": lot.bench_key,
                     "geometry": lot.geometry,
                 }
+                if "joker_pool_size" in norm:
+                    outputs[game_label].update(
+                        joker_pool_size=norm["joker_pool_size"],
+                        joker_pool=engine.joker_pool,
+                        joker_pool_stats=engine.joker_pool_stats,
+                    )
                 if "wf_depth_pct" in cfg:
                     outputs[game_label]["wf_depth_pct"] = depth
                 if "lr_scheme_code" in norm:

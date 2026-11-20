@@ -65,6 +65,37 @@ def _badges(numbers, stats: dict | None = None):
                     )
 
 
+def _render_joker_pool(data: dict) -> None:
+    played = data.get("hard_core_joker") or []
+    ranked = data.get("joker_pool") or []
+    if not ranked and not played:
+        return
+    ui.label("Pool Joker (Urna 2)").classes("text-bold mt-2")
+    if not ranked:
+        # Archived results contain the played ball, without the other candidates.
+        _badges(played, data.get("hard_core_joker_stats"))
+        if len(played) == 1:
+            ui.label(f"Bila {played[0]} este jucată pe toate variantele.").classes("text-caption")
+        return
+
+    chosen = int(played[0]) if len(played) == 1 else None
+    stats = data.get("joker_pool_stats") or {}
+    with ui.row().classes("flex-wrap gap-1"):
+        for value in ranked:
+            number = int(value)
+            frequency = stats.get(str(number), stats.get(number))
+            text = str(number) if frequency is None else f"{number} ({frequency})"
+            if number == chosen:
+                text += " · jucată pe toate variantele"
+            ui.badge(text, color="positive" if number == chosen else "primary").classes("text-sm")
+    size = len(ranked)
+    ui.label(
+        "Bile în ordinea scorului, cu numărul de apariții în paranteze. "
+        "La o extragere uniformă, probabilitatea ca bila "
+        f"extrasă să fie în acest pool este {size}/20 ({size * 5}%)."
+    ).classes("text-caption text-grey")
+
+
 # --------------------------------------------------------------------------- #
 # Randare detaliată rezultate (audit, pipeline stages, cost variante)
 # --------------------------------------------------------------------------- #
@@ -1430,9 +1461,14 @@ def _build_report() -> str:
                 + f" — {_unplayed_reason(d)}, dar hiturile de pool le numără, iar "
                 "biletele nu le pot prinde."
             )
+        if d.get("joker_pool"):
+            out.append(
+                f"{indent}Pool Joker (Urna 2) în ordinea scorului: "
+                + ", ".join(str(int(x)) for x in d["joker_pool"])
+            )
         if d.get("hard_core_joker"):
             out.append(
-                f"{indent}Joker: "
+                f"{indent}Joker jucat: "
                 + ", ".join(str(int(x)) for x in sorted(d["hard_core_joker"]))
             )
         if d.get("p10") is not None:
@@ -2029,9 +2065,7 @@ def _render_pool_body(fname: str, game: str, data: dict) -> None:
             + f" — {_unplayed_reason(data)}, dar hiturile de pool le numără, iar "
             "biletele nu le pot prinde."
         ).classes("text-caption text-warning mt-1")
-    if data.get("hard_core_joker"):
-        ui.label("Joker:").classes("text-bold mt-1")
-        _badges(data.get("hard_core_joker"), data.get("hard_core_joker_stats"))
+    _render_joker_pool(data)
 
     if data.get("p10") is not None:
         ui.label(
