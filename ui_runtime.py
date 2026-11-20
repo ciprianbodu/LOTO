@@ -402,6 +402,7 @@ def _clamped_bench_target(value=None) -> int:
 UI_PERSIST_KEYS = [
     "bench_target_revision",
     "dynamic_method_enabled_val",
+    "joker_pool_size_val",
     "pool_size_val",
     *_POOL_KEYS.values(),
     *_LR_CODE_KEYS.values(),
@@ -436,6 +437,7 @@ UI_PERSIST_KEYS = [
 ]
 DEFAULTS = {
     "pool_size_val": 10,
+    "joker_pool_size_val": 5,
     **{_POOL_KEYS[label]: size for label, size in _POOL_DEFAULTS.items()},
     **{_LR_CODE_KEYS[label]: code for label, code in _LR_CODE_DEFAULTS.items()},
     "guarantee_val": 4,

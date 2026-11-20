@@ -52,6 +52,7 @@ class PipelineMixin:
         _pool_analysis_only=False,
         lr_scheme_code=None,
         dynamic_method=False,
+        joker_pool_size=1,
     ):
         """Rulează pipeline-ul complet de analiză.
 
@@ -73,6 +74,9 @@ class PipelineMixin:
 
         dynamic_method: pentru un cod LR explicit, alege metoda urnei principale
             din istoricul disponibil la fiecare predicție, inclusiv în walk-forward.
+
+        joker_pool_size: la Joker, numărul de candidate afișate din urna a doua
+            (1..20). Prima din clasament se joacă pe fiecare variantă.
 
         recent_penalty_draws / recent_penalty_factor: penalizare pe numerele
             extrase în ultimele N extrageri (scor × factor^aparitii). 0 = oprit.
@@ -120,6 +124,12 @@ class PipelineMixin:
             pool-ul real. NU folosi enable_adaptive_persistence ca poartă —
             producția îl pasează tot False (worker.py).
         """
+        if self.game_type == "joker":
+            if (isinstance(joker_pool_size, bool) or not isinstance(joker_pool_size, (int, np.integer))
+                    or not 1 <= joker_pool_size <= 20):
+                raise ValueError("Pool-ul urnei a doua Joker trebuie să fie un întreg între 1 și 20.")
+            joker_pool_size = int(joker_pool_size)
+            self.audit["joker_pool_size_requested"] = joker_pool_size
         self.audit.pop("lr_scheme", None)
         if self.audit.pop("dynamic_selection", None) is not None:
             self.audit.get("bench_winner", {}).pop(self._bench_game_key(), None)
@@ -577,49 +587,33 @@ class PipelineMixin:
                         "[PIPELINE] Penalizarea recentă a aplatizat scorurile Urnei 2 — o ignor."
                     )
                     self.audit["recent_penalty"]["skipped_flat_urna2"] = True
-            # joker_urna2 e single-pick (pool 1) în TOT lanțul bench→decizie→UI
-            # (_pool_hint=1, decision.py pool_range=[draw_n]=[1]) — păstrăm UN
-            # singur număr (cel mai bun după scor), nu top-2 hardcodat cum era.
-            # Candidații alternativi rămân disponibili în audit['joker_predictions'].
-            if j_scores:
-                # Tie-break CANONIC (rank_by_score), NU sortare proprie: bench-ul
-                # validează joker_urna2 prin `runner._top_k` → aceeași regulă, altfel
-                # la scoruri egale engine-ul ar alege alt număr decât cel validat.
-                ranked_j = rank_by_score(j_scores, 5)
-                self.hard_core_joker = [int(ranked_j[0])]
-                logging.info(
-                    f"[PIPELINE] Nucleu Joker (Urna 2): {self.hard_core_joker}"
-                )
-                self.audit["joker_predictions"] = {
-                    int(n): round(float(j_scores[n]), 4) for n in ranked_j
-                }
+            # Același clasament pentru lista informativă și bila jucată.
+            # Auditul păstrează cele cinci scoruri afișate și în rezultatele vechi.
+            freq_joker = self.analyze_joker_frequency()
+            depth = max(5, joker_pool_size)
+            if not freq_joker.any():
+                ranked_j = []
+                self.audit["joker_urna2_unavailable"] = True
+                self.audit["joker_predictions"] = {}
+                logging.warning("[PIPELINE] Urna 2 nu are observații valide; nu atașez o bilă Joker.")
             else:
-                freq_joker = self.analyze_joker_frequency()
-                if int(freq_joker.sum()) == 0:
-                    # Nu există o observație validă în Urna 2. Alegerea unui număr
-                    # dintr-un vector de zerouri ar fi doar tie-break arbitrar.
-                    self.hard_core_joker = []
-                    self.audit["joker_urna2_unavailable"] = True
-                    self.audit["joker_predictions"] = {}
-                    logging.warning(
-                        "[PIPELINE] Urna 2 Joker nu are valori valide (1..20) — "
-                        "nu atașez un număr Joker arbitrar pe bilete."
-                    )
-                else:
-                    self.hard_core_joker = self._get_hard_core_joker(
-                        freq_joker, pool_size=1
-                    )
-                    # Candidați informativi (top-5 după frecvență) și pe fallback,
-                    # ca UI-ul să aibă aceeași sursă indiferent de path-ul de scoring.
-                    # Aceeași departajare ca bila aleasă (`rank_by_score`), ca
-                    # primul candidat afișat să fie chiar numărul de pe bilete.
-                    _jf = {i + 1: float(v) for i, v in enumerate(freq_joker)}
+                self.audit.pop("joker_urna2_unavailable", None)
+                if j_scores:
+                    ranked_j = rank_by_score(j_scores, depth)
                     self.audit["joker_predictions"] = {
-                        n: int(freq_joker[n - 1]) for n in rank_by_score(_jf, 5)
+                        int(n): round(float(j_scores[n]), 4) for n in ranked_j[:5]
                     }
-                    logging.info(
-                        f"[PIPELINE] Nucleu Joker (Fallback Frecvență): {self.hard_core_joker}"
-                    )
+                else:
+                    ranked_j = self._get_hard_core_joker(freq_joker, pool_size=depth)
+                    self.audit["joker_predictions"] = {
+                        int(n): int(freq_joker[n - 1]) for n in ranked_j[:5]
+                    }
+            self.joker_pool = [int(n) for n in ranked_j[:joker_pool_size]]
+            self.joker_pool_stats = {n: int(freq_joker[n - 1]) for n in self.joker_pool}
+            self.audit["joker_pool_size"] = len(self.joker_pool)
+            self.hard_core_joker = self.joker_pool[:1]
+            self.hard_core_joker_stats = {n: self.joker_pool_stats[n] for n in self.hard_core_joker}
+            logging.info("[PIPELINE] Bila Joker jucată: %s", self.hard_core_joker)
         if _pool_analysis_only:
             # Internal historical analysis only: no wheel is generated. The
             # backtester supplies and labels its mathematical full-system model.
@@ -704,14 +698,6 @@ class PipelineMixin:
             for num in self.hard_core
             if num - 1 < len(final_freq)
         }
-
-        if self.game_type == "joker":
-            final_j_freq = self.analyze_joker_frequency()
-            self.hard_core_joker_stats = {
-                int(num): int(final_j_freq[num - 1])
-                for num in self.hard_core_joker
-                if num - 1 < len(final_j_freq)
-            }
 
         p10, p90 = (
             np.percentile(final_freq, [10, 90]) if final_freq.size else (0.0, 0.0)

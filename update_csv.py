@@ -1,7 +1,8 @@
 """update_csv.py — Detectează și adaugă extrageri noi în CSV-urile din _ISTORIC/.
 
-Verifică DOAR prima URL (extrageri recente) pentru fiecare joc — rapid, fără să
-rescrie tot istoricul. Adaugă la final rândurile care lipsesc, scriere atomică.
+Verifică arhiva recentă a fiecărui joc. Dacă arhiva 5/40 a rămas în urma
+datelor publicate pentru jocurile românești, verifică și lunile oficiale loto.ro.
+Adaugă la final rândurile care lipsesc, prin scriere atomică.
 Nu scrie nimic pentru un joc (EROARE în ieșire) când pagina nu are extrageri,
 are un rând invalid la/după ultima extragere stocată, diferă de CSV în ultimele
 CHECK_DAYS zile sau aduce un rând care copiază numerele rândului anterior.
@@ -71,6 +72,9 @@ TIMEOUT_S = 12  # secunde per request — nu blocăm pornirea dacă site-ul e le
 # update_externe.py): pagina 5/40 merge până în 1995, iar o dispută veche
 # (24-10-2024, corectat local, greșit pe site) nu trebuie să blocheze update-ul.
 CHECK_DAYS = 60
+# La pornire acoperim o lună și trecerea în luna următoare cu cel mult două
+# interogări lunare. O întrerupere mai lungă cere recuperarea distinctă a istoricului.
+MAX_OFFICIAL_MONTHS = 2
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -461,6 +465,63 @@ def _append_rows_atomic(
     return len(to_add)
 
 
+def _complete_540_archive(primary, stored, last, rejected, published, today):
+    """Extinde doar capătul arhivei cu extrageri 5/40 din lunile oficiale."""
+    from loto_enterprise.core.official_prizes import _fetch_month_html, parse_month_html
+
+    tip = primary[-1]["date"]
+    # Verifică întâi zona comună cu CSV-ul. Arhiva secundară poate rămâne
+    # în urmă atât față de celelalte jocuri, cât și față de propriul CSV.
+    overlap_end = min(last, tip) if last is not None else None
+    reason = _site_refusal(stored, primary, rejected, [], overlap_end, False)
+    if reason:
+        raise ValueError(reason)
+    months = (published.year - tip.year) * 12 + published.month - tip.month + 1
+    if months > MAX_OFFICIAL_MONTHS:
+        raise ValueError(
+            f"între {tip:%d-%m-%Y} și {published:%d-%m-%Y} sunt {months} luni "
+            f"calendaristice; actualizarea la pornire verifică cel mult "
+            f"{MAX_OFFICIAL_MONTHS}. Verifică istoricul oficial pentru intervalul lipsă"
+        )
+    month = tip.replace(day=1)
+    official = []
+    while month <= published:
+        html = _fetch_month_html(
+            "loto_5_40", month.year, month.month, timeout=TIMEOUT_S
+        )
+        rows = parse_month_html("loto_5_40", html, month.year, month.month)
+        if not rows:
+            raise ValueError(
+                f"arhiva oficială 5/40 nu conține extrageri în {month:%m-%Y}"
+            )
+        for row in rows:
+            day = date.fromisoformat(row.draw_date)
+            if day > today:
+                raise ValueError(f"extragere oficială în viitor: {day:%d-%m-%Y}")
+            official.append({"date": day, "main": list(row.numbers), "joker": None})
+        month = (month.replace(day=28) + timedelta(days=4)).replace(day=1)
+    official.sort(key=lambda r: r["date"])
+    if official[-1]["date"] < published:
+        raise ValueError(
+            f"arhiva oficială 5/40 se oprește la {official[-1]['date']:%d-%m-%Y}; "
+            f"ultima dată de verificat este {published:%d-%m-%Y}"
+        )
+    if official[0]["date"] > tip:
+        raise ValueError("arhiva oficială nu acoperă ultima extragere din arhiva 5/40")
+    # Nicio dată sau extragere divergentă în intersecția celor două surse.
+    overlap_start = max(primary[0]["date"], official[0]["date"])
+    primary_rows = [
+        _site_row(row, False) for row in primary if row["date"] >= overlap_start
+    ]
+    official = [row for row in official if row["date"] >= overlap_start]
+    reason = _site_refusal(primary_rows, official, [], [], tip, False)
+    if reason:
+        raise ValueError(f"loto.ro și arhiva 5/40: {reason}")
+    return [row for row in primary if row["date"] < tip] + [
+        row for row in official if row["date"] >= tip
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -523,6 +584,40 @@ def update_all() -> int:
             # a zilei poate apărea pe site după ce prima a fost salvată. Cele
             # deja stocate cad la comparația pe (dată, numere).
             stored = _stored_rows(csv_path)
+            if (
+                game_key == "loto_5_40"
+                and site_last
+                and (last is None or all_draws[0]["date"] <= last)
+            ):
+                # Un joc publicat pentru o dată mai nouă declanșează verificarea
+                # la loto.ro; numai rezultatele oficiale 5/40 ajung în CSV.
+                dates = [
+                    last,
+                    *(
+                        _last_date_in_csv(istoric_dir / name)
+                        for name in ("loto_6_49.csv", "joker.csv")
+                    ),
+                ]
+                published = max(
+                    (d for d in dates if d and d <= today), default=site_last
+                )
+                if site_last < published:
+                    try:
+                        all_draws = _complete_540_archive(
+                            all_draws, stored, last, rejected, published, today
+                        )
+                    except Exception as exc:
+                        print(
+                            f"  Loto 5/40   : CSV={last_str} | site={site_last:%d-%m-%Y} | "
+                            f"EROARE verificare loto.ro: {exc}. NU scriu nimic."
+                        )
+                        not_updated.append(cfg["display_name"])
+                        continue
+                    print(
+                        f"  Loto 5/40   : arhivă secundară până la {site_last:%d-%m-%Y}; "
+                        f"loto.ro confirmă până la {all_draws[-1]['date']:%d-%m-%Y}."
+                    )
+                    site_last = all_draws[-1]["date"]
             known = {_row_identity(r, cfg["has_joker"]) for r in stored}
             for d in all_draws:
                 key = _row_identity(_site_row(d, cfg["has_joker"]), cfg["has_joker"])
@@ -601,7 +696,7 @@ def update_all() -> int:
         )
     else:
         print(
-            "[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă pe loto49.ro)."
+            "[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă în sursele verificate)."
         )
 
     return total_added

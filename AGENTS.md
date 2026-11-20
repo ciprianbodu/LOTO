@@ -2070,6 +2070,14 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Pool informativ pentru Joker Urna 2 — 2026-11-20
+
+În setările pentru România, „Pool Joker (Urna 2)” controlează câte bile din clasamentul urnei a doua apar în rezultat. Setarea acceptă 1–20 și pornește de la 5. Lista și frecvențele candidaților se calculează din istoricul Urnei 2. Prima bilă din listă este cea atașată fiecărei variante a schemei LR. Costul, premiile și verificarea walk-forward se calculează pe combinațiile jucate.
+
+### Actualizarea arhivei Loto 5/40 — 2026-11-20
+
+Arhiva folosită de actualizator se oprea la 15 noiembrie, în timp ce Loteria Română publicase extragerea din 19 noiembrie. Rândul verificat, în ordinea extragerii, este 37, 9, 19, 20, 33, 17. Când arhiva 5/40 rămâne în urma unei date deja înregistrate în CSV sau la un alt joc românesc, actualizatorul verifică și arhiva oficială. Adăugarea este condiționată de concordanța între surse și de regulile obișnuite de validare a istoricului. [Rezultatul oficial](https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/540_si_super_noroc/rezultate_extrageri.html)
+
 ### Selecția dinamică a metodei pentru scheme LR — 2026-11-19
 
 În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.
@@ -2842,8 +2850,9 @@ noua semantica.
 
 ### Joker Urna 2
 
-Urna 2 are benchmark propriu, scorer/ensemble propriu si pool fix de un numar
-(top-1, baseline aleator exact 5%). Metodele vechi selectate pentru Urna 2
+Urna 2 are benchmark propriu, scorer/ensemble propriu si o singura bila jucata
+(top-1, baseline aleator exact 5%). Lista informativa poate afisa pana la 20 de bile.
+Metodele vechi selectate pentru Urna 2
 (`ml_knn_5`, `649_decade_hot` etc.) au fost sterse odata cu intreg setul la
 14.09.2026; decizia se reface la primul Re-Bench pe cele 50 de metode noi.
 Poarta `tiebreak_k1` ramane: o metoda cu doar cateva niveluri de scor pe 1..20,
