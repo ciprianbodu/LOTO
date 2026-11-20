@@ -568,6 +568,7 @@ class PipelineMixin:
             j_scores = self._get_timesfm_scores(
                 is_joker_drum=True, context_len=actual_lookback
             )
+            j_scores = {n: score for n, score in j_scores.items() if 1 <= n <= 20}
             if _rp_n > 0 and j_scores:
                 _jk_hist = self._valid_joker_values()
                 _j_pen, _jp = self.apply_recent_penalty(
@@ -598,8 +599,8 @@ class PipelineMixin:
                 logging.warning("[PIPELINE] Urna 2 nu are observații valide; nu atașez o bilă Joker.")
             else:
                 self.audit.pop("joker_urna2_unavailable", None)
-                if j_scores:
-                    ranked_j = rank_by_score(j_scores, depth)
+                ranked_j = rank_by_score(j_scores, depth)
+                if ranked_j:
                     self.audit["joker_predictions"] = {
                         int(n): round(float(j_scores[n]), 4) for n in ranked_j[:5]
                     }
