@@ -4387,16 +4387,19 @@ def main_page() -> None:
                 ("joker", "Pool Joker (Urna 1)"),
             ):
                 _pool_inputs.append(_render_lr_pool_input(_plabel, _ptitle))
-            _pool_inputs.append(_bind_save(
-                ui.number("Pool Joker (Urna 2)", min=1, max=20, step=1).classes("w-full"),
-                "joker_pool_size_val",
-            ))
+            joker_pool_key = "joker_pool_size_val"
+            SETTINGS[joker_pool_key] = min(20, max(1, _int_setting(joker_pool_key)))
+            ui.label("Pool Joker (Urna 2)").classes("text-bold mt-2")
+            joker_pool_slider = ui.slider(
+                min=1, max=20, step=1, value=SETTINGS[joker_pool_key]
+            ).props('label-always markers aria-label="Pool Joker (Urna 2)"').classes("w-full")
+            _pool_inputs.append(_bind_save(joker_pool_slider, joker_pool_key))
             ui.label(
                 "Numere afișate în ordinea scorului Urnei 2. Prima bilă se folosește pe toate "
                 "variantele schemei LR."
             ).classes("text-caption text-grey")
             ui.label(
-                "Fiecare poziție a sliderului alege un cod LR oficial complet. Codurile cu "
+                "Glisoarele de cod LR aleg scheme oficiale complete. Codurile cu "
                 "același număr de numere au poziții distincte, în ordinea costului. "
                 "La pornire: Cod 48 la 6/49, Cod 16 la 5/40 și Cod 24 la Joker. "
                 "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
