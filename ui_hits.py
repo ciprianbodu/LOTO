@@ -1149,9 +1149,8 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
         _wf_notes.append("⚠️ Walk-forward eșuat. Vezi jurnalul pentru detalii și generează din nou.")
     if _skip.get("budget_skipped"):
         _wf_notes.append(
-            "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea "
-            "acestui joc. Mărește „⏱ Buget walk-forward”; la generarea "
-            "următoare pașii deja validați se iau din cache."
+            "⏱ Walk-forward neînceput: bugetul de timp s-a terminat înaintea acestui joc. "
+            "La generarea următoare pașii deja validați se iau din cache."
         )
     if _note := _large_pool_wf_note(_skip):
         _wf_notes.append(_note)

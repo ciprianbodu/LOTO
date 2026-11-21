@@ -8,7 +8,7 @@ Aplicatia optimizeaza pool-uri si sisteme de acoperire pentru Loto 6/49, Loto
 1. valideaza istoricul;
 2. compara metode de scoring prin walk-forward;
 3. alege un scorer sau ensemble pentru fiecare joc si dimensiune de pool;
-4. genereaza pool-ul prin top-N canonic (cu limita optionala de consecutive, §6);
+4. genereaza pool-ul prin top-N canonic pe toate numerele urnei (§6);
 5. transforma pool-ul in bilete prin covering design;
 6. raporteaza separat hiturile de pool, hiturile pe bilet, acoperirea si costul.
 
@@ -2098,21 +2098,31 @@ Arhiva folosită de actualizator se oprea la 15 noiembrie, în timp ce Loteria R
 
 În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.
 
-Motorul compară cele trei metode compacte, `markov_lag2` și `frequency`, la dimensiunea poolului din codul LR ales. Versiunile v1–v3 comparau 1.000 de combinații de semnale și 11 metode. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Obiectivul de selecție este numărul de extrageri cu cel puțin patru dintre numerele din pool. Premiile se calculează ulterior pe variantele codului LR. Candidatul trebuie să depășească martorul `random` la acest prag. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează versiunea selectorului, candidații, metoda aleasă, obiectivul și numărătorile la toate pragurile posibile.
+Motorul compară cele trei metode compacte, `markov_lag2` și `frequency`, la dimensiunea poolului din codul LR ales. Versiunile v1–v3 comparau 1.000 de combinații de semnale și 11 metode. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea rezultatele zilei. Walk-forward folosește același istoric disponibil metodei și configurația jobului afișat. Obiectivul de selecție este numărul de extrageri cu cel puțin patru dintre numerele din pool. Premiile se calculează ulterior pe variantele codului LR. Candidatul trebuie să depășească martorul `random` la acest prag. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează versiunea selectorului, candidații, metoda aleasă, obiectivul și numărătorile la toate pragurile posibile.
 
 Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de extrageri până la 15 noiembrie, a înregistrat 17 evenimente 4+ pe variante, față de 10 pentru `random` și 12 pentru `frequency`. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
 
 ### Sugestii LR după buget — 2026-11-21
 
-Panoul „Bilete LR în buget” din ecranul României acceptă bugete de la
-100 lei. Glisorul pornește cu intervalul 100–200 lei, care se poate
-extinde. Poți alege un singur joc sau compara toate cele trei jocuri
-după probabilitatea teoretică pentru obiectivul ales. Planul afișează
-codurile, numărul de variante și repartizarea pe bilete fizice, cu
-taxa aferentă. Probabilitățile
-folosesc toate cele șase bile extrase la 5/40 și categoriile cu bila
-Joker la obiectivul „Orice premiu”. Panoul calculează independent de
+În ecranul României, glisorul de buget se află în bara din stânga, sub
+glisoarele de pool. Pornește cu intervalul extensibil 100–200 lei.
+Schimbarea sumei deschide și actualizează panoul „Bilete LR în buget”.
+Panoul compară până la trei jocuri după probabilitatea teoretică pentru
+obiectivul ales. Arată codurile, variantele, biletele fizice și taxa aferentă.
+Probabilitățile folosesc toate cele șase bile extrase la 5/40 și categoriile
+cu bila Joker la obiectivul „Orice premiu”. Calculul este independent de
 istoric și de selectorul de metode.
+
+### Setări simplificate de generare — 2026-11-21
+
+Generările noi din UI folosesc întreaga urnă, inclusiv numerele extrase
+recent și seriile consecutive. Încărcarea setărilor ignoră cheile retrase
+pentru aceste filtre, intervalul de numere, fereastra de telemetrie și
+bugetul walk-forward. Walk-forward are un termen intern de 90 de minute.
+Generarea manuală folosește 40% pentru telemetria bench, iar Auto-Pilot
+folosește fereastra din decizia jocului. Alegerea adâncimii de validare
+continuă să se facă în „Analiză & Clasament”. Datele din joburile salvate
+rămân sursa de adevăr pentru reluarea și afișarea istoricului.
 
 ### Portofolii de scheme reduse la același buget — 2026-11-18
 
@@ -2516,9 +2526,12 @@ UI-ul face polling la o secunda, fara reload complet.
   sincronizarea in afara lui `main` („Ramura curenta nu este main - nu modific
   repository-ul”). Cerut explicit de utilizator la 2026-10-22. Intre pasi
   indexul ramane curat (Sync se opreste pe o versiune din index diferita de disc).
-- Utilizatorul a cerut (2026-09-28) ca orice schimbare terminata si verificata
-  (suita completa verde) sa fie integrata pe `main` fara sa astepte confirmare:
-  PR, apoi merge imediat.
+- Utilizatorul a cerut sincronizarea automata dupa verificarea oricarei
+  schimbari LOTO (reconfirmata la 2026-11-21). Nu se asteapta o cerere separata
+  de Git sync. Din mediul cloud se creeaza PR, se integreaza pe `main`, apoi
+  se sincronizeaza checkout-ul. Testele specifice trebuie sa treaca. Daca
+  suita are esecuri preexistente, compara cu baza si raporteaza-le dupa ce
+  verifici ca schimbarea nu introduce regresii.
 - `scripts/git-hooks/post-commit` face push pe `origin/main` dupa fiecare commit
   pe `main` (fara force; `LOTO_SKIP_AUTO_PUSH=1` il opreste; nu retrimite
   commit-uri retrase de pe `origin/main`). La un push respins (origin/main s-a
@@ -2972,106 +2985,19 @@ limita de validitate din §5).
   garantia sigura pierduta se spune (`_lr_lost_guarantee`). Doua valori care ar
   iesi la fel primesc cifre in plus (`_lr_pct_pair`). Motorul adopta schema
   certificat la plafonul egal cu marimea ei (§7); cheia WF o semneaza (`lr`, §8).
-- Selectia este top-N pura dupa scorul validat, cu o singura exceptie, limita
-  de consecutive de mai jos.
-- Limita de consecutive este o OPTIUNE de utilizator (`max_consecutive_run` in
-  `config_json`; bifa „🔗 Fara 3 numere consecutive in pool"), PORNITA implicit
-  in UI la cererea explicita a utilizatorului (2026-09-26), spre deosebire de
-  penalizare si restrangere. Motorul si worker-ul au implicit 0 (oprit): un task
-  vechi fara cheie ruleaza fara limita, iar `filter_consecutives` ramane ignorat.
-  UI-ul trimite 2 (int, nu bool). Clasamentul (dupa penalizare si restrangerea
-  bazei) se parcurge in ordine; numarul care ar forma a treia secventa e sarit,
-  iar locul lui il ia urmatorul care incape. Verificarea de completare
-  (`limit_consecutive_run`) alege cel mai bun set dupa rang care respecta limita,
-  si pe o baza restransa unde parcurgerea simpla ramane fara numere. Daca
-  intervalul e prea ingust pentru pool, se relaxeaza limita, nu pool-ul si nici
-  intervalul. Se aplica si pe completarea defensiva si pe fallback-ul pe
-  frecventa; nu atinge Urna 2 Joker. Auditul `consecutive_limit` retine limita
-  ceruta si aplicata, numerele scoase din pool si puse in loc, cu locul lor in
-  clasament, ambele liste in ordinea clasamentului; `timesfm_predictions` coboara atunci sub locul 25 cat e nevoie. Panoul,
-  raportul, nota de bench si istoricul WF il descriu prin `_consecutive_limit_text`.
-  Nota de bench numeste limita oricand e ceruta, ca restrangerea: bench-ul masoara
-  top-K brut la fiecare pas istoric, iar limita schimba pool-ul jucat la multi
-  dintre ei, chiar cand pool-ul de azi n-a avut nevoie de inlocuire. Antetul
-  pool-ului spune ca paranteza e frecventa pe istoricul folosit (cu lookback,
-  numai pe fereastra lui).
-  Pe datele curente, 6/49 are secvente de 3-4 la fiecare pool 6..16, deci pool-ul
-  jucat difera de top-K validat de bench; numai WF masoara pool-ul jucat. FARA
-  avantaj statistic demonstrat (hipergeometric, ca la restrangere).
-- Fiecare joc genereaza si afiseaza un singur pool; configuratia, worker-ul,
-  raportul, emailul si walk-forward-ul nu mai au Pool 2/auto-invert.
-- Payload-urile vechi cu doua faze sunt citite compatibil folosind numai pool-ul
-  normal din prima faza.
-- Penalizarea dupa ultimele extrageri este o OPTIUNE de utilizator
-  (`recent_penalty_draws`, `recent_penalty_factor`), implicit OPRITA
-  (`recent_penalty_draws_val = 0` in UI) — nu schimba pool-ul fara nicio actiune
-  a utilizatorului. Odata setat un numar de extrageri > 0 (factor implicit 0.5),
-  scorul unui numar extras de k ori in ultimele N extrageri se inmulteste cu
-  factor^k, inainte de top-N. Factorul 0 pune numerele penalizate sub TOATE
-  cele nepenalizate, inclusiv sub cele cu scor 0 sau negativ, cu ordinea dintre
-  ele pastrata (aparitiile intai, apoi scorul; `loto_engine._below_unpenalized`,
-  2026-10-22). Se aplica identic in productie si in walk-forward
-  (intra in cheia de cache WF cand e activa; factorul 0 primeste in plus
-  `|rpz1`) si este raportata in `audit.recent_penalty`. Este o preferinta de compozitie a pool-ului, neutra ca
-  valoare asteptata: analizele din `scripts/analysis/` nu au demonstrat
-  predictibilitate pentru paritate, decade, sume sau tipare recente, iar
-  penalizarea nu trebuie prezentata drept avantaj statistic.
-- Restrangerea bazei de numere este o OPTIUNE de utilizator, un INTERVAL
-  (`restrict_base_min`, `restrict_base_max`), SEPARAT per joc (6/49, 5/40, Joker
-  Urna 1) — universurile difera (49/40/45), deci un singur interval global nu are
-  sens pentru toate trei. In UI: o singura bifa de activare
-  (`restrict_base_enabled_val`, implicit OPRITA) urmata de cate un rand de praguri
-  pentru fiecare joc; bifa oprita anuleaza toate cele trei intervale, indiferent
-  de ce mai e tastat in campuri (`_active_restrict_base(game_label)`,
-  `app_nicegui.py`). La prima activare, campurile goale ale unui joc primesc un
-  punct de plecare 10..(max_n - 9) — NU o recomandare, doar ca bifa sa nu se
-  deschida pe campuri goale; utilizatorul schimba liber. Un capat lasat pe 0
-  ramane liber; intervalul inversat (min > max) si cel mai ingust decat un bilet
-  (span < numerele de pe bilet, `play_n`) sunt IGNORATE si consemnate in `audit.restrict_base.ignored`, nu
-  aplicate tacit. Fara a doua garda, 47-49 la 6/49 lasa trei candidati, iar
-  wheeling-ul trateaza `len(pool) < pick` drept sistem complet cu un bilet:
-  pipeline-ul raporta `[47, 48, 49]` ca bilet 6/49 cu acoperire 100%. FARA
-  avantaj statistic demonstrat: probabilitatea de hit a unui pool de dimensiune
-  fixa e identica matematic (hipergeometric) indiferent de care numere il compun,
-  confirmat si empiric pe istoricul aplicatiei
-  (`scripts/analysis/pattern_base_reduction.py`). Se aplica identic in productie
-  si in walk-forward (intra in cheia de cache WF cand e activa, prin
-  `_restrict_base_sig`, care separa 1..40 de 10..40) si este raportata in
-  `audit.restrict_base`. Cele trei suprafete care o afiseaza — panoul, raportul
-  si nota de bench — folosesc `_restrict_base_text`, ca intervalul sa nu apara
-  altfel in raport decat pe ecran.
-- Submeniul „Cel mai bun interval de fiecare latime, per joc" din sidebar
-  afiseaza, pentru
-  fiecare latime de interval, intervalul cu cea mai buna rata pe istoric, ratele
-  lui pe cele doua jumatati SI cel mai bun interval de aceeasi latime gasit pe
-  extrageri sintetice uniforme. Coloana „Toata extragerea" masoara ALTCEVA: de
-  cate ori au incaput TOATE numerele extrase in interval, langa valoarea
-  asteptata pentru acea latime (`theoretical_full_draw_rate`, care nu depinde de
-  unde e fereastra, doar de cat e de lata). Distinctia nu e cosmetica: 10.31%
-  pentru 2-11 inseamna „cel putin 3 numere au cazut acolo", nu „a fost o
-  extragere intreaga in 2-11" — asta nu s-a intamplat niciodata in 2581 de
-  extrageri 6/49, maximul fiind 5 numere, o data. Ratele sunt exacte
-  (hipergeometric per extragere, `loto_enterprise/core/base_threshold.py`),
-  nu Monte Carlo. Coloana de control
-  nu este optionala: acelasi calcul „gaseste" un campion si acolo unde nu exista
-  nimic de gasit, iar fara ea un varf de 10.31% s-ar citi ca descoperire.
-  Submeniul NU seteaza si NU recomanda niciun interval. Se calculeaza abia la
-  deschidere (inchis costa ~1 ms, deschis ~0.6 s pentru trei jocuri) si e
-  memoizat pe fisier + geometrie + pool, cu plafon peste toate combinatiile
-  joc × pool, ca o plimbare peste dimensiunile de pool sa nu recalculeze tot.
-  Pool-ul fiecarui joc (6..16, la 5/40 6..19) e plafonat inainte de calcul,
-  iar titlul tabelului il numeste: `ui.number` isi aplica
-  min/max abia la blur, iar o valoare tastata intermediar producea o geometrie
-  invalida raportata drept „istoric indisponibil".
-  Nu adauga niciodata o varianta "bench calculeaza intervalul optim" — ar prezenta
-  zgomot statistic drept semnal (orice interval da aceeasi rata teoretica).
-  Bench-ul a fost construit si rulat ca diagnostic, nu ca functie de productie:
-  `scripts/analysis/bench_base_threshold.py` alege pragul pe primele 70% din
-  istoric si il masoara pe ultimele 30%, apoi compara castigul cu distributia
-  nula obtinuta prin permutarea etichetelor numerelor pe tot istoricul. Rezultat
-  la 2026-09-08: 6/49 +0.67pp (p = 0.075), 5/40 +0.35pp (p = 0.200), praguri
-  alese instabile intre seed-uri (20/23/25, respectiv 24/25). Castigul aparent
-  cade in distributia nula, deci nu justifica un prag automat.
+- Selectia pentru joburile noi din UI este top-N pe intreaga urna, dupa
+  scorul metodei. Fiecare joc genereaza un singur pool. Payload-urile vechi
+  cu doua faze sunt citite compatibil folosind pool-ul normal din prima faza.
+- Pentru joburile istorice, workerul si walk-forward citesc in continuare
+  `recent_penalty_draws`, `recent_penalty_factor`, `max_consecutive_run`
+  si `restrict_base_min/max` din payload. Panoul, raportul si istoricul
+  descriu transformarile din audit prin `_consecutive_limit_text` si
+  `_restrict_base_text`. Restrictiile active semneaza cheile WF, astfel
+  incat o reluare masoara acelasi pool care a produs rezultatul.
+- Studiile offline pentru intervalele de numere sunt reproductibile cu
+  `scripts/analysis/bench_base_threshold.py` si
+  `scripts/analysis/pattern_base_reduction.py`. Ratele istorice se compara
+  cu ratele teoretice pentru poolul de aceeasi dimensiune.
 
 ## 7. Wheeling si covering design
 
@@ -3433,18 +3359,11 @@ se stampileaza la fiecare bench, iar `freshness.check_freshness` o compara
 INAINTE de datele CSV. Cu CSV-urile neatinse dar alt motor, raspunsul e
 `stale` / `full_rebench`, nu `fresh` / `use_cache` ca inainte.
 
-Cand se schimba ce pool produce o SETARE data, nu structura rezultatului, un bump
-global ar arunca si cache-urile pe care schimbarea nu le atinge — la WF, 90 de
-minute de rulare fiecare. Pentru restrangerea bazei exista in schimb
-`_RESTRICT_SEMANTICS`, un marcaj care intra in cheie DOAR cand restrictia e
-activa: `walk_forward_adapter._restrict_base_sig` pentru WF si hash-ul din
-`_build_config_json` pentru cache-ul de pipeline al worker-ului. Cele doua
-constante se tin sincron (exista un test pentru asta) si se incrementeaza
-impreuna. v2: intervalele mai inguste decat un bilet sunt ignorate, nu aplicate.
-Limita de consecutive urmeaza acelasi contract cu `_CONSECUTIVE_SEMANTICS`
-(`walk_forward_adapter._consecutive_sig` si hash-ul din `_build_config_json`),
-fara bump global de WF. Cum bifa e pornita implicit, primul WF dupa actualizare
-calculeaza o cheie noua (poate iesi partial si continua prin `skip_indices`).
+Pentru payload-urile vechi, semnaturile `_restrict_base_sig` si
+`_consecutive_sig` din `walk_forward_adapter` separa rezultatele cu
+restrictii active. Configuratia noua de UI foloseste o semnatura de job
+care include telemetria bench si parametrii pastrati de generare.
+Cache-urile walk-forward pastreaza optiunile jobului salvat.
 
 ## 10. Mediu si rulare
 
@@ -3701,7 +3620,7 @@ O schimbare este gata numai cand:
 
 1. contractele de date, ranking si queue raman coerente;
 2. cache-urile relevante au fost invalidate;
-3. testele specifice si suita completa trec pe Python 3.15;
+3. testele specifice trec pe Python 3.15 si suita completa nu are regresii fata de baza;
 4. UI si worker au fost verificate cand schimbarea le atinge;
 5. acoperirea a fost recalculata cand se schimba biletele;
 6. documentatia descrie starea curenta, nu istoricul incidentului;

@@ -79,7 +79,7 @@ from ui_hits import *  # noqa: F403
 from ui_gate import *  # noqa: F403
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
-from ui_lr_budget import lr_budget_panel
+from ui_lr_budget import lr_budget_panel, lr_budget_slider
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
@@ -128,47 +128,12 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         "guarantee_val",
         "max_variants_val",
         "lookback_val",
-        "sim_depth_val",
         "bench_hit_target",
         "wheel_condition_val",
-        "recent_penalty_draws_val",
-        "recent_penalty_factor_val",
     ):
         h.update(str(SETTINGS.get(k, DEFAULTS.get(k))).encode("utf-8"))
-    # Praguri active PER JOC — bifa oprită anulează toate, indiferent de ce mai
-    # e tastat în câmpuri. Calculat o singură dată, pentru toate cele trei jocuri
-    # canonice (nu doar pentru cele efectiv încărcate): hash-ul reprezintă
-    # întreaga submisie (`PIPELINE_CACHE_VERSION:input_hash`, un singur cache_key
-    # pentru tot job-ul), deci trebuie să reflecte TOATE restrângerile alese, nu
-    # doar jocul ultimului fișier procesat în bucla de mai jos.
-    _rb_by_game = {
-        label: _active_restrict_base(label) for label, _s, _m in _RESTRICT_BASE_GAMES
-    }
-    h.update(str(sorted(_rb_by_game.items())).encode("utf-8"))
-    # Semantica restrângerii intră în hash DOAR când e activă undeva: un rezultat
-    # cache-uit sub regula veche (interval mai îngust decât un bilet aplicat, nu
-    # ignorat) nu are voie să fie servit sub cea nouă. Fără nicio restricție,
-    # hash-ul rămâne cel dinainte, deci cache-urile existente continuă să fie folosite.
-    # Jocurile străine: praguri proprii (cheia = id-ul jocului), în hash NUMAI
-    # când sunt active, ca hash-ul românesc să rămână cel dinainte.
     _selected = {g.game_id for g in _selected_games()}
-    _rb_foreign = {
-        g.game_id: _active_restrict_base(g.game_id)
-        for g in _LOT.GAMES
-        if not g.is_romanian and g.game_id in _selected
-    }
-    _rb_foreign = {k: v for k, v in _rb_foreign.items() if v[0] or v[1]}
-    if _rb_foreign:
-        h.update(f"restrict_foreign={sorted(_rb_foreign.items())}".encode("utf-8"))
-    if any(lo or hi for lo, hi in _rb_by_game.values()) or _rb_foreign:
-        h.update(f"restrict_semantics={_RESTRICT_SEMANTICS}".encode("utf-8"))
-    # Limita de consecutive, cu aceeași regulă: în hash numai când e activă, ca
-    # hash-urile fără ea să rămână cele dinainte.
-    _mcr = _active_max_consecutive_run()
-    if _mcr:
-        h.update(
-            f"max_consecutive_run={_mcr}|{_CONSECUTIVE_SEMANTICS}".encode("utf-8")
-        )
+    h.update(f"|bench_telemetry={BENCH_TELEMETRY_DEPTH}|".encode("ascii"))
     h.update(
         str(sorted(sim_depth_per_game.items())).encode("utf-8")
     )  # adâncime per joc → cache key
@@ -186,13 +151,8 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         # România: eticheta de dinainte ("6/49"...); străin: id-ul din registru.
         g_label = _spec.game_id
         df_json = df.to_json(orient="split")
-        # adâncime backtesting: per joc (din Auto-Pilot) dacă există, altfel globală
-        _sd_pg = sim_depth_per_game.get(g_label)
-        sd = int(_sd_pg) if _sd_pg is not None else _int_setting("sim_depth_val")
-        if _spec.is_romanian:
-            _rb_min, _rb_max = _rb_by_game.get(g_label, (0, 0))
-        else:
-            _rb_min, _rb_max = _rb_foreign.get(g_label, (0, 0))
+        game_depth = sim_depth_per_game.get(g_label)
+        sd = BENCH_TELEMETRY_DEPTH if game_depth is None else int(game_depth)
         task = {
             "game_label": g_label,
             # Pool-ul jocului: câmpul lui (România) sau cel comun (alte țări).
@@ -200,15 +160,15 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "guarantee": _int_setting("guarantee_val"),
             "max_variants": _int_setting("max_variants_val"),
             "wheel_condition": _int_setting("wheel_condition_val"),
-            "recent_penalty_draws": _int_setting("recent_penalty_draws_val"),
-            "recent_penalty_factor": _float_setting("recent_penalty_factor_val"),
-            "restrict_base_max": _rb_max,
-            "restrict_base_min": _rb_min,
-            "max_consecutive_run": _mcr,
+            "recent_penalty_draws": 0,
+            "recent_penalty_factor": 0.5,
+            "restrict_base_max": 0,
+            "restrict_base_min": 0,
+            "max_consecutive_run": 0,
             "lookback": _int_setting("lookback_val"),
             "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi AGENTS.md)
             # Mereu True: singurul mod de generare care există azi (scoring → top-N
-            # cu opțiunile explicite ale utilizatorului → wheel, fără filtre
+                # pe toată urna → wheel, fără filtre
             # automate). Rămâne în contractul worker↔UI (regula de aur 2).
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
@@ -343,7 +303,7 @@ def apply_autopilot_and_generate() -> None:
                     )
                     continue
             if cfg and not cfg.get("fallback"):
-                sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
+                sd = int(cfg.get("sim_depth_pct", BENCH_TELEMETRY_DEPTH))
                 per_game[label] = sd
                 low = _autopilot_evidence_note(cfg)
                 # Substituirea nearest-k: bench-ul n-a evaluat pool-ul cerut, deci
@@ -2029,7 +1989,9 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
             STATE["wf_seq"] = my_seq
             STATE["wf_progress"] = 0.0
             wf_t0 = time.time()
+            wf_deadline = wf_t0 + WF_TOTAL_BUDGET_S
             STATE["wf_start"] = wf_t0
+            STATE["wf_deadline"] = wf_deadline
             STATE["wf_status"] = "📊 Pornesc walk-forward backtest (paralel ~80% CPU)..."
             STATE["wf_running"] = True
     if not (isinstance(results, tuple) and len(results) == 2):
@@ -2044,31 +2006,6 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
     # cât rula validarea veche), thread-ul vechi devine stale — se oprește și NU mai
     # scrie retro/status/finalize peste rularea nouă.
     def _worker_wf() -> None:
-        _wf_t0 = wf_t0
-
-        def _budget_s_live() -> float:
-            # Citit LIVE din SETTINGS (nu o dată la pornire) → schimbarea bugetului din
-            # UI ÎN TIMPUL validării are efect imediat (mărești bugetul → rularea
-            # curentă continuă; îl micșorezi → se oprește mai devreme).
-            # Fallback-ul e DEFAULTS, nu o constantă separată: `or` se declanșează pe
-            # orice valoare falsy (câmpul UI golit dă None), iar o valoare hardcodată
-            # aici ar reduce tăcut bugetul — cu oprire parțială a validării, fără ca
-            # UI-ul să arate altceva decât numărul pe care l-a introdus utilizatorul.
-            try:
-                _b = float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"])
-                return max(60.0, _b * 60.0)
-            except (TypeError, ValueError):
-                return float(WF_TOTAL_BUDGET_S)
-
-        def _global_deadline() -> float:
-            dl = _wf_t0 + _budget_s_live()
-            with STATE_LOCK:
-                if STATE.get("wf_seq") == my_seq:
-                    STATE["wf_deadline"] = dl  # ETA urmărește bugetul live
-            return dl
-
-        _global_deadline()  # inițializează STATE["wf_deadline"] pt panou
-
         def _wf_cancel_all():
             # Anulare explicită din UI sau rulare înlocuită (alt WF pornit) →
             # oprire imediată; altfel buget global depășit → oprire parțială.
@@ -2078,7 +2015,7 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
                 or STATE.get("wf_seq") != my_seq
             ):
                 return True
-            return time.time() > _global_deadline()
+            return time.time() > wf_deadline
 
         try:
             from loto_enterprise.core.walk_forward_adapter import (
@@ -2168,14 +2105,13 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
                 # Buget PER JOC (felie adaptivă din timpul global rămas): un joc
                 # lent nu mai înfometează jocurile următoare (bug văzut: joker a
                 # consumat tot bugetul → 5/40 parțial, 6/49 aproape zero). Minim
-                # 60s/joc. Felia se recalculează LIVE din deadline-ul global →
-                # mărirea bugetului din UI extinde și felia jocului CURENT.
+                # 60s/joc, împărțind timpul rămas la începutul fiecărui joc.
                 _games_left = max(1, total - done + 1)
                 _game_t0 = time.time()
+                _game_deadline = _game_t0 + max(60.0, (wf_deadline - _game_t0) / _games_left)
 
-                def _wf_should_cancel(_gt0=_game_t0, _gl=_games_left):
-                    _gd = _gt0 + max(60.0, (_global_deadline() - _gt0) / _gl)
-                    return _wf_cancel_all() or time.time() > _gd
+                def _wf_should_cancel(_deadline=_game_deadline):
+                    return _wf_cancel_all() or time.time() > _deadline
 
                 try:
                     flat, meta = run_honest_walk_forward(
@@ -2261,7 +2197,7 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
                     STATE["wf_status"] = (
                         f"⏱ Walk-forward oprit de bugetul de timp: "
                         f"{count(budget_skipped, 'jocuri', 'joc')} fără validare. "
-                        "Mărește „⏱ Buget walk-forward”; la generarea următoare pașii "
+                        "La generarea următoare pașii "
                         "deja validați se iau din cache."
                         if budget_skipped
                         else ""
@@ -2413,7 +2349,7 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
             depth = config.get("wf_depth_pct", DEFAULT_REPLAY_PERCENT)
             if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
                 raise ValueError(f"Fereastră de validare necunoscută: {depth!r}.")
-            budget = max(60.0, float(SETTINGS.get("wf_budget_min") or DEFAULTS["wf_budget_min"]) * 60.0)
+            budget = WF_TOTAL_BUDGET_S
             countries = _history_decision_keys((task for _, _, _, task, _ in jobs), simulated=simulated)
             initial_decision = _virtual_decision_fingerprint(countries)
             if initial_decision[0] is not None and any(
@@ -3966,218 +3902,6 @@ def _refresh_status() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Submeniu: procentul exact al fiecărui prag de restrângere, per joc
-# --------------------------------------------------------------------------- #
-_BASE_TABLE_GAMES = (
-    ("6/49", "loto_6_49.csv", 6, 49),
-    ("5/40", "loto_5_40.csv", 6, 40),  # 6 numere extrase
-    ("Joker — Urna 1 (5/45)", "joker.csv", 5, 45),
-)
-
-
-
-def _base_table_games(country=None) -> tuple:
-    """Jocurile tabelului de intervale pentru țara aleasă (România: tuplul vechi)."""
-    cc = country or _selected_country()
-    if cc == _LOT.RO:
-        return _BASE_TABLE_GAMES
-    return tuple(
-        (g.display, Path(g.csv).relative_to("_ISTORIC").as_posix(), g.draw_n, g.max_n)
-        for g in _LOT.games_for_country(cc)
-    )
-
-
-_BASE_TABLE_MEMO: dict = {}  # (fișier, mtime, size, geometrie, pool, țintă) → (rânduri, n)
-# Toate dimensiunile de pool românești, pentru cele două ținte 3/4.
-# Sub atât, memo-ul se golea înainte să apuce să fie folosit:
-# o plimbare înainte și înapoi peste dimensiunile de pool recalcula tot de
-# fiecare dată.
-_BASE_TABLE_MEMO_MAX = 2 * sum(
-    _LOT.GAMES_BY_ID[game].max_pool - 5 for game in ("6/49", "5/40", "joker")
-)
-# Tabelul se calculează abia când submeniul e deschis: ~0.7 s pentru trei jocuri
-# ar fi fost plătiți la fiecare încărcare de pagină, chiar fără să fie deschis.
-_BASE_TABLE_OPENED = {"value": False}
-
-
-def _weaker_text(n: int) -> str:
-    """„niciunul n-a ieșit mai slab”, „unul a ieșit mai slab”, „5 au ieșit mai slabe”."""
-    if int(n) == 0:
-        return "niciunul n-a ieșit mai slab"
-    if int(n) == 1:
-        return "unul a ieșit mai slab"
-    return f"{int(n)} au ieșit mai slabe"
-
-
-def _base_interval_rows(
-    csv_name: str, draw_n: int, max_num: int, pool_size: int, target: int = 3
-):
-    """Tabelul de intervale al unui joc, memoizat pe fișier + geometrie + pool.
-
-    Calculul e exact (hipergeometric per extragere), nu simulare, și durează sub
-    o secundă per joc — memo-ul e doar ca redesenarea sidebar-ului să nu îl reia.
-    Întoarce None dacă istoricul lipsește sau e prea scurt ca să fie tăiat în
-    două, cazuri în care submeniul afișează motivul în loc de cifre.
-    """
-    from loto_enterprise.benchmark.runner import _list_istoric_dirs
-    from loto_enterprise.core.base_threshold import interval_table
-    from loto_enterprise.core.draw_validation import valid_draw_matrix
-
-    path = next(
-        (d / csv_name for d in _list_istoric_dirs() if (d / csv_name).exists()), None
-    )
-    if path is None:
-        return None
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    key = (str(path), stat.st_mtime_ns, stat.st_size, draw_n, max_num, pool_size, target)
-    if key in _BASE_TABLE_MEMO:
-        return _BASE_TABLE_MEMO[key]
-    try:
-        draws, _ = valid_draw_matrix(
-            pd.read_csv(path),
-            [f"n{i}" for i in range(1, draw_n + 1)],
-            draw_n=draw_n,
-            max_num=max_num,
-        )
-        result = (
-            interval_table(draws, max_num, pool_size, draw_n, target=target),
-            len(draws),
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("tabel intervale %s: %s", csv_name, exc)
-        return None
-    while len(_BASE_TABLE_MEMO) >= _BASE_TABLE_MEMO_MAX:
-        _BASE_TABLE_MEMO.pop(next(iter(_BASE_TABLE_MEMO)))
-    _BASE_TABLE_MEMO[key] = result
-    return result
-
-
-@ui.refreshable
-def _render_base_interval_tables() -> None:
-    """Cel mai bun interval de fiecare lățime, per joc, lângă controlul lui.
-
-    Procentele diferă de la joc la joc pentru că geometria diferă, de aceea
-    tabelul e per joc. Coloana „uniform" este ACELAȘI calcul pe extrageri
-    generate aleator, unde niciun număr nu e mai bun decât altul: dacă acolo
-    apare un campion la fel de bun, campionul din coloana reală nu dovedește
-    nimic. Submeniul nu setează niciun interval — alegerea rămâne a
-    utilizatorului (AGENTS.md §6).
-    """
-    from loto_enterprise.core.base_threshold import theoretical_rate
-
-    if not _BASE_TABLE_OPENED["value"]:
-        ui.label("Deschide submeniul pentru a calcula tabelul.").classes(
-            "text-caption text-grey"
-        )
-        return
-    # `ui.number` își aplică min/max abia la blur, deci în timpul tastării pot
-    # ajunge aici valori ca 0 sau 1. Fără plafonare, geometria era invalidă și
-    # tabelul raporta „istoric indisponibil" pentru un istoric perfect valid.
-    from loto_enterprise.benchmark.hit_target import game_hit_target
-
-    ui.label(
-        "Pentru fiecare lățime de interval, intervalul cu cea mai bună rată la ținta "
-        "jocului (ca bench-ul: Loto 5/40 minimum 4+), la pool-ul fiecărui joc. "
-        "Calcul exact (hipergeometric per extragere), "
-        "nu simulare. Coloana «Toată extragerea» e altceva: de câte ori au încăput "
-        "TOATE numerele extrase în interval — plafonul unui sistem care ar juca "
-        "întregul interval, nu rata unui pool de dimensiune fixă. Ultimul rând este "
-        "jocul nerestrâns și cade pe referința teoretică."
-    ).classes("text-caption text-grey")
-    # Fișierul unui joc străin e „externe/…csv”: jocul se ia din registru, nu
-    # din ghicitul după nume (care ar da Loto 6/49 și câmpul lui).
-    _by_csv = {
-        Path(g.csv).relative_to("_ISTORIC").as_posix(): g.game_id
-        for g in _LOT.games_for_country(_selected_country())
-    }
-    for label, csv_name, draw_n, max_num in _base_table_games():
-        _gkey = _by_csv.get(csv_name, csv_name)
-        # Pool-ul jocului (câmpul lui), plafonat la 6..maximul jocului.
-        pool = _pool_size_for(_gkey)
-        if pool > max_num:
-            continue
-        _t = game_hit_target(_game_spec_for(_gkey).bench_key, _clamped_bench_target())
-        data = _base_interval_rows(csv_name, draw_n, max_num, pool, _t)
-        if data is None:
-            ui.label(f"· {label}: istoric indisponibil.").classes(
-                "text-caption text-grey"
-            )
-            continue
-        rows, n_draws = data
-        with ui.expansion(
-            f"{label} — {count(n_draws, 'extrageri')}, pool {pool}, ținta {_t}+",
-            value=False,
-        ).classes(
-            "w-full"
-        ):
-            ui.table(
-                columns=[
-                    {"name": "w", "label": "Lățime", "field": "w", "align": "center"},
-                    {
-                        "name": "span",
-                        "label": "Interval",
-                        "field": "span",
-                        "align": "center",
-                    },
-                    {"name": "whole", "label": "Tot", "field": "whole", "align": "center"},
-                    # Controlul uniform lângă „Tot”: în sertarul de 360 px încap
-                    # primele patru coloane, iar comparația lor e rostul tabelului.
-                    {
-                        "name": "ctrl",
-                        "label": "🎲 Uniform",
-                        "field": "ctrl",
-                        "align": "center",
-                    },
-                    {"name": "h1", "label": "Jum. 1", "field": "h1", "align": "center"},
-                    {"name": "h2", "label": "Jum. 2", "field": "h2", "align": "center"},
-                    {
-                        "name": "full",
-                        "label": "Toată extragerea",
-                        "field": "full",
-                        "align": "center",
-                    },
-                ],
-                rows=[
-                    {
-                        "w": r.width,
-                        "span": r.label,
-                        "whole": f"{r.whole:.2f}%",
-                        "h1": f"{r.first_half:.2f}%",
-                        "h2": f"{r.second_half:.2f}%",
-                        "ctrl": f"{r.control_label} · {r.control:.2f}%",
-                        "full": f"{r.full_draw:.2f}% (aşteptat {r.full_draw_theoretical:.2f}%)",
-                    }
-                    for r in rows
-                ],
-                row_key="w",
-                pagination=0,
-            ).classes("w-full")
-            _moved = sum(
-                1
-                for r in rows
-                if r.width < max_num and r.second_half < r.first_half
-            )
-            ui.label(
-                f"Referință teoretică, identică pentru ORICE pool de {pool} numere: "
-                f"{theoretical_rate(max_num, pool, draw_n, _t):.2f}%. "
-                f"Din {count(len(rows) - 1, 'intervale', 'un interval')} alese pe tot "
-                f"istoricul, {_weaker_text(_moved)} pe a doua jumătate decât pe prima."
-            ).classes("text-caption text-grey")
-    ui.label(
-        "Cum se citește: un pool de dimensiune fixă are aceeași probabilitate "
-        "indiferent care numere îl compun. Diferențele dintre intervale sunt abateri "
-        "ale istoricului, iar cu cât intervalul e mai îngust, cu atât rămân mai puține "
-        "combinații distincte și cu atât cifra e mai zgomotoasă — la lățime egală cu "
-        "pool-ul există o singură combinație posibilă. Compară fiecare rând cu "
-        "coloana uniformă, unde nu există nimic de găsit: dacă acolo apare un câștig "
-        "de aceeași mărime, câștigul din coloana reală e zgomot."
-    ).classes("text-caption text-grey")
-
-
-# --------------------------------------------------------------------------- #
 # Pagina principală
 # --------------------------------------------------------------------------- #
 def _render_lr_pool_input(game: str, title: str):
@@ -4420,6 +4144,7 @@ def main_page() -> None:
         # România: fiecare cod LR oficial are o poziție proprie a sliderului.
         # Alte țări: câmpul numeric comun de dinainte.
         _pool_inputs = []
+        budget_slider = None
         if _cc == _LOT.RO:
             _bind_save(ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val")
             ui.label(
@@ -4451,6 +4176,8 @@ def main_page() -> None:
                 "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
+            ui.separator()
+            budget_slider = lr_budget_slider()
         else:
             _pool_inputs.append(
                 _bind_save(
@@ -4506,135 +4233,9 @@ def main_page() -> None:
                     ui.label(note).classes("text-caption text-warning")
 
         _render_large_pool_warning()
-        _bind_save(
-            ui.number(
-                "Penalizare numere extrase în ultimele N extrageri (0 = oprit)",
-                min=0,
-                max=50,
-                step=1,
-            ).classes("w-full"),
-            "recent_penalty_draws_val",
-        )
-        _bind_save(
-            ui.number(
-                "Factor penalizare per apariție (0..0.99)", min=0, max=0.99, step=0.05
-            ).classes("w-full"),
-            "recent_penalty_factor_val",
-        )
-        ui.label(
-            "Scorul unui număr extras de k ori în ultimele N extrageri se înmulțește cu factor^k. "
-            "Apariția recentă nu face un număr mai puțin probabil la următoarea extragere. "
-            "Avantajul penalizării nu este demonstrat; 0 extrageri o oprește. "
-            "La Joker se aplică și numărului din Urna 2. Walk-forward aplică aceeași setare."
-        ).classes("text-caption text-grey")
-        _consecutive_input = _bind_save(
-            ui.checkbox("🔗 Fără 3 numere consecutive în pool (activ implicit)").classes(
-                "w-full"
-            ),
-            "max_consecutive_run_enabled_val",
-        )
-        ui.label(
-            "Opțiunea este deja activă la prima pornire, iar alegerea ta se păstrează "
-            "la repornire. Setarea se aplică la următoarea generare. "
-            "Pool-ul se ia tot după clasamentul metodei. Numărul care ar forma al "
-            "treilea consecutiv este sărit, iar locul lui îl ia următorul număr din "
-            "clasament care nu formează trei numere consecutive. Fereastra rezultatului arată ce "
-            "număr a fost scos din pool și ce număr i-a luat locul. Preferință de "
-            "compoziție, fără avantaj statistic demonstrat; walk-forward aplică "
-            "aceeași regulă. Dacă un pool mare nu încape cu această regulă, limita "
-            "de consecutive este relaxată și se arată în rezultat."
-        ).classes("text-caption text-grey")
-        ui.label(
-            "Restrânge candidații jucați la un interval de numere, SEPARAT pentru "
-            "fiecare joc — de exemplu 10–40 la 6/49 în loc de 1–49. FĂRĂ avantaj "
-            "statistic demonstrat: probabilitatea de hit a unui pool de dimensiune "
-            "fixă e identică matematic, indiferent de care numere îl compun "
-            "(verificat pe istoricul acestei aplicații, vezi tabelul de mai jos). "
-            "E doar o preferință personală de compoziție a pool-ului, ca penalizarea "
-            "recentă de mai sus — bifa e implicit OPRITĂ și aplicația nu alege și nu "
-            "recomandă niciun interval. Walk-forward aplică aceeași restricție."
-        ).classes("text-caption text-grey")
-
-        def _on_restrict_base_toggle(event) -> None:
-            if event.value:
-                for _label, suffix, max_num in _restrict_games_for(_cc):
-                    lo_key = f"restrict_base_min_{suffix}_val"
-                    hi_key = f"restrict_base_max_{suffix}_val"
-                    if not SETTINGS.get(lo_key) and not SETTINGS.get(hi_key):
-                        # Prima activare, per joc: punct de plecare ca bifa să nu se
-                        # deschidă pe câmpuri goale — NU e un interval recomandat de
-                        # aplicație. Scalat de la exemplul „10-40" al lui 6/49
-                        # (49 - 9 = 40) la universul fiecărui joc, ca marginea de sus
-                        # să nu depășească niciodată jocul (5/40 nu poate merge la 40
-                        # dacă exemplul ar fi copiat direct). Tabelul de mai jos și
-                        # scripts/analysis/bench_base_threshold.py arată zgomot
-                        # statistic pentru orice interval ales — utilizatorul schimbă
-                        # liber ambele praguri sau lasă unul pe 0.
-                        SETTINGS[lo_key] = 10
-                        SETTINGS[hi_key] = max(10, max_num - 9)
-            _save_settings()
-
-        _restrict_enabled = ui.checkbox(
-            "🎯 Restrânge baza de numere jucate (implicit oprită)"
-        ).classes("w-full")
-        _restrict_enabled.bind_value(SETTINGS, "restrict_base_enabled_val")
-        _restrict_enabled.on_value_change(_on_restrict_base_toggle)
-
-        _RESTRICT_BASE_ROW_LABEL = {
-            "6/49": "6/49 (1–49)",
-            "5/40": "5/40 (1–40)",
-            "joker": "Joker Urna 1 (1–45)",
-        }
-        for _label, _suffix, _max_num in _restrict_games_for(_cc):
-            _row_label = _RESTRICT_BASE_ROW_LABEL.get(_label) or (
-                f"{_LOT.GAMES_BY_ID[_label].name} (1–{_max_num})"
-            )
-            with ui.row().classes("w-full items-center gap-2") as _rb_row:
-                ui.label(_row_label).classes(
-                    "text-caption w-24"
-                )
-                _bind_save(
-                    ui.number(
-                        "de la", min=0, max=_max_num, step=1
-                    ).classes("w-20"),
-                    f"restrict_base_min_{_suffix}_val",
-                )
-                _bind_save(
-                    ui.number(
-                        "până la", min=0, max=_max_num, step=1
-                    ).classes("w-20"),
-                    f"restrict_base_max_{_suffix}_val",
-                )
-            # Rândurile apar doar cât bifa e activă — ascunse, nu dispărute: valorile
-            # tastate rămân la reactivare. Config_json ignoră oricum toate cele trei
-            # praguri cât bifa e oprită (vezi `_active_restrict_base`), deci o
-            # valoare rămasă într-un câmp nu poate ajunge în producție pe furiș.
-            _rb_row.bind_visibility_from(_restrict_enabled, "value")
-        ui.label(
-            "Interval inversat (minim > maxim) este ignorat și consemnat în audit, "
-            "nu aplicat peste o bază goală."
-        ).classes("text-caption text-grey").bind_visibility_from(
-            _restrict_enabled, "value"
-        )
-
-        def _toggle_intervals(event) -> None:
-            _BASE_TABLE_OPENED["value"] = bool(event.value)
-            _render_base_interval_tables.refresh()
-
-        _intervals = ui.expansion(
-            "📐 Cel mai bun interval de fiecare lățime, per joc", value=False
-        ).classes("w-full")
-        with _intervals:
-            _render_base_interval_tables()
-        _intervals.on_value_change(_toggle_intervals)
-        # Procentele depind de dimensiunea pool-ului, deci tabelul se recalculează
-        # când aceasta se schimbă. Intervalul ales de utilizator nu intră în calcul —
-        # tabelul arată toate lățimile, nu îl evidențiază pe cel setat.
-        for _pool_input in _pool_inputs:
-            _pool_input.on_value_change(lambda: _render_base_interval_tables.refresh())
         for _budget_input in (
             *_pool_inputs, _guarantee_input, _condition_input,
-            _variant_limit_input, _consecutive_input,
+            _variant_limit_input,
         ):
             if _budget_input is not None:
                 _budget_input.on_value_change(lambda: _render_large_pool_warning())
@@ -4644,26 +4245,9 @@ def main_page() -> None:
             ).classes("w-full"),
             "lookback_val",
         )
-        _bind_save(
-            ui.number(
-                "Fereastră bench (telemetrie, nu schimbă pool-ul) (%)",
-                min=10,
-                max=100,
-                step=10,
-            ).classes("w-full"),
-            "sim_depth_val",
-        )
         ui.label(
-            "Fereastra de mai sus e telemetrie Auto-Pilot (unde avg_hits a picat pe bench). "
-            "«Analizează doar ultimele X% extrageri» limitează istoricul disponibil metodei "
-            "(0 = tot istoricul). În «Analiză & Clasament» alegi cât istoric se validează."
+            "0 folosește tot istoricul. În «Analiză & Clasament» alegi cât istoric se validează."
         ).classes("text-caption text-grey")
-        _bind_save(
-            ui.number("⏱ Buget walk-forward (minute)", min=1, max=480, step=5).classes(
-                "w-full"
-            ),
-            "wf_budget_min",
-        )
 
         def _on_target_change(e):
             target = _clamped_bench_target(e.value)
@@ -4671,8 +4255,6 @@ def main_page() -> None:
                 _VIRTUAL_WF_DECISION_CHANGED.set()
             SETTINGS["bench_hit_target"] = target
             _save_settings()
-            # Tabelul de intervale se ordonează pe ținta jocului.
-            _render_base_interval_tables.refresh()
             try:
                 import loto_enterprise.benchmark.decision as decision
 
@@ -4822,8 +4404,8 @@ def main_page() -> None:
         gate_panel()
         history_windows_panel()
         nested_wfv_panel(_cc)
-        if _LOT.games_for_country(_cc)[0].is_romanian:
-            lr_budget_panel()
+        if budget_slider is not None:
+            lr_budget_panel(budget_slider)
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"

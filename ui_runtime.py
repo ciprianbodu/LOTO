@@ -27,6 +27,9 @@ REPORT_FILE = PROJECT_ROOT / "raport_complet.txt"
 # Buget de timp TOTAL pentru walk-forward (toate jocurile). Peste buget, validarea
 # se oprește PARȚIAL și pipeline-ul continuă (mail + shutdown).
 WF_TOTAL_BUDGET_S = 90 * 60
+# Fereastra implicită pentru telemetria generării manuale. Auto-Pilot poate
+# folosi fereastra din decizia de bench a jocului.
+BENCH_TELEMETRY_DEPTH = 40
 # Adâncime walk-forward: ultimele X% din istoric simulate onest (fără lookahead).
 WF_DEPTH_PERCENT = float(DEFAULT_REPLAY_PERCENT)
 
@@ -66,17 +69,6 @@ def _restrict_base_text(audit: dict | None) -> str:
     if lo > 1 and hi:
         return f"baza restrânsă la {lo}–{hi}"
     return f"baza restrânsă la ≤{hi}"
-
-
-# Ținut sincron cu `walk_forward_adapter._RESTRICT_SEMANTICS`: aceeași schimbare
-# de regulă invalidează și cache-ul WF, și cache-ul de pipeline al worker-ului.
-_RESTRICT_SEMANTICS = "2"
-
-# Același contract pentru limita de consecutive: sincron cu
-# `walk_forward_adapter._CONSECUTIVE_SEMANTICS`, în cheie numai cu limita activă.
-_CONSECUTIVE_SEMANTICS = "1"
-# Valoarea trimisă când bifa e pusă: cel mult 2 consecutive, deci fără 4-5-6.
-_MAX_CONSECUTIVE_RUN_ON = 2
 
 
 def _consecutive_limit_text(audit: dict | None, details: bool = True) -> str:
@@ -171,18 +163,7 @@ def _wf_generation_options(data: dict) -> dict:
     return opts
 
 
-# Praguri separate PER JOC: 6/49, 5/40 și Joker Urna 1 au universuri diferite
-# (49/40/45), deci un singur interval global (ex. „10-40") nu are sens pentru
-# toate trei deodată — pentru 5/40 chiar depășește universul. Cheia SETTINGS e
-# sufixată cu identificatorul jocului; `game_label` e forma întoarsă de
-# `_game_label_for` ("6/49", "5/40", "joker"), aceeași folosită la construirea
-# task-urilor din `_build_config_json`.
-_RESTRICT_BASE_GAMES = (
-    ("6/49", "649", 49),
-    ("5/40", "540", 40),
-    ("joker", "joker", 45),
-)
-_RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_BASE_GAMES}
+_RO_UI_SUFFIXES = {"6/49": "649", "5/40": "540", "joker": "joker"}
 
 # Pool-ul pe joc: câmpuri separate pentru România, cu limitele jocului
 # (`Lottery.max_pool`: 49 / 40 / 45). La pornire revenim la schemele oficiale
@@ -192,9 +173,9 @@ _RESTRICT_BASE_SUFFIX = {label: suffix for label, suffix, _max_num in _RESTRICT_
 # Jocurile altor țări folosesc câmpul comun `pool_size_val`.
 # Minimul UI (2026-11-11): cel mai mic cod LR oficial (`Lottery.min_pool`:
 # 9 la 6/49 = Cod 48; 7 la 5/40 = Cod 15; 7 la Joker = Cod 45).
-_POOL_KEYS = {label: f"pool_size_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
+_POOL_KEYS = {game: f"pool_size_{suffix}_val" for game, suffix in _RO_UI_SUFFIXES.items()}
 _POOL_DEFAULTS = {"6/49": 9, "5/40": 8, "joker": 10}
-_LR_CODE_KEYS = {label: f"lr_scheme_{suffix}_val" for label, suffix, _m in _RESTRICT_BASE_GAMES}
+_LR_CODE_KEYS = {game: f"lr_scheme_{suffix}_val" for game, suffix in _RO_UI_SUFFIXES.items()}
 _LR_CODE_DEFAULTS = {"6/49": 48, "5/40": 16, "joker": 24}
 
 
@@ -292,14 +273,13 @@ def _lr_selection_change_text(game, previous_code, next_code) -> str:
 
 
 def _large_pool_notes() -> list[str]:
-    """Costul unei alegeri mari și eventuala relaxare a limitei de consecutive."""
+    """Costul unei alegeri mari."""
     if _selected_country() != _LOT.RO:
         return []
     from math import comb
     from covering.large_pool import validate_large_pool_request
 
     notes = []
-    limit = _active_max_consecutive_run()
     budget = max(0, _int_setting("max_variants_val"))
     guarantee = _int_setting("guarantee_val")
     for lot in _selected_games():
@@ -348,45 +328,8 @@ def _large_pool_notes() -> list[str]:
                 "Nu este ales un plafon de variante. Un pool mai mare poate cere "
                 "mai multe variante și un cost mai mare."
             )
-        if limit and pool > lot.max_n - lot.max_n // (limit + 1):
-            text += (
-                f" Regula fără {limit + 1} consecutive nu încape în acest pool; "
-                "va fi relaxată, iar limita aplicată apare în rezultat."
-            )
         notes.append(text)
     return notes
-
-
-def _active_restrict_base(game_label: str) -> tuple[int, int]:
-    """Interval de bază activ pentru UN joc: (0, 0) dacă bifa e oprită sau
-    jocul nu are o pereche proprie de praguri, indiferent de ce e tastat în
-    câmpuri. Sursa unică pentru `_build_config_json` (hash + task per joc) —
-    oprirea bifei trebuie să anuleze valorile peste tot, nu doar la ultima
-    citire."""
-    if not SETTINGS.get("restrict_base_enabled_val"):
-        return 0, 0
-    suffix = _RESTRICT_BASE_SUFFIX.get(game_label)
-    if suffix is None:
-        # Joc străin: cheia e id-ul lui din registru (`restrict_base_min_de_lotto_val`),
-        # niciodată perechea românească de aceeași geometrie.
-        lot = _LOT.lottery_by_id(game_label)
-        if lot is None or lot.is_romanian:
-            return 0, 0
-        suffix = lot.game_id
-    return (
-        _int_setting(f"restrict_base_min_{suffix}_val"),
-        _int_setting(f"restrict_base_max_{suffix}_val"),
-    )
-
-
-def _active_max_consecutive_run() -> int:
-    """Limita de consecutive pentru următoarea generare: 2 cu bifa pusă, 0 fără.
-
-    Întreg, nu bool: `int(True)` ar da 1, adică „fără nicio pereche", mult mai
-    strict decât a cerut utilizatorul. Aceeași valoare pentru toate jocurile;
-    motorul o aplică numai pool-ului principal (Urna 2 Joker are un număr).
-    """
-    return _MAX_CONSECUTIVE_RUN_ON if SETTINGS.get("max_consecutive_run_enabled_val") else 0
 
 
 def _clamped_bench_target(value=None) -> int:
@@ -405,28 +348,12 @@ UI_PERSIST_KEYS = [
     "max_variants_val",
     "lookback_val",
     "wheel_condition_val",
-    "recent_penalty_draws_val",
-    "recent_penalty_factor_val",
-    "restrict_base_enabled_val",
-    *(f"restrict_base_min_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
-    *(f"restrict_base_max_{suffix}_val" for _l, suffix, _m in _RESTRICT_BASE_GAMES),
-    # Fără ea în listă, bifa debifată revine pornită la fiecare repornire:
-    # `_load_settings` citește numai cheile de aici, iar implicitul e True.
-    "max_consecutive_run_enabled_val",
-    # Țara și jocurile ei (pasul 1). Praguri de restrângere proprii jocurilor străine.
+    # Țara și jocurile ei (pasul 1).
     "country_val",
     "games_val",
-    *(
-        f"restrict_base_{bound}_{g.game_id}_val"
-        for g in _LOT.GAMES
-        if not g.is_romanian
-        for bound in ("min", "max")
-    ),
     "shutdown_on_complete",
-    "sim_depth_val",
     "autopilot_after_bench",
     "mail_on_complete",
-    "wf_budget_min",
     "wf_depth_pct",
     "bench_hit_target",
 ]
@@ -439,50 +366,13 @@ DEFAULTS = {
     "max_variants_val": 0,
     # Lotto design „garanție dacă condiție": 0 = cover clasic (condiție = garanție).
     "wheel_condition_val": 0,
-    # Penalizare numere extrase în ultimele N extrageri (0 = oprit), scor × factor^aparitii.
-    # Implicit OPRITĂ: schimbă pool-ul fără nicio acțiune din partea utilizatorului
-    # dacă e pornită din start — utilizatorul decide explicit din UI dacă o vrea.
-    "recent_penalty_draws_val": 0,
-    "recent_penalty_factor_val": 0.5,
-    # Restrângere bază — praguri SEPARATE per joc (6/49, 5/40, Joker Urna 1), toate
-    # 0 implicit (fără restricție). Preferință OPȚIONALĂ a utilizatorului, FĂRĂ
-    # avantaj statistic demonstrat — probabilitatea de hit a unui pool de
-    # dimensiune fixă e identică matematic (hipergeometric) indiferent de care
-    # numere îl compun. Vezi scripts/analysis/pattern_base_reduction.py și
-    # docstring-ul loto_engine.run_institutional_pipeline. Nu prezenta niciodată
-    # acest câmp drept optimizare — e doar compoziție, la fel ca recent_penalty_draws.
-    **{
-        f"restrict_base_{bound}_{suffix}_val": 0
-        for _label, suffix, _max_num in _RESTRICT_BASE_GAMES
-        for bound in ("min", "max")
-    },
-    # Bifă separată de valorile de mai sus: oprită implicit, indiferent de ce e
-    # tastat în câmpuri — un capăt lăsat din greșeală nediscutat nu ajunge
-    # niciodată în producție cât bifa e oprită (vezi `_active_restrict_base`).
-    "restrict_base_enabled_val": False,
-    **{
-        f"restrict_base_{bound}_{g.game_id}_val": 0
-        for g in _LOT.GAMES
-        if not g.is_romanian
-        for bound in ("min", "max")
-    },
     # Țara aleasă (pasul 1) și jocurile ei; [] = toate jocurile țării.
     "country_val": _LOT.RO,
     "games_val": [],
-    # Fără 3 numere consecutive în pool: PORNITĂ implicit, la cererea explicită a
-    # utilizatorului (2026-09-26), spre deosebire de penalizare și restrângere,
-    # oprite fiindcă ar schimba pool-ul fără nicio acțiune. Tot compoziție, FĂRĂ
-    # avantaj statistic demonstrat (hipergeometric, ca mai sus); bifa o oprește.
-    "max_consecutive_run_enabled_val": True,
     "lookback_val": 0,
     "shutdown_on_complete": False,
-    "sim_depth_val": 40,
     "autopilot_after_bench": True,
     "mail_on_complete": False,
-    # Buget walk-forward (minute). Plafon de siguranță (anulare automată), NU timp real de rulare:
-    # cu WF paralel (~80% CPU) validarea completă la 30% depth durează minute, nu ore.
-    # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
-    "wf_budget_min": 90,
     "wf_depth_pct": DEFAULT_REPLAY_PERCENT,
     "bench_hit_target": DEFAULT_BENCH_HIT_TARGET,
     "bench_target_revision": BENCH_TARGET_REVISION,
@@ -493,17 +383,6 @@ DEFAULTS = {
 # Stare server-side (single-user local app → globală e suficient)
 # --------------------------------------------------------------------------- #
 SETTINGS: dict = dict(DEFAULTS)
-
-
-def _float_setting(key: str, default: float | None = None) -> float:
-    """SETTINGS[key] ca float, robust la câmp golit (None) — ca `_int_setting`."""
-    try:
-        v = SETTINGS.get(key)
-        if v is None:
-            v = DEFAULTS.get(key) if default is None else default
-        return float(v)
-    except (TypeError, ValueError):
-        return float(DEFAULTS.get(key, 0.0) if default is None else default)
 
 
 def _int_setting(key: str, default: int | None = None) -> int:
@@ -759,19 +638,6 @@ def _training_only_note(lot) -> str:
     if getattr(lot, "play_note", None):
         return lot.play_note
     return _TRAINING_ONLY_NOTE if lot.training_only else ""
-
-
-def _restrict_games_for(country=None) -> tuple:
-    """(cheie joc, sufix SETTINGS, univers) pentru rândurile de restrângere ale
-    țării. România: tuplul de dinainte; celelalte: sufixul = id-ul jocului."""
-    cc = country or _selected_country()
-    if cc == _LOT.RO:
-        return _RESTRICT_BASE_GAMES
-    try:
-        games = _LOT.games_for_country(cc)
-    except _LOT.UnknownLotteryError:
-        return ()
-    return tuple((g.game_id, g.game_id, g.max_n) for g in games)
 
 
 def _next_draw_date_for(weekdays=(3, 6), today=None) -> str:
