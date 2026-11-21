@@ -279,8 +279,10 @@ def apply_autopilot_and_generate() -> None:
                 gk = _LABEL_TO_KEY.get(label, "loto_6_49")
                 pool_size = _pool_size_for(_spec.game_id)
                 if SETTINGS.get("dynamic_method_enabled_val", True):
-                    recs.append(f"{gk}: selecție dinamică 4+ în pool-ul de {pool_size} numere. "
-                                "Metoda se stabilește la generare.")
+                    recs.append(
+                        f"{gk} · selecție dinamică după 4+ pe o variantă LR. "
+                        f"Pool de {pool_size} numere."
+                    )
                     cfg = None
                 else:
                     cfg = recommend_optimal_config(gk, pool_size)
@@ -4333,12 +4335,12 @@ def main_page() -> None:
         ui.label(
             "Re-Bench evaluează pragul selectat pentru fiecare dimensiune de pool, "
             "cu prioritate de la 7 numere în sus."
-            + (" Selecția dinamică LR folosește pragul 4+ în pool. O extragere cu 5 sau 6 "
-               "numere în pool se numără o singură dată la 4+." if _cc == _LOT.RO else "")
+            + (" Selecția dinamică verifică 4+ pe aceeași variantă a codului LR ales. "
+               "O extragere cu 5 sau 6 potriviri pe o variantă se numără o singură dată la 4+."
+               if _cc == _LOT.RO else "")
         ).classes("text-caption text-grey")
         ui.label(
-            "Validarea folosește istoricul și fereastra din cererea de generare. "
-            "Bugetul walk-forward limitează timpul de calcul."
+            "Validarea walk-forward folosește istoricul și fereastra din cererea de generare."
         ).classes("text-caption text-grey")
         _bind_save(
             ui.checkbox("🔌 Oprește PC-ul automat la final"), "shutdown_on_complete"

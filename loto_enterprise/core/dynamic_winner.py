@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from functools import partial
+from functools import lru_cache, partial
 
 import numpy as np
 
+from covering.probability import subset_hit_table
 from loto_enterprise.benchmark.methods import (
     call_method,
     require_complete_catalog,
@@ -24,8 +25,8 @@ from loto_enterprise.core.score_validation import SCORE_VARIANCE_EPSILON
 
 logger = logging.getLogger(__name__)
 
-DYNAMIC_VERSION = "dynamic-lr-v5-markov-lag2-pool-4plus"
-POOL_HIT_TARGET = 4
+DYNAMIC_VERSION = "dynamic-lr-v6-ticket-4plus"
+TICKET_HIT_TARGET = 4
 WARMUP_DRAWS = 250
 WINDOW_DAYS = 104
 MIN_DAYS = 26
@@ -77,8 +78,8 @@ def _score_rows(candidates, history, bounds, universe, reported):
 def _winner(totals, days, thresholds):
     if days < MIN_DAYS:
         return 0, "insufficient_history"
-    # A draw with 4, 5 or 6 main numbers in the proposed pool counts once.
-    counts = totals[:, thresholds.index(POOL_HIT_TARGET)]
+    # A draw counts once when at least one official variant has four hits.
+    counts = totals[:, thresholds.index(TICKET_HIT_TARGET)]
     best = int(np.argmax(counts[:-1]))  # First declared method wins an exact tie.
     if counts[best] <= counts[-1]:
         return 0, "no_gain_over_random"
@@ -87,6 +88,18 @@ def _winner(totals, days, thresholds):
 
 def _counts(row, thresholds):
     return {str(t): int(n) for t, n in zip(thresholds, row, strict=True)}
+
+
+@lru_cache(maxsize=16)
+def _ticket_hit_counter(scheme):
+    masks, _ = scheme._position_data
+    best_hits = subset_hit_table(scheme.n, masks)[1]
+    positions = 1 << np.arange(scheme.n)
+
+    def count(matches):
+        return best_hits[matches @ positions]
+
+    return count
 
 
 def dynamic_forecasts(
@@ -117,10 +130,12 @@ def dynamic_forecasts(
         origins,
         candidates=CANDIDATES,
         select_winner=_winner,
+        ticket_hits=_ticket_hit_counter(scheme),
         selection_metadata={
             "version": DYNAMIC_VERSION,
-            "hit_scope": "pool",
-            "pool_hit_target": POOL_HIT_TARGET,
+            "hit_scope": "ticket",
+            "ticket_hit_target": TICKET_HIT_TARGET,
+            "scheme_code": scheme.code,
             "pool_size": scheme.n,
             "candidate_methods": list(CANDIDATES),
             "control_method": "random",
@@ -143,7 +158,7 @@ def _forecast_origins(
     candidates,
     select_winner,
     selection_metadata,
-    archived_ticket_hits=None,
+    ticket_hits=None,
     prepare_archived_scores=None,
     max_run=0,
     restrict_min=0,
@@ -152,7 +167,7 @@ def _forecast_origins(
     penalty_factor=0.5,
     should_cancel=None,
 ):
-    """Replay causal pool forecasts; archived reports may supply their original ticket scorer."""
+    """Replay causal forecasts on the selected geometry."""
     lot = ro_lottery_for_geometry(scheme.game)
     if lot is None:
         raise ValueError("Selecția dinamică necesită o schemă oficială românească")
@@ -206,7 +221,7 @@ def _forecast_origins(
         raise ValueError(
             f"Cod {scheme.code} cere {scheme.n} numere în intervalul permis"
         )
-    maximum_hits = lot.draw_n if archived_ticket_hits is None else lot.pick_n
+    maximum_hits = lot.draw_n if ticket_hits is None else lot.pick_n
     thresholds = tuple(range(4, maximum_hits + 1))
     days = all_starts[all_starts >= WARMUP_DRAWS]
     ends = np.r_[days[1:], end] if len(days) else np.empty(0, dtype=int)
@@ -289,8 +304,8 @@ def _forecast_origins(
                 matches = draw[columns]
                 hits = (
                     matches.sum(axis=1)
-                    if archived_ticket_hits is None
-                    else archived_ticket_hits(matches)
+                    if ticket_hits is None
+                    else ticket_hits(matches)
                 )
                 daily += hits[:, None] >= thresholds
             recent_days.append((day, daily))

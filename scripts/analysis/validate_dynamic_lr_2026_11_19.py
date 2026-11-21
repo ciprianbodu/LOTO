@@ -12,7 +12,6 @@ import argparse
 import json
 import sys
 from collections import Counter
-from functools import lru_cache
 from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
@@ -27,12 +26,15 @@ if str(ROOT) not in sys.path:
 
 from covering.lr_schemes import scheme_odds, scheme_tickets
 from covering.lr_selection import lr_scheme_signature, resolve_lr_scheme
-from covering.probability import subset_hit_table
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from scripts.analysis.legacy_scoring.dynamic_bank import (
     RECIPE_IDS, RECIPE_WEIGHTS, SIGNAL_NAMES, recipe_scores, signal_ranks,
 )
-from loto_enterprise.core.dynamic_winner import _forecast_origins, _method_rows
+from loto_enterprise.core.dynamic_winner import (
+    _forecast_origins,
+    _method_rows,
+    _ticket_hit_counter,
+)
 from loto_enterprise.core.history import (
     chronological_history,
     history_dates,
@@ -102,18 +104,6 @@ def _prepare_archived_scores(indicators, universe):
     return score
 
 
-@lru_cache(maxsize=3)
-def _archived_ticket_scorer(scheme):
-    masks, _ = scheme._position_data
-    best_hits = subset_hit_table(scheme.n, masks)[1]
-    positional_weights = 1 << np.arange(scheme.n)
-
-    def score(matches):
-        return best_hits[matches @ positional_weights]
-
-    return score
-
-
 def archived_forecasts(matrix, bounds, scheme, origins, *, version=ARCHIVED_VERSION, settings=None):
     """Replay the original 1,011 candidates with their recorded v1/v2/v3 objective."""
     metadata = {"version": version}
@@ -131,7 +121,7 @@ def archived_forecasts(matrix, bounds, scheme, origins, *, version=ARCHIVED_VERS
         candidates=CANDIDATES,
         select_winner=_archived_winner if version == ARCHIVED_VERSION else _archived_four_plus_winner,
         prepare_archived_scores=_prepare_archived_scores,
-        archived_ticket_hits=None if version == "dynamic-lr-v3-pool-4plus" else _archived_ticket_scorer(scheme),
+        ticket_hits=None if version == "dynamic-lr-v3-pool-4plus" else _ticket_hit_counter(scheme),
         selection_metadata=metadata,
         **(SETTINGS if settings is None else settings),
     )

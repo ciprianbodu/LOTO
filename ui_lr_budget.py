@@ -91,9 +91,10 @@ def _ticket_details(plan, *, expanded=False):
                     hits = selection.get("hits", {}).get("4")
                     random = selection.get("random_hits", {}).get("4")
                     draws = selection.get("validation_draws")
-                    if selection.get("hit_scope") == "pool" and hits is not None and random is not None and draws:
+                    if hits is not None and random is not None and draws:
+                        scope = "în pool" if selection.get("hit_scope") == "pool" else "pe o variantă LR"
                         evidence += (
-                            f" · walk-forward 4+ în pool · {hits} față de {random} pentru martorul aleator,"
+                            f" · walk-forward 4+ {scope} · {hits} față de {random} pentru martorul aleator,"
                             f" din {draws} extrageri"
                         )
                     if selection.get("reason") not in (None, "winner"):

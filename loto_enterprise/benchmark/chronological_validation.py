@@ -20,12 +20,23 @@ CAUSAL_POLICIES = (
     "ticket_block26",
     "pool_daily",
     "ticket_daily",
+    "dynamic_lr",
 )
 
 
-def select_best(arms: dict, *, second_urn: bool = False) -> str:
-    """Maximize draws with 4+ in the final pool, or correct single-ball picks for Urna 2."""
-    metric = "primary" if second_urn else "pool_4plus"
+def selection_metric(*, second_urn: bool, official_scheme: bool) -> str:
+    if second_urn:
+        return "top1"
+    return "ticket_4plus" if official_scheme else "pool_4plus"
+
+
+def select_best(
+    arms: dict, *, second_urn: bool = False, official_scheme: bool = False,
+) -> str:
+    """Rank forward policies on the objective of the game being validated."""
+    metric = "primary" if second_urn else selection_metric(
+        second_urn=False, official_scheme=official_scheme,
+    )
     return max(
         (key for key in CAUSAL_POLICIES if key in arms),
         key=lambda key: arms[key][metric],
@@ -47,7 +58,7 @@ def run_validation(country: str, run_id: str, scheme_codes: dict) -> None:
     # country report, just as we do for invalid launch settings.
     require_complete_catalog(country=country)
     streams = {
-        key: key == lot.bench_key_urna2
+        key: lot
         for lot in games_for_country(country)
         for key in lot.bench_keys
     }
@@ -56,17 +67,24 @@ def run_validation(country: str, run_id: str, scheme_codes: dict) -> None:
 
     logger = logging.getLogger(__name__)
     results, errors = {}, {}
-    for index, (key, second_urn) in enumerate(streams.items(), start=1):
+    for index, (key, lot) in enumerate(streams.items(), start=1):
+        second_urn = key == lot.bench_key_urna2
+        official = lot.is_romanian and not second_urn
         logger.info(
             "%s Se calculează %s (%d/%d)", PROGRESS_MARKER, key, index, len(streams)
         )
         try:
             result = study_game(
-                key, scheme_code=scheme_codes[key], hit_target=4, selection_basis="pool",
+                key, scheme_code=scheme_codes[key], hit_target=4,
+                selection_basis="ticket" if official else "pool",
                 active_catalog=True,
             )
-            result["selection_metric"] = "top1" if second_urn else "pool_4plus"
-            result["best_policy"] = select_best(result["arms"], second_urn=second_urn)
+            result["selection_metric"] = selection_metric(
+                second_urn=second_urn, official_scheme=official,
+            )
+            result["best_policy"] = select_best(
+                result["arms"], second_urn=second_urn, official_scheme=official,
+            )
             results[key] = result
         except Exception as exc:
             logger.exception("Validarea cronologică a eșuat pentru %s", key)
