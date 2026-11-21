@@ -110,7 +110,27 @@ def _render_recommendations(records, budget_lei, objective):
         _ticket_details(plan)
 
 
-def lr_budget_panel():
+def lr_budget_slider():
+    budget_label = ui.label().classes("text-bold mt-2")
+    slider = ui.slider(min=MIN_BUDGET_LEI, max=200, step=1, value=200).props(
+        'aria-label="Buget pentru bilete LR" label'
+    ).classes("w-full")
+    budget_label.bind_text_from(
+        slider, "value", lambda value: f"Buget bilete LR · {int(value)} lei"
+    )
+
+    def extend_range():
+        maximum = int(slider.props["max"]) * 2
+        slider.props["max"] = maximum
+        limits.set_text(f"Interval · {MIN_BUDGET_LEI}–{maximum} lei")
+
+    with ui.row().classes("w-full items-center justify-between"):
+        limits = ui.label(f"Interval · {MIN_BUDGET_LEI}–200 lei").classes("text-caption")
+        ui.button("Extinde intervalul", on_click=extend_range).props("flat dense no-caps")
+    return slider
+
+
+def lr_budget_panel(slider):
     with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
         ui.label(
             "Compară schemele oficiale pentru o singură extragere uniformă. "
@@ -124,20 +144,6 @@ def lr_budget_panel():
         objective = ui.toggle(_OBJECTIVES, value=FOUR_PLUS).props(
             'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
         )
-        budget_label = ui.label().classes("text-subtitle1 text-weight-bold")
-        slider = ui.slider(min=MIN_BUDGET_LEI, max=200, step=1, value=200).props(
-            'aria-label="Buget pentru bilete LR" label'
-        ).classes("w-full")
-        budget_label.bind_text_from(slider, "value", lambda value: f"Buget · {int(value)} lei")
-
-        def extend_range():
-            maximum = int(slider.props["max"]) * 2
-            slider.props["max"] = maximum
-            limits.set_text(f"Interval · {MIN_BUDGET_LEI}–{maximum} lei")
-
-        with ui.row().classes("w-full items-center justify-between"):
-            limits = ui.label(f"Interval · {MIN_BUDGET_LEI}–200 lei").classes("text-caption")
-            ui.button("Extinde intervalul", on_click=extend_range).props("flat dense no-caps")
         output = ui.column().classes("w-full gap-2")
         revision = 0
         running = False
@@ -179,7 +185,13 @@ def lr_budget_panel():
             finally:
                 running = False
 
+        async def on_budget_change():
+            if not panel.value:
+                panel.set_value(True)
+                return
+            await refresh()
+
         panel.on_value_change(refresh)
         game.on_value_change(refresh)
-        slider.on_value_change(refresh)
+        slider.on_value_change(on_budget_change)
         objective.on_value_change(refresh)

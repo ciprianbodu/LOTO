@@ -132,11 +132,9 @@ STAGE_META = [
     ),
     (
         "3_anti_sequence",
-        "3. Limita de consecutive (opțiunea utilizatorului)",
+        "3. Limita de consecutive a rulării",
         "#f59e0b",
-        "Cu bifa „Fără 3 numere consecutive”, numărul care ar forma secvența iese, "
-        "iar locul lui îl ia următorul din clasamentul metodei. Fără bifă, pool-ul "
-        "rămâne cel de la pasul 1. Preferință de compoziție, fără avantaj statistic.",
+        "Rularea salvată a aplicat o limită pentru seriile de numere consecutive.",
     ),
     (
         "4_post_hoc_final",
@@ -199,6 +197,8 @@ def _render_stages(audit: dict) -> None:
     ).classes("w-full"):
         prev: set | None = None
         for key, title, color, desc in STAGE_META:
+            if key == "3_anti_sequence" and not (audit.get("consecutive_limit") or {}).get("requested"):
+                continue
             pool_list = stages.get(key)
             if not pool_list:
                 continue
@@ -1607,8 +1607,7 @@ def _method_desc(name: str) -> str:
 def _consecutive_pool_diagnostic(data: dict) -> str:
     """Describe actual runs in the played pool and its recorded raw selection.
 
-    The sidebar describes the next generation, not this result. Legacy payloads
-    without the raw stage cannot reconstruct it from a rounded top-25 ranking.
+    Older payloads may only contain the played pool.
     """
     from loto_enterprise.core.ranking import longest_consecutive_run
 
