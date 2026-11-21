@@ -1302,6 +1302,18 @@ def _bench_intro_text(country: str) -> str:
     )
 
 
+def _default_bench_methods_by_game(game_keys):
+    from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
+    from loto_enterprise.benchmark.methods import list_methods, method_meta
+    from loto_enterprise.benchmark.runner import _methods_for_game
+
+    keys = tuple(game_keys)
+    available = [name for name in list_methods() if method_meta(name).get("available", True)]
+    kept, info = apply_curation(available)
+    configured = resolve_methods_per_game(kept, keys) if info.get("active") else None
+    return {key: _methods_for_game(kept, configured, key) for key in keys}
+
+
 def _country_bench_texts(country: str) -> dict:
     """Cele patru texte ale panoului de bench pentru o țară STRĂINĂ.
 
@@ -1313,20 +1325,14 @@ def _country_bench_texts(country: str) -> dict:
     name = _LOT.country_name(cc)
     games = _LOT.games_for_country(cc)
     out: dict = {"intro": _bench_intro_text(cc)}
-    n_keys = sum(len(g.bench_keys) for g in games)
+    keys = [key for game in games for key in game.bench_keys]
     n_urna2 = sum(1 for g in games if g.bench_key_urna2)
     try:
-        from loto_enterprise.benchmark.curated import apply_curation
-        from loto_enterprise.benchmark.methods import list_methods, method_meta
-
-        avail = [m for m in list_methods() if method_meta(m).get("available", True)]
-        kept, _info = apply_curation(avail)
-        # `random` e deja în lista curată (REQUIRED_METHODS), iar runner-ul îl
-        # rulează o singură dată: textul îl numește separat și ținta îl adaugă
-        # o singură dată (+1 mai jos), nu încă o dată peste listă.
-        n_methods = len([m for m in kept if m != "random"])
+        matrix = _default_bench_methods_by_game(keys)
     except Exception:  # noqa: BLE001
-        n_methods = 0
+        matrix = dict.fromkeys(keys, ())
+    counts = [sum(method != "random" for method in methods) for methods in matrix.values()]
+    n_methods = "/".join(map(str, dict.fromkeys(counts)))
     n_main = len(games)
     out["curation"] = (
         f"{name}: {n_methods} metode × {n_main} "
@@ -1335,7 +1341,7 @@ def _country_bench_texts(country: str) -> dict:
         + ", plus baseline-ul random."
     )
     n_windows = len([p for p in _PCTS.split(",") if p.strip()])
-    target = (n_methods + 1) * n_keys * max(1, n_windows)
+    target = sum(map(len, matrix.values())) * max(1, n_windows)
     fp = _LOT.bench_out_dir_for(cc, PROJECT_ROOT) / "folds.csv"
     eta = None
     try:
@@ -1492,48 +1498,12 @@ def _autoload_histories(games) -> tuple[list, list]:
 
 
 def _target_bench_folds() -> int:
-    """Numărul de folduri pe care Re-Bench-ul UI (`run_rebench`, fără
-    `--methods`/`--quick`) urmează să le ruleze — ținta pentru `_estimate_bench_eta`.
-
-    Aceeași formulă din AGENTS.md §5: suma metodelor per joc după
-    `resolve_methods_per_game` (curarea + baseline-urile structurale
-    random/frequency adăugate acolo, NU numărătoarea brută din
-    `apply_curation`, care nu include baseline-urile) ori numărul de ferestre
-    din `_PCTS`. Cu curarea inactivă, `resolve_methods_per_game` întoarce {},
-    iar `runner._methods_for_game` rulează întreaga listă pe FIECARE joc — de
-    aceea fallback-ul de mai jos e `len(kept) * len(games)`, nu 0.
-
-    Întoarce 0 (→ ETA implicit „~5 min"/„~50 min") dacă istoricul sau
-    registry-ul de metode nu sunt disponibile la randare — nu trebuie să
-    blocheze sidebar-ul.
-    """
+    """Count folds on the methods and games that a normal Romanian Re-Bench will run."""
     try:
-        from loto_enterprise.benchmark.curated import (
-            apply_curation,
-            resolve_methods_per_game,
-        )
-        from loto_enterprise.benchmark.methods import list_methods, method_meta
         from loto_enterprise.benchmark.runner import discover_games
 
-        avail = [
-            m
-            for m in list_methods()
-            if method_meta(m).get("available", True)
-        ]
-        kept, info = apply_curation(avail)
-        games = discover_games()
-        # Aceeași poartă ca bench_all_methods.py: matricea restrânsă per joc se
-        # aplică DOAR cu curarea activă (fără `--methods` explicit, cum rulează
-        # mereu UI-ul). Cu curarea oprită, `resolve_methods_per_game` ar întoarce
-        # totuși o restrângere — CLI-ul nu o folosește în cazul ăsta, deci nici
-        # estimarea de-aici nu are voie, altfel supraestimează eronat un bench
-        # care de fapt rulează toate metodele pe fiecare joc.
-        per_game = (
-            resolve_methods_per_game(kept, (g.key for g in games))
-            if info.get("active")
-            else {}
-        )
-        total_methods = sum(len(per_game.get(game.key, kept)) for game in games)
+        methods = _default_bench_methods_by_game(game.key for game in discover_games())
+        total_methods = sum(map(len, methods.values()))
         n_windows = len([p for p in _PCTS.split(",") if p.strip()])
         return total_methods * max(1, n_windows)
     except Exception as exc:  # noqa: BLE001
@@ -1891,7 +1861,11 @@ def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
         audit = data.get("audit") or {}
         info = (audit.get("bench_winner") or {}).get(_game_spec_for(g_label, data).bench_key) or {}
         selection = audit.get("dynamic_selection") or info.get("dynamic_selection") or {}
-        if selection.get("version") != DYNAMIC_VERSION or selection.get("method") not in CANDIDATES:
+        if (
+            selection.get("version") != DYNAMIC_VERSION
+            or selection.get("method") not in CANDIDATES
+            or ("candidate_methods" in selection and selection["candidate_methods"] != list(CANDIDATES))
+        ):
             return False
     for _key, methods_now, info in _decision_methods_now(g_label, data):
         if info.get("method") != methods_now[0]:

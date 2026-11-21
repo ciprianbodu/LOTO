@@ -180,6 +180,9 @@ def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
             EXCLUDED_FROM_SINGLE_PICK,
         )
 
+        from loto_enterprise.benchmark.methods import METHODS, method_applies_to_game
+
+        forbidden.update(name for name in METHODS if not method_applies_to_game(name, game_key))
         forbidden |= {str(m) for m in EXCLUDED_FROM_PRODUCTION}
         # Urna cu o singură bilă: metodele care repetă bila precedentă.
         if game_key is not None and _is_urna2_key(game_key):
@@ -229,7 +232,7 @@ def _sanitize_production_name(
         registry_error = f"{type(exc).__name__}: {exc}"
     if name in _production_forbidden(game_key):
         logger.warning(
-            "[method_selector] %s %r interzis în producție (EXCLUDED_FROM_PRODUCTION) — skip",
+            "[method_selector] %s %r neeligibil pentru jocul curent — skip",
             context,
             name,
         )

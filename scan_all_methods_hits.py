@@ -114,8 +114,10 @@ def _available_methods() -> list[str]:
 def scan_game(
     game, pools: tuple[int, ...], methods: list[str], workers: int
 ) -> list[dict]:
+    from loto_enterprise.benchmark.methods import method_applies_to_game
     from loto_enterprise.benchmark.runner import load_draws
 
+    methods = [name for name in methods if method_applies_to_game(name, game.key)]
     # Ca bench-ul: aceeasi ordonare/validare si game.history_cutoffs completat,
     # deci istoricul unei tinte exclude extragerile din ziua ei.
     draws = load_draws(game)

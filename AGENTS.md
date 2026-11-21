@@ -19,7 +19,15 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Catalogul activ la 20.11.2026 este `compact-v1`, comun tuturor celor 13 jocuri și ambelor urne Joker. Re-Bench compară trei metode: frecvențe pe ferestre (`compact_multiscale_shrink`), tranziții între zile (`compact_transition_prior`) și intervale de reapariție (`compact_renewal_hazard`). `frequency` este eligibilă și servește ca rezervă. `random` este reperul de comparație. O decizie veche trebuie recalculată prin Re-Bench. Metodele retrase se găsesc în `scripts/analysis/legacy_scoring/` pentru reproducerea studiilor. [Rezultatele validării pe 13 jocuri](scripts/analysis/compact_catalog_2026_11_20.md)
+Catalogul de bază este comun tuturor jocurilor și include trei metode:
+frecvențe pe ferestre (`compact_multiscale_shrink`), tranziții între zile
+(`compact_transition_prior`) și intervale de reapariție (`compact_renewal_hazard`).
+Din 21.11.2026, catalogul `compact-v2` adaugă `markov_lag2` pe toate cele patru
+fluxuri ale Loteriei Române. Formula reproduce metoda anterioară pe același
+prefix de extrageri, iar Re-Bench și selectorul dinamic LR o evaluează în
+același clasament cu celelalte metode. Joker Urna 2 folosește selecția top-1
+din Re-Bench. `frequency` servește și ca rezervă. `random` este martorul.
+[Validarea catalogului compact inițial](scripts/analysis/compact_catalog_2026_11_20.md)
 
 Snapshot istoric verificat la 2026-09-15:
 
@@ -2090,7 +2098,7 @@ Arhiva folosită de actualizator se oprea la 15 noiembrie, în timp ce Loteria R
 
 În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.
 
-Din 20 noiembrie, motorul compară cele trei metode din catalogul compact și `frequency`, la dimensiunea poolului din codul LR ales. Versiunea anterioară compara 1.000 de combinații de semnale și 11 metode. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Obiectivul de selecție este numărul de extrageri cu cel puțin patru dintre numerele din pool. Premiile se calculează ulterior pe variantele codului LR. Candidatul trebuie să depășească martorul `random` la acest prag. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează versiunea selectorului, candidații, metoda aleasă, obiectivul și numărătorile la toate pragurile posibile.
+Motorul compară cele trei metode compacte, `markov_lag2` și `frequency`, la dimensiunea poolului din codul LR ales. Versiunile v1–v3 comparau 1.000 de combinații de semnale și 11 metode. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Obiectivul de selecție este numărul de extrageri cu cel puțin patru dintre numerele din pool. Premiile se calculează ulterior pe variantele codului LR. Candidatul trebuie să depășească martorul `random` la acest prag. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează versiunea selectorului, candidații, metoda aleasă, obiectivul și numărătorile la toate pragurile posibile.
 
 Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de extrageri până la 15 noiembrie, a înregistrat 17 evenimente 4+ pe variante, față de 10 pentru `random` și 12 pentru `frequency`. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
 
@@ -2419,13 +2427,15 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.3 Metode active si curate
 
 - Registrul activ încarcă cele trei metode CPU din `methods_compact.py`.
+  Pentru Loteria Română încarcă și `markov_lag2` din `methods_markov.py`.
   Metodele retrase sunt disponibile studiilor datate prin
   `scripts.analysis.legacy_methods_2026_11_20`.
 - Limita de consecutive din §6 se aplică la construirea poolului. Testele
   verifică și comportamentul scorerilor la reetichetarea numerelor.
 - Lista `active` din `curated_methods.json` controlează metodele evaluate.
-  Configurația implicită include cele trei metode compacte, `frequency` și
-  `random` pentru fiecare joc. O intrare `per_game` restrânge lista jocului.
+  Configurația implicită include metodele compacte, `frequency` și
+  `random` pentru fiecare joc, plus `markov_lag2` pentru România. O intrare
+  `per_game` restrânge lista jocului.
 - Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`),
   pe alt `--istoric` sau cu `--block-size` diferit de 1 nu trebuie sa rescrie
   decizia de productie fara `--force-decision` (`reduced_run_reason`).

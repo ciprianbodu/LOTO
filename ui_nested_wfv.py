@@ -24,9 +24,13 @@ _POLICIES = (
 )
 
 
-def _nested_results(result):
-    game = lottery_by_bench_key(result["key"])
-    single = result["key"] == game.bench_key_urna2
+def _nested_results(result, *, game_key=None):
+    key = result.get("key") or game_key
+    game = lottery_by_bench_key(key)
+    if game is None:
+        ui.label("Raportul salvat nu identifică jocul.").classes("text-warning")
+        return
+    single = key == game.bench_key_urna2
     title = f"{game.display} · Urna 2" if single else game.display
     if scheme := result["scheme"]:
         kind = "Cod" if scheme["official_for_game"] else "Cod simulat"
@@ -56,7 +60,7 @@ def _nested_results(result):
             "a înlocuit o metodă fără clasament utilizabil · " + ", ".join(fallbacks)
         ).classes("text-caption")
     current = (
-        saved_catalog == registry.CATALOG_VERSION
+        saved_catalog == registry.catalog_version_for_game(key)
         and result.get("hit_target") == (1 if single else 4)
         and result.get("selection_metric") == ("top1" if single else "pool_4plus")
     )
@@ -155,7 +159,7 @@ def nested_wfv_panel(country):
                     ui.label(f"Sursa · {lottery_by_bench_key(key).csv}").classes(
                         "text-caption"
                     )
-                    _nested_results(result)
+                    _nested_results(result, game_key=key)
                 elif error := document.get("errors", {}).get(key):
                     ui.label(f"Validarea nu a putut fi finalizată. {error}").classes(
                         "text-warning"

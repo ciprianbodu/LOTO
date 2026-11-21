@@ -150,7 +150,7 @@ def _content_hash(csv_path: Path, num_cols: list[str] | None = None) -> tuple[st
     return h, n_rows
 
 
-def compute_engine_signature() -> dict[str, str | int]:
+def compute_engine_signature(*, country: str | None = None) -> dict[str, str | int]:
     """Semnătura MOTORULUI: versiune de cache, registry și revizii numerice.
 
     Nu include configurația de rulare (percentile, pool_extra): aceea schimbă cât
@@ -165,17 +165,31 @@ def compute_engine_signature() -> dict[str, str | int]:
     except Exception:  # noqa: BLE001
         CACHE_VERSION = "?"
     try:
-        from loto_enterprise.benchmark.methods import CATALOG_VERSION, METHODS
+        from loto_enterprise.benchmark.methods import (
+            METHODS,
+            catalog_version_for_game,
+            method_applies_to_game,
+        )
+        from loto_enterprise.core.lotteries import games_for_country
 
-        names = sorted(str(n) for n in METHODS)
+        game_keys = tuple(
+            key for lot in games_for_country(country or "RO") for key in lot.bench_keys
+        )
+        version = catalog_version_for_game(game_keys[0])
+        names = sorted(
+            name for name in METHODS
+            if any(method_applies_to_game(name, key) for key in game_keys)
+        )
     except Exception:  # noqa: BLE001
         names = []
-        CATALOG_VERSION = "unavailable"
+        version = "unavailable"
     from loto_enterprise.core.wf_sig import method_cache_semantics
 
     # Same numerical revisions as the per-method fold namespace. Empty suffixes
     # preserve the legacy digest for registries without revised scorers.
-    payload = "\n".join([CATALOG_VERSION, *(f"{name}{method_cache_semantics(name)}" for name in names)])
+    payload = "\n".join(
+        [version, *(f"{name}{method_cache_semantics(name)}" for name in names)]
+    )
     digest = hashlib.md5(payload.encode("utf-8")).hexdigest()[:16]
     return {
         "bench_cache_version": str(CACHE_VERSION),
@@ -264,7 +278,7 @@ def stamp_signatures(
         if signatures is not None
         else csv_signatures(csv_map, cols_map)
     )
-    engine = compute_engine_signature()
+    engine = compute_engine_signature(country=(cfg.get("_meta") or {}).get("country"))
     cfg.setdefault("_meta", {})["csv_signatures"] = sigs
     cfg["_meta"]["engine_signature"] = engine
     return sigs
@@ -324,7 +338,9 @@ def check_freshness(
     _cached_engine = cfg.get("_meta", {}).get("engine_signature")
     _engine_changed = True
     if isinstance(_cached_engine, dict) and _cached_engine:
-        _current_engine = compute_engine_signature()
+        _current_engine = compute_engine_signature(
+            country=country or (cfg.get("_meta") or {}).get("country")
+        )
         _engine_changed = any(
             str(_cached_engine.get(k, "")) != str(v)
             for k, v in _current_engine.items()

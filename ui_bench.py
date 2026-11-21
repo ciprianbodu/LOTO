@@ -646,10 +646,10 @@ def _render_bench_leaderboard_slice(
 
     _BASE = _baseline_methods()
     try:
-        from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW
+        from loto_enterprise.benchmark.methods import METHODS as _METHODS_NOW, method_applies_to_game
         from loto_enterprise.benchmark.curated import load_per_game as _load_pg
 
-        _alive_methods = set(_METHODS_NOW)
+        _alive_methods = {name for name in _METHODS_NOW if method_applies_to_game(name, folds_game_key)}
         _pg_only = set(_load_pg().get(folds_game_key) or [])
     except Exception:  # noqa: BLE001
         _alive_methods = set()
@@ -1713,7 +1713,7 @@ def _mail_exact_rating(folds_game_key: str, pool: int, method: str, entry: dict)
         engine = (cfg.get("_meta") or {}).get("engine_signature")
         if not isinstance(engine, dict) or any(
             str(engine.get(k, "")) != str(v)
-            for k, v in compute_engine_signature().items()
+            for k, v in compute_engine_signature(country=spec.country).items()
         ):
             return None
         raw = pd.read_csv(folds_path)

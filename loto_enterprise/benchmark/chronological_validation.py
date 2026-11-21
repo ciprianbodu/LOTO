@@ -45,7 +45,7 @@ def run_validation(country: str, run_id: str, scheme_codes: dict) -> None:
 
     # A shared catalog failure invalidates the entire run. Keep the previous
     # country report, just as we do for invalid launch settings.
-    require_complete_catalog()
+    require_complete_catalog(country=country)
     streams = {
         key: key == lot.bench_key_urna2
         for lot in games_for_country(country)

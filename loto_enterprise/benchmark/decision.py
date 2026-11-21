@@ -808,9 +808,12 @@ def decide_optimal_config_for_pool(
     observed = set(sub["method"])
     if candidate_methods is None:
         from loto_enterprise.benchmark.curated import load_per_game
-        from loto_enterprise.benchmark.methods import METHODS
+        from loto_enterprise.benchmark.methods import METHODS, method_applies_to_game
 
-        active = METHODS.keys() & observed
+        active = {
+            name for name in METHODS.keys() & observed
+            if method_applies_to_game(name, game_key)
+        }
         curated = [name for name in load_per_game().get(game_key, ()) if name in active]
         eligible = curated or [name for name in sub["method"].unique() if name in active]
     else:

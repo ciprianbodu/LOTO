@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 
 from . import validate_percentiles
-from .methods import call_method, method_meta
+from .methods import call_method, method_applies_to_game, method_meta
 from .hw_sampler import HwSampler, HwSnapshot
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -650,16 +650,13 @@ def _methods_for_game(
     methods_per_game: dict[str, list[str]] | None,
     game_key: str,
 ) -> list[str]:
-    """Metodele efectiv rulate pentru joc, deduplicate și validate în ``methods``.
-
-    Fără matrice sau fără cheia jocului păstrăm comportamentul compatibil: toate
-    metodele. O cheie prezentă reprezintă o selecție explicită, inclusiv dacă
-    lista este goală.
-    """
-    if methods_per_game is None or game_key not in methods_per_game:
-        return list(dict.fromkeys(methods))
+    """Deduplicate and apply both the requested list and the method's game scope."""
+    requested = methods if methods_per_game is None else methods_per_game.get(game_key, methods)
     allowed = set(methods)
-    return list(dict.fromkeys(m for m in methods_per_game[game_key] if m in allowed))
+    return list(dict.fromkeys(
+        name for name in requested
+        if name in allowed and method_applies_to_game(name, game_key)
+    ))
 
 
 _PER_PROC_GB = 0.6

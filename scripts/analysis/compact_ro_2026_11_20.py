@@ -24,19 +24,27 @@ from scipy.stats import binomtest
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import methods
 from loto_enterprise.benchmark.decision import expected_random_rate, holm_adjusted
-from loto_enterprise.benchmark.methods_compact import COMPACT_METHODS
 from loto_enterprise.core.dynamic_pools import ranked_pools
-from loto_enterprise.core.dynamic_winner import dynamic_forecasts
+from loto_enterprise.core.dynamic_winner import _forecast_origins
 from loto_enterprise.core.lotteries import lottery_by_bench_key
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.score_validation import has_usable_score_variance
 from scripts.analysis import legacy_methods_2026_11_20 as legacy
 from scripts.analysis.nested_wfv_2026_11_18 import read_draws
-from scripts.analysis.validate_dynamic_lr_2026_11_19 import archived_forecasts
+from scripts.analysis.validate_dynamic_lr_2026_11_19 import (
+    _archived_four_plus_winner,
+    archived_forecasts,
+)
 
 HERE = Path(__file__).resolve().parent
 AS_OF = np.datetime64("2026-11-19")
-CURRENT = ("frequency", *COMPACT_METHODS, "random")
+# Declaration order determined ties in the original selector and its control.
+STUDY_METHODS = (
+    "compact_multiscale_shrink",
+    "compact_transition_prior",
+    "compact_renewal_hazard",
+)
+CURRENT = ("frequency", *STUDY_METHODS, "random")
 # K, official LR code, previous training winner, previous holdout leader.
 # The last entry is descriptive. It cannot participate in the prospective rule.
 SETTINGS = {
@@ -137,12 +145,31 @@ def fixed_winner(candidates, names, counts):
     return min(candidates, key=lambda n: (-int(counts[names.index(n)]), n != "frequency", n))
 
 
+def archived_v4_forecasts(matrix, bounds, scheme, origins, **settings):
+    """Replay the four selectable methods in the original 2026-11-20 study."""
+    candidates = CURRENT[:-1]
+    return _forecast_origins(
+        matrix, bounds, scheme, origins,
+        candidates=candidates,
+        select_winner=_archived_four_plus_winner,
+        selection_metadata={
+            "version": "dynamic-lr-v4-compact-pool-4plus",
+            "hit_scope": "pool",
+            "pool_hit_target": 4,
+            "pool_size": scheme.n,
+            "candidate_methods": list(candidates),
+            "control_method": "random",
+        },
+        **settings,
+    )
+
+
 def dynamic_hits(matrix, bounds, days, scheme, *, archived):
     settings = {"max_run": 2, "penalty_draws": 0}
     if archived:
         forecasts = archived_forecasts(matrix, bounds, scheme, days, version="dynamic-lr-v3-pool-4plus", settings=settings)
     else:
-        forecasts = dynamic_forecasts(matrix, bounds, scheme, days, **settings)
+        forecasts = archived_v4_forecasts(matrix, bounds, scheme, days, **settings)
     outcomes = []
     for start, end in zip(days, np.r_[days[1:], len(matrix)], strict=True):
         scores, detail = forecasts[start]
@@ -179,9 +206,9 @@ def evaluate(key, *, rescan, cache_dir):
         old_winner = fixed_winner(old_candidates, names, train) if rescan else locked
         old_leader = fixed_winner(old_candidates, names, test) if rescan else previous_leader
         chosen = fixed_winner(CURRENT[:-1], names, train)
-        new_leader = fixed_winner(COMPACT_METHODS, names, test)
+        new_leader = fixed_winner(STUDY_METHODS, names, test)
         trials = {name: name for name in CURRENT}
-        trials.update(static_new=chosen, only_new=fixed_winner(COMPACT_METHODS, names, train),
+        trials.update(static_new=chosen, only_new=fixed_winner(STUDY_METHODS, names, train),
                       static_old=old_winner, retrospective_new=new_leader, retrospective_old=old_leader)
         series = {arm: h[cut:, names.index(method)] for arm, method in trials.items()}
         if code is not None:
@@ -230,7 +257,7 @@ def main():
     else:
         with ProcessPoolExecutor(max_workers=args.jobs) as workers:
             rows = list(chain.from_iterable(workers.map(run, SETTINGS)))
-    for group in (COMPACT_METHODS, {"static_new"}, {"dynamic_v4"}):
+    for group in (STUDY_METHODS, {"static_new"}, {"dynamic_v4"}):
         relevant = [r for r in rows if r["arm"] in group]
         adjust(relevant, "exact_binomial_p", "uniform_p_holm")
         adjust(relevant, "paired_greater_p", "paired_p_holm")

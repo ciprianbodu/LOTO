@@ -1,14 +1,15 @@
 {
   "_meta": {
-    "updated": "2026-11-20",
-    "criterion": "Același catalog compact pentru toate jocurile. Selecția se evaluează prin Re-Bench și walk-forward."
+    "updated": "2026-11-21",
+    "criterion": "Catalogul compact plus markov_lag2 pentru jocurile Loteriei Române. Selecția se evaluează prin Re-Bench și walk-forward."
   },
   "active": [
     "random",
     "frequency",
     "compact_multiscale_shrink",
     "compact_transition_prior",
-    "compact_renewal_hazard"
+    "compact_renewal_hazard",
+    "markov_lag2"
   ],
   "per_game": {}
 }

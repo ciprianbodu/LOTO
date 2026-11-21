@@ -143,16 +143,19 @@ def resolve_methods_per_game(
     fiecare cheie configurată păstrăm exact lista acelui joc și adăugăm
     baseline-urile structurale disponibile (``random`` + ``frequency``).
 
-    O cheie absentă sau o listă fără nicio metodă validă este omisă din rezultat;
-    ``runner.run_benchmark`` interpretează lipsa cheii drept fallback sigur la
-    toate metodele candidate. Astfel un JSON incomplet nu poate produce tăcut un
-    joc fără folduri.
+    Pentru o cheie absentă sau o listă fără metode valide se folosesc toate
+    metodele compatibile cu jocul.
     """
+    from .methods import method_applies_to_game
+
     ordered = list(dict.fromkeys(str(m).strip() for m in candidates if str(m).strip()))
-    allowed = set(ordered)
     configured = load_per_game()
     out: dict[str, list[str]] = {}
     for game_key in dict.fromkeys(str(g) for g in game_keys):
+        game_candidates = [m for m in ordered if method_applies_to_game(m, game_key)]
+        allowed = set(game_candidates)
+        if game_candidates != ordered:
+            out[game_key] = game_candidates
         requested = configured.get(game_key)
         if not requested:
             continue

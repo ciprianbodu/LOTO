@@ -12,9 +12,11 @@ from typing import Callable, Sequence
 
 import numpy as np
 
+from loto_enterprise.core.lotteries import RO, lottery_by_bench_key, normalize_country
+
 logger = logging.getLogger(__name__)
 
-CATALOG_VERSION = "compact-v1"
+CATALOG_VERSION = "compact-v2"
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +108,19 @@ def _load_extra_methods() -> None:
         else:
             METHODS[name] = definition
 
+    try:
+        from .methods_markov import score_markov_lag2
+    except Exception as exc:
+        METHOD_LOAD_ERRORS["methods_markov"] = f"{type(exc).__name__}: {exc}"
+        logger.exception("Nu s-a putut încărca modulul de scorare methods_markov.")
+        return
+    METHODS["markov_lag2"] = (
+        score_markov_lag2,
+        "transition",
+        False,
+        "Tranziții la două extrageri distanță",
+    )
+
 
 _load_extra_methods()
 
@@ -121,16 +136,38 @@ def list_methods() -> list[str]:
     return list(METHODS)
 
 
-def require_complete_catalog() -> None:
-    """A normal benchmark or validation needs both references and all three scorers."""
-    if (
-        not METHOD_LOAD_ERRORS
-        and BASELINES.keys() <= METHODS.keys()
-        and sum(name.startswith("compact_") for name in METHODS) == 3
-    ):
+def method_applies_to_game(name: str, game_key: str | None) -> bool:
+    """Limit the reintroduced scorer to the Romanian Lottery's draw streams."""
+    if resolve_method_name(name) != "markov_lag2":
+        return True
+    lottery = lottery_by_bench_key(game_key)
+    return lottery is not None and lottery.is_romanian
+
+
+def catalog_version_for_game(game_key: str) -> str:
+    """Keep the previous catalog identity where the candidate set is unchanged."""
+    return (
+        CATALOG_VERSION if method_applies_to_game("markov_lag2", game_key) else "compact-v1"
+    )
+
+
+def require_complete_catalog(*, country: str = RO) -> None:
+    """Check that the scorers needed in the selected country have loaded."""
+    romanian = normalize_country(country) == RO
+    required = BASELINES.keys() | ({"markov_lag2"} if romanian else set())
+    errors = {
+        module: error for module, error in METHOD_LOAD_ERRORS.items()
+        if romanian or module != "methods_markov"
+    }
+    if not errors and required <= METHODS.keys() and sum(
+        name.startswith("compact_") for name in METHODS
+    ) == 3:
         return
-    details = ", ".join(f"{module}: {error}" for module, error in METHOD_LOAD_ERRORS.items())
-    raise RuntimeError(f"Catalogul {CATALOG_VERSION} este incomplet ({details or 'înregistrare incompletă'}).")
+    details = ", ".join(f"{module}: {error}" for module, error in errors.items())
+    version = CATALOG_VERSION if romanian else "compact-v1"
+    raise RuntimeError(
+        f"Catalogul {version} este incomplet ({details or 'înregistrare incompletă'})."
+    )
 
 
 def method_meta(name: str) -> dict:

@@ -35,9 +35,13 @@ METHOD_LOAD_ERRORS = {}
 
 
 def archived_scoring_sources(root: Path) -> list[Path]:
-    """Sources outside the live package that dated scorer caches must hash."""
+    """Sources that dated scorer caches must hash."""
     analysis = root / "scripts" / "analysis"
-    return [analysis / "legacy_methods_2026_11_20.py", *sorted((analysis / "legacy_scoring").glob("methods*.py"))]
+    return [
+        analysis / "legacy_methods_2026_11_20.py",
+        *sorted((analysis / "legacy_scoring").glob("methods*.py")),
+        root / "loto_enterprise/benchmark/methods_markov.py",
+    ]
 
 
 def eligible_methods_for_game(game_key):

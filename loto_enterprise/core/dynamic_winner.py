@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from functools import partial
 
 import numpy as np
 
 from loto_enterprise.benchmark.methods import (
-    METHODS,
-    METHOD_LOAD_ERRORS,
     call_method,
+    require_complete_catalog,
     score_frequency,
 )
 from loto_enterprise.core.dynamic_pools import ranked_pools
@@ -24,13 +24,19 @@ from loto_enterprise.core.score_validation import SCORE_VARIANCE_EPSILON
 
 logger = logging.getLogger(__name__)
 
-DYNAMIC_VERSION = "dynamic-lr-v4-compact-pool-4plus"
+DYNAMIC_VERSION = "dynamic-lr-v5-markov-lag2-pool-4plus"
 POOL_HIT_TARGET = 4
 WARMUP_DRAWS = 250
 WINDOW_DAYS = 104
 MIN_DAYS = 26
-# Fixed before replay: the random scorer is the last row, a comparator only.
-CANDIDATES = ("frequency", *(name for name in METHODS if name.startswith("compact_")))
+# Declaration order determines ties. Changing eligibility requires a new version.
+CANDIDATES = (
+    "frequency",
+    "compact_multiscale_shrink",
+    "compact_transition_prior",
+    "compact_renewal_hazard",
+    "markov_lag2",
+)
 
 
 def _method_rows(history, bounds, universe, reported, candidates, scorer):
@@ -64,8 +70,8 @@ def _method_rows(history, bounds, universe, reported, candidates, scorer):
     return np.stack(registered), np.asarray(unavailable[:-1], dtype=bool)
 
 
-def _score_rows(history, bounds, universe, reported):
-    return _method_rows(history, bounds, universe, reported, CANDIDATES, call_method)
+def _score_rows(candidates, history, bounds, universe, reported):
+    return _method_rows(history, bounds, universe, reported, candidates, call_method)
 
 
 def _winner(totals, days, thresholds):
@@ -103,13 +109,7 @@ def dynamic_forecasts(
     The history passed in already respects the caller's scoring lookback.
     When cancelled, only fully prepared forecast origins are returned.
     """
-    if (
-        len(CANDIDATES) != 4
-        or METHOD_LOAD_ERRORS
-        or not all(name in METHODS for name in (*CANDIDATES, "random"))
-    ):
-        reason = METHOD_LOAD_ERRORS.get("methods_compact") or "înregistrare incompletă"
-        raise RuntimeError(f"Catalogul compact LR este indisponibil: {reason}")
+    require_complete_catalog()
     return _forecast_origins(
         matrix,
         cutoffs,
@@ -228,7 +228,7 @@ def _forecast_origins(
     score_rows = (
         prepare_archived_scores(indicators, universe)
         if prepare_archived_scores is not None and day_indices
-        else _score_rows
+        else partial(_score_rows, candidates)
     )
     results = {}
     reported = set()

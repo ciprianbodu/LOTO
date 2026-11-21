@@ -26,7 +26,7 @@ from loto_enterprise.core.history import (
     history_dates,
     training_cutoffs,
 )
-from loto_enterprise.core.lotteries import GAMES
+from loto_enterprise.core.lotteries import GAMES, lottery_by_bench_key
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
@@ -80,10 +80,15 @@ def call_method(*args, **kwargs):
 def active_methods(key):
     from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
     from loto_enterprise.benchmark.methods import list_methods, require_complete_catalog
+    from loto_enterprise.benchmark.runner import _methods_for_game
 
-    require_complete_catalog()
-    available, _ = apply_curation(list_methods())
-    names = resolve_methods_per_game(available, [key]).get(key, available)
+    lot = lottery_by_bench_key(key)
+    if lot is None:
+        raise ValueError(f"Unknown validation stream: {key}")
+    require_complete_catalog(country=lot.country)
+    available, info = apply_curation(list_methods())
+    configured = resolve_methods_per_game(available, [key]) if info.get("active") else None
+    names = _methods_for_game(available, configured, key)
     # Frequency wins exact ties. Random is evaluated on the same dates but
     # remains outside the selectable methods for every policy.
     return ("frequency", *(name for name in names if name not in ("frequency", "random")), "random")
@@ -339,7 +344,7 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
     report = {"key": key, "n": test_len, "n_dates": len(days) - split_day, "k": k, "scheme": scheme, "hit_target": threshold,
               "start": str(dates[start + days[0]]), "end": str(dates[-1]), "sha256": digest, "arms": result}
     if active_catalog:
-        report.update(catalog_version=registry.CATALOG_VERSION, candidate_methods=list(candidates),
+        report.update(catalog_version=registry.catalog_version_for_game(key), candidate_methods=list(candidates),
                       comparator="random", fallback_days=fallback_days, scored_days=len(days))
     return report
 

@@ -62,7 +62,12 @@ from rich.progress import (
 
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES, validate_percentiles
 from loto_enterprise.benchmark.hardware import snapshot as hw_snapshot
-from loto_enterprise.benchmark.methods import METHODS, list_methods, method_meta
+from loto_enterprise.benchmark.methods import (
+    METHODS,
+    list_methods,
+    method_applies_to_game,
+    method_meta,
+)
 from loto_enterprise.benchmark.reporting import (
     render_hardware,
     render_methods_table,
@@ -405,7 +410,7 @@ def main() -> int:
         from loto_enterprise.benchmark.methods import require_complete_catalog
 
         try:
-            require_complete_catalog()
+            require_complete_catalog(country=country)
         except RuntimeError as exc:
             logging.error("[bench] %s", exc)
             return 1
@@ -476,11 +481,11 @@ def main() -> int:
         if is_foreign
         else discover_games(args.istoric)
     )
-    # `active` este uniunea tuturor jocurilor. În producție rulăm numai lista
-    # `per_game` relevantă (+ baseline-urile structurale adăugate de resolver),
-    # fiindcă decizia și UI-ul ignoră oricum restul uniunii pentru acel joc.
-    # Override-urile explicite păstrează comportamentul cerut: fiecare metodă
-    # indicată rulează pe fiecare joc.
+    if games and not any(method_applies_to_game(m, g.key) for g in games for m in methods):
+        logging.error("[bench] Nicio metodă solicitată nu este eligibilă pentru aceste jocuri.")
+        return 2
+    # Curarea de producție poate restrânge lista fiecărui joc. Restricțiile
+    # proprii metodei se aplică și unei liste de diagnostic date explicit.
     methods_per_game = (
         _resolve_methods_per_game(methods, (g.key for g in games))
         if CURATION_INFO.get("active") and not _explicit
@@ -524,7 +529,11 @@ def main() -> int:
     available_methods = [m for m in methods if meta_map[m]["available"]]
     _control_factor = 1 if args.no_shuffled_control else 2
     total_est = (
-        sum(len(methods_per_game.get(g.key, available_methods)) for g in games)
+        sum(
+            method_applies_to_game(name, game.key)
+            for game in games
+            for name in methods_per_game.get(game.key, available_methods)
+        )
         * len(pcts)
         * _control_factor
     )
