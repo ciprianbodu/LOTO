@@ -56,7 +56,8 @@ def _ticket_details(plan, *, expanded=False):
             pool = forecast["pool"]
             origin = "Pool din generare" if forecast["generated"] else "Pool calculat cu setările generatorului"
             if "expanded_from" in forecast:
-                origin = f"Pool LR maxim pentru buget · de la {forecast['expanded_from']} la {len(pool)} numere"
+                origin = "Pool LR maxim pentru buget" if forecast["expanded_to_max"] else "Pool pentru codul recomandat"
+                origin += f" · de la {forecast['expanded_from']} la {len(pool)} numere"
             else:
                 origin += f" · {len(pool)} numere"
             code = f" · Cod {forecast['code']}" if forecast["code"] is not None else ""
@@ -184,7 +185,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
     with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
         ui.label(
             "Șansa teoretică se calculează pentru o extragere uniformă. "
-            "Zonele folosesc pool-ul generatorului sau pool-ul LR maxim. Totalul include taxa de bilet."
+            "Zonele folosesc pool-ul generatorului sau un pool calculat pentru recomandare. Totalul include taxa de bilet."
         ).classes("text-body2")
         game_options = {"all": "Toate jocurile"}
         game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})

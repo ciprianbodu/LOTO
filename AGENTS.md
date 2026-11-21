@@ -2115,10 +2115,12 @@ cu bila Joker la obiectivul „Orice premiu”.
 
 Panoul alege întâi portofoliul după buget și obiectiv. Dacă pozițiile sale
 încap în pool-ul generat, zonele preiau numere din acel pool. Panoul
-calculează pool-ul configurat înaintea primei generări. Când portofoliul
-cere mai multe numere, motorul folosește metoda câștigătoare la dimensiunea
-maximă a catalogului LR pentru joc. Panoul indică dimensiunea, codul de
-referință și metoda sursei. Urna 2 Joker își folosește pool-ul propriu.
+calculează pool-ul configurat înaintea primei generări. Dacă este nevoie
+de mai multe numere, motorul recalculează pool-ul la dimensiunea codului
+recomandat pentru o singură zonă sau la dimensiunea maximă a catalogului
+LR pentru mai multe zone. În ambele cazuri aplică metoda câștigătoare la
+dimensiunea folosită. Panoul indică dimensiunea, codul de referință și
+metoda sursei. Urna 2 Joker își folosește pool-ul propriu.
 
 Când configurația cere mai multe numere decât oferă pool-urile disponibile,
 panoul caută în buget completări cu zone care se pot suprapune. Șansa se

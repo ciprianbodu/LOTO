@@ -106,7 +106,7 @@ def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5,
 ):
-    """Plan by budget, then use the production pool or score the largest LR pool."""
+    """Plan by budget, then use the production pool or score the required LR pool."""
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
@@ -124,19 +124,26 @@ def recommend_playable_games(
                 scheme = resolve_lr_scheme(lot.geometry, pool_codes[lot.game_id])
                 size = scheme.n
                 dynamic_mode = dynamic
-            maximum = max(lr_pool_sizes(lot.geometry))
-            if size < min(maximum, required_pool_size(plan)):
-                largest = select_lr_scheme(lot.geometry, maximum)
+            if size < required_pool_size(plan):
+                zones = [zone for ticket in plan["tickets"] for zone in ticket]
+                if len(zones) == 1:
+                    replacement = resolve_lr_scheme(lot.geometry, zones[0]["code"])
+                else:
+                    replacement = select_lr_scheme(lot.geometry, max(lr_pool_sizes(lot.geometry)))
+            else:
+                replacement = None
+            if replacement is not None and replacement.n > size:
                 filename = source_name
                 saved_lookback = saved.get("lookback")
                 expanded = _preview_pool(
-                    lot, source, largest, lookback if saved_lookback is None else float(saved_lookback),
+                    lot, source, replacement, lookback if saved_lookback is None else float(saved_lookback),
                     dynamic_mode, joker_size,
                 )
                 if result:
                     expanded.update(jokers=forecast["jokers"], joker_selection=forecast["joker_selection"])
                 forecast = expanded
                 forecast["expanded_from"] = size
+                forecast["expanded_to_max"] = len(zones) > 1
             elif not result:
                 forecast = _preview_pool(lot, source, scheme, lookback, dynamic, joker_size)
             pool = _balls(forecast["pool"], lot.max_n)
