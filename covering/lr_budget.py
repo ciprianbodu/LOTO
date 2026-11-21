@@ -57,6 +57,7 @@ def recommend_games(budget_lei: int, objective: str, game_id: str | None = None)
             "denominator": plan["denominator"],
             "upper": plan.get("upper"),
             "optimal": plan["optimal"],
+            "anchor_size": plan["anchor_size"],
             "tickets": [
                 zones[start:start + lot.per_ticket]
                 for start in range(0, len(zones), lot.per_ticket)

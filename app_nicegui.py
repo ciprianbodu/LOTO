@@ -3943,6 +3943,20 @@ def _render_lr_pool_input(game: str, title: str):
 @ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
+    refresh_budget = None
+
+    def budget_forecast_inputs(game_id):
+        histories = {}
+        with STATE_LOCK:
+            for name, history in STATE["datasets"]:
+                lot = _game_spec_for(name)
+                if lot.is_romanian and (game_id is None or game_id == lot.game_id):
+                    histories[lot.game_id] = (name, history)
+            return {
+                "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
+                "lookback": _effective_lookback_pct(),
+                "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
+            }
 
     # Chevron-ul expansion-urilor: vârful în JOS când e DESCHIS (arată spre conținut),
     # în sus când e închis — invers față de implicitul Quasar. Inversăm rotația global
@@ -4018,7 +4032,7 @@ def main_page() -> None:
                 "și analizele funcționează."
             ).classes("text-caption text-grey")
 
-        def _load_country_history() -> None:
+        async def _load_country_history() -> None:
             loaded, errors = _load_registry_histories(_selected_games())
             for err in errors:
                 ui.notify(f"Istoric respins: {err}", type="negative", timeout=8000)
@@ -4030,6 +4044,8 @@ def main_page() -> None:
                 )
             datasets_label.refresh()
             _bench_freshness_panel.refresh()
+            if refresh_budget is not None:
+                await refresh_budget()
 
         ui.button(
             f"📂 Încarcă istoricul {_cc_name}", on_click=_load_country_history
@@ -4082,6 +4098,8 @@ def main_page() -> None:
             ]
             ui.notify(f"Încărcat {name} ({len(df)} extrageri).", type="positive")
             datasets_label.refresh()
+            if refresh_budget is not None:
+                await refresh_budget()
 
         ui.upload(on_upload=_on_upload, multiple=True, auto_upload=True).props(
             "accept=.csv"
@@ -4146,7 +4164,9 @@ def main_page() -> None:
         _pool_inputs = []
         budget_slider = None
         if _cc == _LOT.RO:
-            _bind_save(ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val")
+            dynamic_input = _bind_save(
+                ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val",
+            )
             ui.label(
                 "La fiecare generare și pas walk-forward, metoda se alege după numărul de extrageri "
                 "anterioare cu cel puțin 4 numere în pool-ul de dimensiunea aleasă. "
@@ -4239,7 +4259,7 @@ def main_page() -> None:
         ):
             if _budget_input is not None:
                 _budget_input.on_value_change(lambda: _render_large_pool_warning())
-        _bind_save(
+        lookback_input = _bind_save(
             ui.number(
                 "Analizează doar ultimele X% extrageri", min=0, max=100, step=5
             ).classes("w-full"),
@@ -4405,7 +4425,7 @@ def main_page() -> None:
         history_windows_panel()
         nested_wfv_panel(_cc)
         if budget_slider is not None:
-            lr_budget_panel(budget_slider)
+            refresh_budget = lr_budget_panel(budget_slider, budget_forecast_inputs, dynamic_input, lookback_input)
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
@@ -4465,8 +4485,11 @@ def main_page() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("[tick] refresh după walk-forward eșuat: %s", exc)
         # Re-Bench terminat → Auto-Pilot automat
+        bench_was_running = STATE.get("bench_was_running")
         _observe_bench_activity(bench_now)
         _continue_after_automatic_history(bench_now)
+        if refresh_budget is not None and bench_was_running and not STATE.get("bench_was_running"):
+            await refresh_budget()
         # Refresh UI (rapid, din STATE) — doar când e activ
         if _active:
             logs_panel.refresh()

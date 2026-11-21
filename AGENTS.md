@@ -2111,8 +2111,17 @@ Schimbarea sumei deschide și actualizează panoul „Bilete LR în buget”.
 Panoul compară până la trei jocuri după probabilitatea teoretică pentru
 obiectivul ales. Arată codurile, variantele, biletele fizice și taxa aferentă.
 Probabilitățile folosesc toate cele șase bile extrase la 5/40 și categoriile
-cu bila Joker la obiectivul „Orice premiu”. Calculul este independent de
-istoric și de selectorul de metode.
+cu bila Joker la obiectivul „Orice premiu”.
+
+Biletele afișează numere concrete. Pentru fiecare dimensiune de pool din
+portofoliu se folosește selecția walk-forward după 4+ în pool sau decizia
+fixată de Re-Bench, în funcție de setarea din bara laterală. Se respectă
+fereastra de istoric și se afișează fișierul, ultima extragere, metoda și
+rezultatul ei în selecția walk-forward. La Joker, clasamentul separat din
+Urna 2 furnizează câte o bilă distinctă pentru fiecare zonă. Pool-urile se
+completează în ordinea descrescătoare a dimensiunii, cu intersecțiile din
+construcția certificată. Șansa teoretică aparține astfel biletelor afișate.
+Datele indisponibile se semnalează în panou.
 
 ### Setări simplificate de generare — 2026-11-21
 
