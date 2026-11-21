@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from itertools import combinations
 from math import comb
+from numbers import Integral
 
 from covering import lr_schemes as catalog
 from covering.lr_selection import resolve_lr_scheme
@@ -81,15 +82,43 @@ def _constructible(options, maximum, drawn, threshold, unit, zones, budget):
     return found
 
 
-@lru_cache(maxsize=3)
-def _study(game):
+def _best_at_budget(constructions, budget):
+    return min(
+        (entry for entry in constructions.items() if entry[0] <= budget),
+        key=lambda row: (-row[1][0], row[0], len(row[1][1]), row[1][1]),
+        default=(0, (0, ())),
+    )
+
+
+def _catalog_data(game):
     lot = require_lottery(game, country="RO")
-    unit = round(lot.price * 100)
     schemes = sorted(catalog.lr_schemes(game), key=lambda s: s.code)
     manifest = {(code, n) for g, code, n in catalog._manifest(str(catalog.LR_DIR)) if g == game}
     if not manifest or manifest != {(s.code, s.n) for s in schemes}:
         raise ValueError(f"Catalogul de scheme LR este incomplet pentru {game}.")
     exact = {s.code: catalog.scheme_numerators(s) for s in schemes}
+    return lot, schemes, exact
+
+
+def _example_pools(pieces, maximum):
+    # Use the smallest common anchor that leaves enough distinct private numbers.
+    count = len(pieces)
+    excess = max(0, sum(piece.n for piece in pieces) - maximum)
+    shared = (excess + count - 2) // (count - 1) if count > 1 else 0
+    offset = shared
+    pools = []
+    for piece in pieces:
+        end = offset + piece.n - shared
+        pools.append([*range(1, shared + 1), *range(offset + 1, end + 1)])
+        offset = end
+    assert offset <= maximum
+    return shared, pools
+
+
+@lru_cache(maxsize=3)
+def _study(game):
+    lot, schemes, exact = _catalog_data(game)
+    unit = round(lot.price * 100)
     # If six numbers are drawn, two disjoint pools can both hit 3+ only
     # through one covered triple in each. A third such hit is impossible.
     triple_counts = {
@@ -108,21 +137,11 @@ def _study(game):
         for original in schemes:
             budget = cost_bani(original.size, 1, unit, lot.per_ticket)
             bound = min(denominator, max(total for price, total in upper.items() if price <= budget))
-            price, (best, codes) = min(((p, entry) for p, entry in lower.items() if p <= budget),
-                                       key=lambda pair: (-pair[1][0], pair[0], len(pair[1][1]), pair[1][1]))
+            price, (best, codes) = _best_at_budget(lower, budget)
             assert exact[original.code][t] <= best <= bound
             pieces = [by_code[c] for c in codes]
-            required = sum(s.n for s in pieces)
-            overlaps = max(0, required - lot.max_n)
-            shared = (overlaps + len(pieces) - 2) // (len(pieces) - 1) if len(pieces) > 1 else 0
+            shared, pools = _example_pools(pieces, lot.max_n)
             assert shared <= 2 * t - lot.draw_n - 1
-            offset = shared
-            pools = []
-            for s in pieces:
-                pool = list(range(1, shared + 1)) + list(range(offset + 1, offset + s.n - shared + 1))
-                offset += s.n - shared
-                pools.append(pool)
-            assert offset <= lot.max_n
             side_counts = {}
             for threshold in range(3, lot.pick_n + 1):
                 if len(pieces) == 1 or shared < 2 * threshold - lot.draw_n:
@@ -144,3 +163,69 @@ def compare_portfolios(game, base_code):
     """Isolated copies of the 4+ and 5+ comparisons under this code's full ticket price."""
     base = resolve_lr_scheme(game, base_code)
     return [deepcopy(r) for r in _study(game) if r["base"] == base.code]
+
+
+@lru_cache(maxsize=128)
+def _budget_record(game, budget, threshold):
+    lot, schemes, exact = _catalog_data(game)
+    if not 4 <= threshold <= lot.pick_n:
+        raise ValueError(f"Pragul pentru {game} trebuie să fie între 4 și {lot.pick_n}.")
+    unit, zones = round(lot.price * 100), lot.per_ticket
+    options = [
+        _Option(s.code, s.n, s.size, exact[s.code][threshold]) for s in schemes
+    ]
+    denominator = comb(lot.max_n, lot.draw_n)
+    # The anchor construction has at most this much private space. Every code
+    # consumes n-anchor positions, so its variants/position ratio also bounds
+    # the total affordable size at which these constructions stop changing.
+    anchor = 2 * threshold - lot.draw_n - 1
+    space = lot.max_n - anchor
+    max_marks = space // min(item.n - anchor for item in options)
+    max_variants = max(space * item.size // (item.n - anchor) for item in options)
+    construction_cap = cost_bani(max_variants, max_marks, unit, zones)
+    lower = _constructible(
+        options, lot.max_n, lot.draw_n, threshold, unit, zones, min(budget, construction_cap)
+    )
+    price, (best, codes) = _best_at_budget(lower, budget)
+    if not codes:
+        upper = 0
+    elif budget <= construction_cap:
+        affordable = (budget - FEE_BANI) // unit
+        bounds = _unrestricted_bounds(options, affordable, unit, zones)
+        upper = min(denominator, max(total for p, total in bounds.items() if p <= budget))
+    else:
+        # Arbitrarily many codes of any overlap remain legal. Each mark costs
+        # at least size*unit + fee/zones, since physical tickets round up.
+        # Apply the largest favorable-draws/price ratio to the entire budget.
+        upper = min(denominator, max(
+            budget * item.favorable * zones // (item.size * unit * zones + FEE_BANI)
+            for item in options
+        ))
+    by_code = {s.code: s for s in schemes}
+    pieces = [by_code[code] for code in codes]
+    shared, pools = _example_pools(pieces, lot.max_n)
+    assert best <= upper and shared <= anchor
+    return dict(
+        game=game, threshold=threshold, budget_bani=budget, price_bani=price,
+        attained=best, denominator=denominator, upper=upper, optimal=best == upper,
+        variants=sum(s.size for s in pieces), codes=list(codes), anchor_size=shared,
+        example_pools=pools,
+    )
+
+
+def recommend_main_hits(game: str, budget_bani: int, threshold: int = 4) -> dict:
+    """Recommend complete Romanian LR codes at a physical-ticket budget in bani.
+
+    attained / denominator is the exact chance of reaching the threshold on at
+    least one variant. upper bounds every affordable arrangement, including
+    repeated codes and overlapping pools. An empty plan costs zero.
+    """
+    if (
+        isinstance(budget_bani, bool)
+        or not isinstance(budget_bani, Integral)
+        or budget_bani < 0
+    ):
+        raise ValueError("Bugetul trebuie să fie un număr întreg de bani, cel puțin zero.")
+    if isinstance(threshold, bool) or not isinstance(threshold, Integral):
+        raise ValueError("Pragul trebuie să fie un număr întreg.")
+    return deepcopy(_budget_record(game, int(budget_bani), int(threshold)))

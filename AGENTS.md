@@ -2102,6 +2102,18 @@ Motorul compară cele trei metode compacte, `markov_lag2` și `frequency`, la di
 
 Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de extrageri până la 15 noiembrie, a înregistrat 17 evenimente 4+ pe variante, față de 10 pentru `random` și 12 pentru `frequency`. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
 
+### Sugestii LR după buget — 2026-11-21
+
+Panoul „Bilete LR în buget” din ecranul României acceptă bugete de la
+100 lei. Glisorul pornește cu intervalul 100–200 lei, care se poate
+extinde. Poți alege un singur joc sau compara toate cele trei jocuri
+după probabilitatea teoretică pentru obiectivul ales. Planul afișează
+codurile, numărul de variante și repartizarea pe bilete fizice, cu
+taxa aferentă. Probabilitățile
+folosesc toate cele șase bile extrase la 5/40 și categoriile cu bila
+Joker la obiectivul „Orice premiu”. Panoul calculează independent de
+istoric și de selectorul de metode.
+
 ### Portofolii de scheme reduse la același buget — 2026-11-18
 
 - Panoul românesc „Compară schemele LR la același buget” folosește
