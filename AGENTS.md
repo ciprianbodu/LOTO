@@ -2105,7 +2105,8 @@ Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de ext
 ### Sugestii LR după buget — 2026-11-21
 
 În ecranul României, glisorul de buget se află în bara din stânga, sub
-glisoarele de pool. Pornește cu intervalul extensibil 100–200 lei.
+glisoarele de pool. Valoarea inițială este 200 lei, cu reglaj direct între
+100 și 400 lei în pași de 1 leu.
 Schimbarea sumei deschide și actualizează panoul „Bilete LR în buget”.
 Panoul compară până la trei jocuri după probabilitatea teoretică pentru
 obiectivul ales. Arată codurile, variantele, biletele fizice și taxa aferentă.
