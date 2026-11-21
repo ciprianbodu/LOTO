@@ -40,7 +40,7 @@ def _popcount(x, xp):
     if xp is not np:
         tbl = xp.asarray(tbl)
     return sum(
-        tbl[(x >> xp.uint32(8 * k)).astype(xp.uint32) & xp.uint32(255)] for k in range(4)
+        tbl[(x >> (8 * byte)).astype(xp.uint8)] for byte in range(x.dtype.itemsize)
     )
 
 
@@ -53,20 +53,25 @@ def enumerate_hit_histogram(
     use_gpu: bool | None = None,
 ) -> dict:
     """Histograma exactă: counts[h] = numărul de extrageri cu max-hit == h pe
-    un bilet (h = 0..draw_n). `pool`/`tickets` pe numere 1..max_num."""
+    un bilet (h = 0..draw_n). `pool` are cel mult 64 de numere din 1..max_num."""
     pool = sorted(int(n) for n in pool)
     v = len(pool)
-    if not (0 < draw_n <= max_num and v <= max_num):
+    if not (0 < draw_n <= max_num and v <= min(64, max_num)):
         raise ValueError("geometrie invalidă")
     if any(not 1 <= n <= max_num for n in pool):
         raise ValueError("număr din pool în afara 1..max_num")
-    pos = {n: i for i, n in enumerate(pool)}
-    for t in tickets:
-        if any(n not in pos for n in t):
+    bits = {number: 1 << i for i, number in enumerate(pool)}
+    if len(bits) != v:
+        raise ValueError("pool-ul conține numere duplicate")
+    draw_bits = np.zeros(max_num + 1, dtype=np.uint64)
+    draw_bits[pool] = list(bits.values())
+    ticket_masks = []
+    for ticket in tickets:
+        numbers = set(ticket)
+        if not numbers <= bits.keys():
             raise ValueError("bilet cu numere în afara pool-ului")
-    tmasks = np.array(
-        [sum(1 << pos[n] for n in t) for t in tickets], dtype=np.int64
-    )
+        ticket_masks.append(sum(bits[number] for number in numbers))
+    tmasks = np.array(ticket_masks or [0], dtype=np.uint64)
     xp = _CUPY if (use_gpu is None or use_gpu) and _CUPY is not None else np
     if xp is not np:
         tmasks = xp.asarray(tmasks)
@@ -83,8 +88,8 @@ def enumerate_hit_histogram(
                 break
         if not chunk:
             break
-        arr = np.array(chunk, dtype=np.int32)
-        dmask = (np.int64(1) << (arr - 1)).sum(axis=1)
+        arr = np.array(chunk, dtype=np.intp)
+        dmask = draw_bits[arr].sum(axis=1)
         if xp is not np:
             dm = xp.asarray(dmask)
             hits = _popcount(dm[:, None] & tmasks[None, :], xp).astype(xp.int64)

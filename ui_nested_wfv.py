@@ -5,7 +5,10 @@ import json
 from nicegui import ui
 
 from loto_enterprise.benchmark import methods as registry
-from loto_enterprise.benchmark.chronological_validation import validation_path
+from loto_enterprise.benchmark.chronological_validation import (
+    selection_metric,
+    validation_path,
+)
 from loto_enterprise.core.lotteries import games_for_country, lottery_by_bench_key
 
 _POLICIES = (
@@ -20,6 +23,7 @@ _POLICIES = (
     ("ticket_frozen", "Hituri pe variantă", "La începutul testului"),
     ("ticket_block26", "Hituri pe variantă", "La fiecare 26 de zile de extragere"),
     ("ticket_daily", "Hituri pe variantă", "Înaintea fiecărei zile"),
+    ("dynamic_lr", "Selecția dinamică LR din generator", "Înaintea fiecărei zile"),
     ("ticket_hindsight", "Hituri pe variantă", "La final, retrospectiv"),
 )
 
@@ -31,6 +35,7 @@ def _nested_results(result, *, game_key=None):
         ui.label("Raportul salvat nu identifică jocul.").classes("text-warning")
         return
     single = key == game.bench_key_urna2
+    metric = selection_metric(second_urn=single, official_scheme=game.is_romanian)
     title = f"{game.display} · Urna 2" if single else game.display
     if scheme := result["scheme"]:
         kind = "Cod" if scheme["official_for_game"] else "Cod simulat"
@@ -62,7 +67,8 @@ def _nested_results(result, *, game_key=None):
     current = (
         saved_catalog == registry.catalog_version_for_game(key)
         and result.get("hit_target") == (1 if single else 4)
-        and result.get("selection_metric") == ("top1" if single else "pool_4plus")
+        and result.get("selection_metric") == metric
+        and (single or result.get("max_consecutive_run") == 0)
     )
     best = result.get("best_policy") if current else None
     labels = [("policy", "Criteriu"), ("origin", "Când s-a ales metoda")]
@@ -98,8 +104,12 @@ def _nested_results(result, *, game_key=None):
             }
         )
     if winner := next((row for row in rows if row["id"] == best), None):
-        count = result["arms"][best]["primary" if single else "pool_4plus"]
-        measure = "potriviri ale bilei" if single else "extrageri cu 4+ în pool"
+        count = result["arms"][best]["primary" if single else metric]
+        measure = {
+            "top1": "potriviri ale bilei",
+            "ticket_4plus": "extrageri cu 4+ pe o variantă LR",
+            "pool_4plus": "extrageri cu 4+ în pool",
+        }[metric]
         ui.label(
             f"Cea mai bună în perioada testată · {winner['policy']} · {winner['origin']} · "
             f"{count} {measure} din {result['n']}"
@@ -124,26 +134,29 @@ def _nested_results(result, *, game_key=None):
 
 
 def nested_wfv_panel(country):
+    lots = games_for_country(country)
     games = {
         key: (f"{g.display} · Urna 2" if key == g.bench_key_urna2 else g.display)
-        for g in games_for_country(country)
+        for g in lots
         for key in g.bench_keys
     }
+    romanian = any(lot.is_romanian for lot in lots)
     path = validation_path(country)
     with ui.expansion("Validare cronologică după Re-Bench", value=False).classes(
         "w-full"
     ):
+        criterion = (
+            "cel puțin 4 numere pe aceeași variantă a codului LR ales la pornire"
+            if romanian else "cel puțin 4 numere în pool"
+        )
         ui.label(
-            "Pe ultimele 30% din zilele eligibile, câștigă regula cu cele mai multe extrageri "
-            "în care poolul a cuprins cel puțin 4 numere extrase. Tabelul arată și câte "
-            "dintre extrageri au atins fiecare prag pe o variantă. La Joker Urna 2 contează "
-            "bilele ghicite. Rândurile retrospective servesc comparației."
+            "Pe ultimele 30% din zilele eligibile, este evidențiată regula cu cele mai multe "
+            f"extrageri cu {criterion}. Rândurile retrospective servesc comparației."
         ).classes("text-body2")
-        ui.label(
-            "Validarea folosește metodele active pentru joc, martorul aleator, istoricul din arhivă și maximum două numere "
-            "consecutive în pool. În România se aplică dimensiunea poolului și variantele codului "
-            "LR ales la pornirea Re-Bench. Pentru jocurile străine se simulează o schemă pe 10 numere."
-        ).classes("text-caption")
+        if romanian:
+            ui.label("La Joker Urna 2 se numără bilele ghicite.").classes("text-caption")
+        else:
+            ui.label("Variantele se simulează cu o schemă pe 10 numere.").classes("text-caption")
         game = ui.select(games, value=next(iter(games)), label="Joc sau urnă").classes(
             "w-full sm:w-96"
         )

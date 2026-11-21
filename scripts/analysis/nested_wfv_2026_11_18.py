@@ -20,6 +20,7 @@ import pandas as pd
 from covering.lr_schemes import _best_position
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import decision
+from loto_enterprise.core import dynamic_winner
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import (
     chronological_history,
@@ -132,7 +133,10 @@ def scheme_definition(lot, second, code):
     return scheme.n, metadata, best_ticket_hits
 
 
-def outcome_matrices(matrix, cutoffs, days, universe, k, lookup, methods, caller, fallback_days):
+def outcome_matrices(
+    matrix, cutoffs, days, universe, k, lookup, methods, caller, fallback_days,
+    *, unavailable=None,
+):
     """Evaluate a shared date prefix, with visible frequency substitution in active reports."""
     first = int(days[0])
     shape = (len(matrix) - first, len(methods))
@@ -141,6 +145,7 @@ def outcome_matrices(matrix, cutoffs, days, universe, k, lookup, methods, caller
     ticket_hits = np.empty_like(raw_hits)
     ties = np.empty((len(days), len(methods)), dtype=np.uint8)
     balls = set(range(1, universe + 1))
+    max_run = 2 if fallback_days is None else 0  # The dated research uses the old limit.
     for day, (start, end) in enumerate(zip(days, np.r_[days[1:], len(matrix)], strict=True)):
         targets = matrix[start:end]
         rows = slice(start - first, end - first)
@@ -157,6 +162,8 @@ def outcome_matrices(matrix, cutoffs, days, universe, k, lookup, methods, caller
                     raise
                 fallback_days[method] += 1
                 scores = frequency_scores
+                if unavailable is not None:
+                    unavailable[day, col] = True
             if method == "frequency":
                 frequency_scores = scores
             rank = rank_by_score(scores, k + 1)
@@ -164,7 +171,9 @@ def outcome_matrices(matrix, cutoffs, days, universe, k, lookup, methods, caller
             raw_mask = np.zeros(universe + 1, dtype=np.uint8)
             raw_mask[rank[:k]] = 1
             raw_hits[rows, col] = raw_mask[targets].sum(axis=1)
-            numbers = select_pool_from_scores(scores, k, set(), max_num=universe, max_consecutive_run=2)
+            numbers = select_pool_from_scores(
+                scores, k, set(), max_num=universe, max_consecutive_run=max_run,
+            )
             if len(numbers) != k or numbers != sorted(numbers):
                 raise ValueError("Invalid positional pool for the reduced scheme")
             positions = np.zeros(universe + 1, dtype=np.uint32)
@@ -263,6 +272,7 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
         raise ValueError("Chronological comparison requires a 4+ or 5+ pool or ticket target.")
     second = key == lot.bench_key_urna2
     primary_pool = selection_basis == "pool" and not second
+    official = lot.is_romanian and not second
     k, scheme, lookup = scheme_definition(lot, second, scheme_code)
     matrix, dates, cutoffs, days, universe, digest = read_draws(lot, second)
     threshold = 1 if second else hit_target
@@ -287,7 +297,18 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
         )
         caller = call_method
         fallback_days = None
-    raw, pools, tickets, ties = outcome_matrices(matrix, cutoffs, days, universe, k, lookup, methods, caller, fallback_days)
+    live_dynamic = (
+        active_catalog and official and threshold == dynamic_winner.TICKET_HIT_TARGET
+        and all(name in candidates for name in dynamic_winner.CANDIDATES)
+    )
+    score_options = {}
+    if live_dynamic:
+        unavailable = np.zeros((len(days), len(methods)), dtype=bool)
+        score_options["unavailable"] = unavailable
+    raw, pools, tickets, ties = outcome_matrices(
+        matrix, cutoffs, days, universe, k, lookup, methods, caller, fallback_days,
+        **score_options,
+    )
     ends = np.r_[days - days[0], len(raw)]
     split_day = MIN_VALIDATION_DAYS + (len(days) - MIN_VALIDATION_DAYS) * 7 // 10
     start = int(ends[split_day])
@@ -317,7 +338,19 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
         entries[family + "_frozen"] = forecast_methods(ends, split_day, len(days), choose)
         entries[family + "_block26"] = forecast_methods(ends, split_day, BLOCK_DAYS, choose)
     entries["ticket_daily"] = forecast_methods(ends, split_day, 1, pick_ticket)
-    if primary_pool:
+    if live_dynamic:
+        columns = [methods.index(name) for name in (*dynamic_winner.CANDIDATES, "random")]
+        ticket_events = ticket_objectives[0][:, columns]
+
+        def pick_dynamic(day):
+            first = max(0, day - dynamic_winner.WINDOW_DAYS)
+            totals = ticket_events[ends[day]] - ticket_events[ends[first]]
+            selected, _ = dynamic_winner._winner(totals[:, None], day - first, (threshold,))
+            index = columns[selected]
+            return 0 if unavailable[day, index] else index
+
+        entries["dynamic_lr"] = forecast_methods(ends, split_day, 1, pick_dynamic)
+    if primary_pool or (active_catalog and official):
         # Count eligible draws on the actual constrained pool. The prefix ends
         # before every draw on this day; argmax retains method order on ties.
         pool_events = cumulative(pools >= threshold)
@@ -345,7 +378,8 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
               "start": str(dates[start + days[0]]), "end": str(dates[-1]), "sha256": digest, "arms": result}
     if active_catalog:
         report.update(catalog_version=registry.catalog_version_for_game(key), candidate_methods=list(candidates),
-                      comparator="random", fallback_days=fallback_days, scored_days=len(days))
+                      comparator="random", fallback_days=fallback_days, scored_days=len(days),
+                      max_consecutive_run=0)
     return report
 
 
