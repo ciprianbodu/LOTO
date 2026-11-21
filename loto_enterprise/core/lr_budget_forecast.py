@@ -1,16 +1,19 @@
-"""Fill a budget portfolio with balls ranked on the available draw history."""
+"""Fill budget tickets from the production pool for each game."""
 
 from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from fractions import Fraction
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
 from covering.lr_budget import recommend_games
-from covering.lr_selection import select_lr_scheme
+from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_selection import resolve_lr_scheme
+from covering.probability import _integer
 from loto_engine import LotoEngine
 from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
 from loto_enterprise.core.history import history_dates, training_cutoffs
@@ -23,122 +26,123 @@ logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=32)
-def _validated_rank(game, pool_size, draws, cutoffs):
-    # Identical histories and pool sizes recur as the budget slider moves.
+def _dynamic_scores(game, code, draws, cutoffs):
     lot = require_lottery(game, "RO")
     matrix = np.frombuffer(draws, dtype=np.int32).reshape(-1, lot.draw_n)
-    scheme = select_lr_scheme(game, pool_size)
-    scores, selection = choose_dynamic_winner(matrix, cutoffs, scheme)
-    return rank_by_score(scores, lot.max_n), selection
+    return choose_dynamic_winner(matrix, cutoffs, resolve_lr_scheme(game, code))
 
 
-def _bench_rank(engine, limit, *, bonus=False):
-    scores = engine._get_timesfm_scores(is_joker_drum=bonus)
-    maximum = engine.lottery.geo.second.max_n if bonus else engine.lottery.max_n
-    ranking = rank_by_score({ball: score for ball, score in scores.items() if 1 <= ball <= maximum}, limit)
-    if bonus and not ranking:
-        ranking = engine._get_hard_core_joker(engine.analyze_joker_frequency(), pool_size=limit)
-    key = engine._bench_game_key(bonus)
-    selection = engine.audit.get("bench_winner", {}).get(key)
-    if selection is None:
-        selection = {"method": "frequency", "fallback": True}
-    return ranking, selection
-
-
-def _fill_portfolio(plan, engine, dynamic):
-    zones = [zone for ticket in plan["tickets"] for zone in ticket]
-    order = sorted(range(len(zones)), key=lambda i: -zones[i]["pool_size"])
-    sizes = dict.fromkeys(zone["pool_size"] for zone in zones)
-    maximum = engine.lottery.max_n
-    rankings, selections = {}, {}
+def _preview_pool(lot, source, scheme, lookback, dynamic, joker_size):
+    engine = LotoEngine(lot.geometry, game_key=lot.bench_key, country=lot.country)
+    if source is None:
+        if not engine.load_data(str(_ROOT / lot.csv)):
+            raise ValueError("Istoricul jocului nu poate fi încărcat.")
+    else:
+        engine.data = source[1]
+        engine._build_draw_matrix()
+    if engine._draw_matrix is None or not len(engine._draw_matrix):
+        raise ValueError("Istoricul jocului nu conține extrageri valide.")
+    if 0 < lookback < 100:
+        rows = max(1, int(len(engine.data) * (lookback / 100)))
+        engine.data = engine.data.tail(rows)
+        engine._draw_matrix = engine._draw_matrix[-rows:]
+    engine._winner_pool_hint = scheme.n
     if dynamic:
-        draws = engine._draw_matrix.tobytes()
-        cutoffs = training_cutoffs(engine.data)
-    for size in sizes:
-        if dynamic:
-            ranking, selection = _validated_rank(plan["game"], size, draws, cutoffs)
-        else:
-            engine._winner_pool_hint = size
-            ranking, selection = _bench_rank(engine, maximum)
-        if len(ranking) != maximum:
-            raise ValueError(f"Clasament incomplet pentru pool-ul de {size} numere.")
-        rankings[size], selections[size] = ranking, deepcopy(selection)
+        scores, selection = _dynamic_scores(
+            lot.game_id, scheme.code, engine._draw_matrix.tobytes(), training_cutoffs(engine.data),
+        )
+    else:
+        scores = engine._get_timesfm_scores()
+        selection = engine.audit.get("bench_winner", {}).get(
+            lot.bench_key, {"method": "frequency", "fallback": True},
+        )
+    pool = engine._get_timesfm_pool(scores, scheme.n, set())
+    jokers, bonus = (), None
+    if lot.bench_key_urna2 and engine._valid_joker_values().size:
+        bonus_scores = engine._get_timesfm_scores(is_joker_drum=True)
+        maximum = lot.geo.second.max_n
+        ranked = rank_by_score({n: s for n, s in bonus_scores.items() if 1 <= n <= maximum}, joker_size)
+        if not ranked:
+            ranked = engine._get_hard_core_joker(engine.analyze_joker_frequency(), pool_size=joker_size)
+        jokers = tuple(ranked)
+        bonus = engine.audit.get("bench_winner", {}).get(
+            lot.bench_key_urna2, {"method": "frequency", "fallback": True},
+        )
+    dates = history_dates(engine.data)
+    return {
+        "pool": pool, "jokers": jokers, "selection": deepcopy(selection), "joker_selection": bonus,
+        "date": dates.iloc[-1].strftime("%d-%m-%Y") if dates is not None else None,
+        "rows": len(engine.data), "code": scheme.code, "dynamic": dynamic, "generated": False,
+    }
 
-    bonus_ranking, bonus_selection = [None] * len(zones), None
-    if plan["game"] == "joker":
-        if not engine._valid_joker_values().size:
-            raise ValueError("Istoricul nu conține bile valabile pentru Urna 2 Joker.")
-        bonus_ranking, bonus_selection = _bench_rank(engine, len(zones), bonus=True)
-        if len(bonus_ranking) != len(zones):
-            raise ValueError("Clasament incomplet pentru Urna 2 Joker.")
 
-    # Preserve the optimizer's common anchor and disjoint private portions.
-    # For 4+ this keeps the zone events mutually exclusive. For any-prize
-    # portfolios the pools are disjoint, with distinct bonuses at Joker, so
-    # relabeling these positions leaves the exact uniform coverage intact.
-    primary_size = zones[order[0]]["pool_size"]
-    anchor = rankings[primary_size][:plan["anchor_size"]]
-    used = set(anchor)
-    allocations = []
-    for i, bonus in zip(order, bonus_ranking, strict=True):
-        zone = zones[i]
-        size = zone["pool_size"]
-        private = [ball for ball in rankings[size] if ball not in used][:size - len(anchor)]
-        if len(private) + len(anchor) != size:
-            raise ValueError("Numere insuficiente pentru a păstra acoperirea portofoliului.")
-        used.update(private)
-        allocations.append((zone, sorted(anchor + private), bonus))
-    for zone, numbers, bonus in allocations:
-        zone.update(numbers=numbers, joker=bonus)
-    return selections, bonus_selection
+def _generated_pool(lot, result):
+    audit = result.get("audit") or {}
+    winners = audit.get("bench_winner") or {}
+    main = winners.get(lot.bench_key) or {}
+    selection = audit.get("dynamic_selection") or main.get("dynamic_selection")
+    days = (result.get("context") or {}).get("last_3") or []
+    date = days[-1].get("date") if days else None
+    return {
+        "pool": result.get("hard_core"),
+        "jokers": result.get("joker_pool") or result.get("hard_core_joker") or (),
+        "selection": selection or main,
+        "joker_selection": winners.get(lot.bench_key_urna2),
+        "date": date if date and date != "N/A" else None,
+        "rows": result.get("total_draws") or 0,
+        "code": result.get("lr_scheme_code") or (audit.get("lr_scheme") or {}).get("code"),
+        "dynamic": bool(selection), "generated": True,
+    }
+
+
+def _balls(values, maximum):
+    balls = tuple(_integer(n) for n in (values or ()))
+    if len(set(balls)) != len(balls) or any(not 1 <= n <= maximum for n in balls):
+        raise ValueError("Pool-ul conține numere duplicate sau în afara urnei.")
+    return balls
 
 
 def recommend_playable_games(
-    budget_lei, objective, game_id=None, histories=None, *, lookback=100, dynamic=True,
+    budget_lei, objective, game_id=None, histories=None, *,
+    pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5,
 ):
-    """Apply the regular scoring to a portfolio without writing generation state.
-
-    A loaded history takes precedence over the game's built-in CSV. Each
-    history is a (filename, DataFrame) pair. Leave the cost and odds visible
-    if a history is unusable, with empty zones in place of fixture numbers.
-    """
+    """Use the displayed result, or preview the same production pool during setup."""
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
-        engine = LotoEngine(lot.geometry, game_key=lot.bench_key, country=lot.country)
-        for ticket in plan["tickets"]:
-            for zone in ticket:
-                zone.update(numbers=[], joker=None)
+        result = (generated or {}).get(lot.game_id)
         source = (histories or {}).get(lot.game_id)
-        filename = source[0] if source is not None else Path(lot.csv).name
+        filename = result[0] if result else (source[0] if source else Path(lot.csv).name)
         try:
-            if source is None:
-                if not engine.load_data(str(_ROOT / lot.csv)):
-                    raise ValueError("Istoricul jocului nu poate fi încărcat.")
+            if result:
+                forecast = _generated_pool(lot, result[1])
             else:
-                engine.data = source[1]
-                engine._build_draw_matrix()
-            if engine._draw_matrix is None or not len(engine._draw_matrix):
-                raise ValueError("Istoricul jocului nu conține extrageri valide.")
-            if 0 < lookback < 100:
-                rows = max(1, int(len(engine.data) * (lookback / 100)))
-                engine.data = engine.data.tail(rows)
-                engine._draw_matrix = engine._draw_matrix[-rows:]
-            dates = history_dates(engine.data)
-            selections, bonus = _fill_portfolio(plan, engine, dynamic)
+                scheme = resolve_lr_scheme(lot.geometry, pool_codes[lot.game_id])
+                forecast = _preview_pool(lot, source, scheme, lookback, dynamic, joker_size)
+            pool = _balls(forecast["pool"], lot.max_n)
+            if not pool:
+                raise ValueError("Pool-ul jocului este gol.")
+            jokers = ()
+            if lot.bench_key_urna2:
+                jokers = _balls(forecast["jokers"], lot.geo.second.max_n)
+                if not jokers:
+                    raise ValueError("Pool-ul Urnei 2 Joker este indisponibil.")
+            forecast.update(filename=filename, pool=sorted(pool), jokers=jokers)
+            if not restrict_to_pool(plan, objective, pool, jokers)["tickets"]:
+                plan["forecast_error"] = f"Niciun cod LR în buget pentru pool-ul de {len(pool)} numere."
+            plan["forecast"] = forecast
         except (OSError, ValueError) as exc:
             logger.warning("Sugestie LR %s (%s): %s", lot.game_id, filename, exc)
             plan["forecast_error"] = f"{filename} · {exc}"
         except Exception:
-            logger.exception("Scoring sugestie LR pentru %s", lot.game_id)
-            plan["forecast_error"] = f"{filename} · Calculul numerelor a eșuat."
-        else:
-            plan["forecast"] = {
-                "filename": filename,
-                "date": dates.iloc[-1].strftime("%d-%m-%Y") if dates is not None else None,
-                "rows": len(engine.data),
-                "selections": selections,
-                "joker_selection": bonus,
-                "dynamic": dynamic,
-            }
-    return plans
+            logger.exception("Sugestie LR pentru %s", lot.game_id)
+            plan["forecast_error"] = f"{filename} · Calculul biletelor a eșuat."
+        if "forecast" not in plan:
+            plan.update(tickets=[], variants=0, price_bani=0, attained=0, upper=None, optimal=False)
+    return sorted(
+        plans,
+        key=lambda item: (
+            not item["tickets"], -Fraction(item["attained"], item["denominator"]),
+            item["price_bani"], item["game"],
+        ),
+    )

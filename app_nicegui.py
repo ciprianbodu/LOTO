@@ -3944,18 +3944,39 @@ def _render_lr_pool_input(game: str, title: str):
 def main_page() -> None:
     ui.dark_mode().enable()
     refresh_budget = None
+    budget_result = STATE.get("results")
 
     def budget_forecast_inputs(game_id):
-        histories = {}
+        games = {g.game_id for g in _LOT.games_for_country("RO")}
+        if game_id is not None:
+            games.intersection_update((game_id,))
+        histories, generated = {}, {}
         with STATE_LOCK:
+            results = STATE.get("results")
+            if isinstance(results, tuple) and len(results) == 2:
+                for name, label, data in _iter_wf_jobs(results[0]):
+                    lot = _game_spec_for(label, data)
+                    if lot.game_id not in games or not data.get("hard_core"):
+                        continue
+                    fields = ("hard_core", "joker_pool", "hard_core_joker", "context", "total_draws", "lr_scheme_code")
+                    snapshot = {key: deepcopy(data[key]) for key in fields if key in data}
+                    audit = data.get("audit") or {}
+                    snapshot["audit"] = {
+                        key: deepcopy(audit[key])
+                        for key in ("bench_winner", "dynamic_selection", "lr_scheme") if key in audit
+                    }
+                    generated[lot.game_id] = (name, snapshot)
             for name, history in STATE["datasets"]:
                 lot = _game_spec_for(name)
-                if lot.is_romanian and (game_id is None or game_id == lot.game_id):
+                if lot.game_id in games and lot.game_id not in generated:
                     histories[lot.game_id] = (name, history)
             return {
                 "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
+                "generated": generated,
+                "pool_codes": {game: _lr_scheme_for(game).code for game in games - generated.keys()},
                 "lookback": _effective_lookback_pct(),
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
+                "joker_size": _int_setting("joker_pool_size_val"),
             }
 
     # Chevron-ul expansion-urilor: vârful în JOS când e DESCHIS (arată spre conținut),
@@ -4425,7 +4446,9 @@ def main_page() -> None:
         history_windows_panel()
         nested_wfv_panel(_cc)
         if budget_slider is not None:
-            refresh_budget = lr_budget_panel(budget_slider, budget_forecast_inputs, dynamic_input, lookback_input)
+            refresh_budget = lr_budget_panel(
+                budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, *_pool_inputs,
+            )
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
@@ -4454,6 +4477,7 @@ def main_page() -> None:
     # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără
     # 'connection lost'. Doar refresh-ul UI (rapid, din cache STATE) e pe loop. ----
     async def _tick() -> None:
+        nonlocal budget_result
         from nicegui import run as _nrun
 
         def _blocking_probe():
@@ -4488,12 +4512,15 @@ def main_page() -> None:
         bench_was_running = STATE.get("bench_was_running")
         _observe_bench_activity(bench_now)
         _continue_after_automatic_history(bench_now)
-        if refresh_budget is not None and bench_was_running and not STATE.get("bench_was_running"):
-            await refresh_budget()
         # Refresh UI (rapid, din STATE) — doar când e activ
         if _active:
             logs_panel.refresh()
             status_panel.refresh()
+        current_result = STATE.get("results")
+        bench_finished = bench_was_running and not STATE.get("bench_was_running")
+        if refresh_budget is not None and (current_result is not budget_result or bench_finished):
+            budget_result = current_result
+            await refresh_budget()
         if STATE.get("wf_running"):
             # DOAR progresul WF — NU tot bundle-ul, ca expansion-urile deschise
             # (🏆 Clasament bench etc.) să NU se închidă la fiecare poll de 1s.
