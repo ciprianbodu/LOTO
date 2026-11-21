@@ -11,6 +11,8 @@ from ui_lr_portfolio import _codes, _percent, _price
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
+_DEFAULT_BUDGET_LEI = 200
+_MAX_SLIDER_BUDGET_LEI = 400
 
 
 def _columns(fields):
@@ -112,21 +114,16 @@ def _render_recommendations(records, budget_lei, objective):
 
 def lr_budget_slider():
     budget_label = ui.label().classes("text-bold mt-2")
-    slider = ui.slider(min=MIN_BUDGET_LEI, max=200, step=1, value=200).props(
-        'aria-label="Buget pentru bilete LR" label'
-    ).classes("w-full")
+    slider = ui.slider(
+        min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=_DEFAULT_BUDGET_LEI,
+    ).props('aria-label="Buget pentru bilete LR" label').classes("w-full")
     budget_label.bind_text_from(
         slider, "value", lambda value: f"Buget bilete LR · {int(value)} lei"
     )
 
-    def extend_range():
-        maximum = int(slider.props["max"]) * 2
-        slider.props["max"] = maximum
-        limits.set_text(f"Interval · {MIN_BUDGET_LEI}–{maximum} lei")
-
-    with ui.row().classes("w-full items-center justify-between"):
-        limits = ui.label(f"Interval · {MIN_BUDGET_LEI}–200 lei").classes("text-caption")
-        ui.button("Extinde intervalul", on_click=extend_range).props("flat dense no-caps")
+    with ui.row().classes("w-full justify-between text-caption"):
+        ui.label(f"{MIN_BUDGET_LEI} lei")
+        ui.label(f"{_MAX_SLIDER_BUDGET_LEI} lei")
     return slider
 
 
