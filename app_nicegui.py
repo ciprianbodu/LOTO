@@ -3958,7 +3958,10 @@ def main_page() -> None:
                     lot = _game_spec_for(label, data)
                     if lot.game_id not in games or not data.get("hard_core"):
                         continue
-                    fields = ("hard_core", "joker_pool", "hard_core_joker", "context", "total_draws", "lr_scheme_code")
+                    fields = (
+                        "hard_core", "joker_pool", "hard_core_joker", "context", "total_draws",
+                        "lr_scheme_code", "lookback", "dynamic_method",
+                    )
                     snapshot = {key: deepcopy(data[key]) for key in fields if key in data}
                     audit = data.get("audit") or {}
                     snapshot["audit"] = {
@@ -3968,8 +3971,11 @@ def main_page() -> None:
                     generated[lot.game_id] = (name, snapshot)
             for name, history in STATE["datasets"]:
                 lot = _game_spec_for(name)
-                if lot.game_id in games and lot.game_id not in generated:
+                if lot.game_id in games:
                     histories[lot.game_id] = (name, history)
+            for game, (name, _) in generated.items():
+                if (source := _result_source(name)) is not None:
+                    histories[game] = (name, source)
             return {
                 "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
                 "generated": generated,

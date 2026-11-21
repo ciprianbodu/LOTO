@@ -1,4 +1,4 @@
-"""Fill budget tickets from the production pool for each game."""
+"""Fill budget tickets from a pool ranked by the production selector."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 
 from covering.lr_budget import recommend_games
-from covering.lr_pool_budget import restrict_to_pool
-from covering.lr_selection import resolve_lr_scheme
+from covering.lr_pool_budget import required_pool_size, restrict_to_pool
+from covering.lr_selection import lr_pool_sizes, resolve_lr_scheme, select_lr_scheme
 from covering.probability import _integer
 from loto_engine import LotoEngine
 from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
@@ -106,18 +106,38 @@ def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5,
 ):
-    """Use the displayed result, or preview the same production pool during setup."""
+    """Plan by budget, then use the production pool or score the largest LR pool."""
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
         result = (generated or {}).get(lot.game_id)
         source = (histories or {}).get(lot.game_id)
-        filename = result[0] if result else (source[0] if source else Path(lot.csv).name)
+        source_name = source[0] if source else Path(lot.csv).name
+        filename = result[0] if result else source_name
         try:
+            saved = result[1] if result else {}
             if result:
-                forecast = _generated_pool(lot, result[1])
+                forecast = _generated_pool(lot, saved)
+                size = len(forecast["pool"] or ())
+                dynamic_mode = saved.get("dynamic_method", forecast["dynamic"] or dynamic)
             else:
                 scheme = resolve_lr_scheme(lot.geometry, pool_codes[lot.game_id])
+                size = scheme.n
+                dynamic_mode = dynamic
+            maximum = max(lr_pool_sizes(lot.geometry))
+            if size < min(maximum, required_pool_size(plan)):
+                largest = select_lr_scheme(lot.geometry, maximum)
+                filename = source_name
+                saved_lookback = saved.get("lookback")
+                expanded = _preview_pool(
+                    lot, source, largest, lookback if saved_lookback is None else float(saved_lookback),
+                    dynamic_mode, joker_size,
+                )
+                if result:
+                    expanded.update(jokers=forecast["jokers"], joker_selection=forecast["joker_selection"])
+                forecast = expanded
+                forecast["expanded_from"] = size
+            elif not result:
                 forecast = _preview_pool(lot, source, scheme, lookback, dynamic, joker_size)
             pool = _balls(forecast["pool"], lot.max_n)
             if not pool:

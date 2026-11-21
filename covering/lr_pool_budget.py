@@ -194,6 +194,11 @@ def _attach(plan, lot, zones, pool, jokers, price, attained, upper):
     return plan
 
 
+def required_pool_size(plan):
+    """Width of the budget template, whose positions use contiguous labels."""
+    return max((n for ticket in plan["tickets"] for zone in ticket for n in zone["numbers"]), default=0)
+
+
 def restrict_to_pool(plan, objective, pool, jokers=()):
     """Replace the unrestricted layout with whole official zones inside this pool."""
     lot = require_lottery(plan["game"], "RO")
@@ -203,16 +208,16 @@ def restrict_to_pool(plan, objective, pool, jokers=()):
     threshold = 3 if objective == ANY_PRIZE and plan["game"] != "5/40" else 4
     upper = _layout_bound(plan, lot, len(pool), threshold, len(jokers) if use_bonus else 0)
     template_fits = (
-        template and max(n for zone in template for n in zone["numbers"]) <= len(pool)
+        template and required_pool_size(plan) <= len(pool)
         and (not use_bonus or len(template) <= len(jokers))
     )
-    if not template_fits or plan["attained"] != upper:
+    plan["template_adjusted"] = not template_fits
+    if not template_fits:
         options, attained, price = _layout(plan["game"], len(pool), plan["budget_bani"], objective, len(jokers))
-        if not template_fits or (attained, -price) > (plan["attained"], -plan["price_bani"]):
-            return _attach(
-                plan, lot, [(z.code, z.positions, z.variants) for z in options],
-                pool, jokers, price, attained, upper,
-            )
+        return _attach(
+            plan, lot, [(z.code, z.positions, z.variants) for z in options],
+            pool, jokers, price, attained, upper,
+        )
 
     sizes = {scheme.code: scheme.size for scheme in lr_schemes(plan["game"])}
     zones = [(z["code"], tuple(n - 1 for n in z["numbers"]), sizes[z["code"]]) for z in template]

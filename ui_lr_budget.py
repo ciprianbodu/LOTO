@@ -55,8 +55,12 @@ def _ticket_details(plan, *, expanded=False):
         if forecast := plan.get("forecast"):
             pool = forecast["pool"]
             origin = "Pool din generare" if forecast["generated"] else "Pool calculat cu setările generatorului"
+            if "expanded_from" in forecast:
+                origin = f"Pool LR maxim pentru buget · de la {forecast['expanded_from']} la {len(pool)} numere"
+            else:
+                origin += f" · {len(pool)} numere"
             code = f" · Cod {forecast['code']}" if forecast["code"] is not None else ""
-            ui.label(f"{origin} · {len(pool)} numere{code}").classes("text-weight-bold")
+            ui.label(f"{origin}{code}").classes("text-weight-bold")
             ui.label(", ".join(map(str, pool))).classes("text-body2")
             if forecast["jokers"]:
                 ui.label("Pool Urna 2 · " + ", ".join(map(str, forecast["jokers"]))).classes("text-caption")
@@ -66,6 +70,8 @@ def _ticket_details(plan, *, expanded=False):
         if error := plan.get("forecast_error"):
             ui.label(error).classes("text-warning")
         if rows:
+            if plan.get("template_adjusted"):
+                ui.label("Scheme adaptate la pool-urile disponibile.").classes("text-caption")
             table = ui.table(
                 columns=_columns(fields), rows=rows, row_key="id",
                 pagination={"rowsPerPage": 12},
@@ -178,7 +184,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
     with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
         ui.label(
             "Șansa teoretică se calculează pentru o extragere uniformă. "
-            "Zonele folosesc pool-ul generatorului pentru jocul respectiv. Totalul include taxa de bilet."
+            "Zonele folosesc pool-ul generatorului sau pool-ul LR maxim. Totalul include taxa de bilet."
         ).classes("text-body2")
         game_options = {"all": "Toate jocurile"}
         game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})
