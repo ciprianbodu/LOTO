@@ -2113,20 +2113,19 @@ obiectivul ales. Arată codurile, variantele, biletele fizice și taxa aferentă
 Probabilitățile folosesc toate cele șase bile extrase la 5/40 și categoriile
 cu bila Joker la obiectivul „Orice premiu”.
 
-Toate zonele folosesc numere din pool-ul jocului afișat la ultima generare.
-Înaintea unei generări, panoul calculează același pool folosind codul, metoda
-și fereastra de istoric din setările generatorului. Se afișează explicit
-pool-ul, istoricul și metoda. La Joker, fiecare zonă primește o bilă din
-pool-ul separat de Urna 2. Bilele se pot repeta când numărul zonelor îl
-depășește pe cel din pool.
+Panoul alege întâi portofoliul după buget și obiectiv. Dacă pozițiile sale
+încap în pool-ul generat, zonele preiau numere din acel pool. Panoul
+calculează pool-ul configurat înaintea primei generări. Dacă este nevoie
+de mai multe numere, motorul recalculează pool-ul la dimensiunea codului
+recomandat pentru o singură zonă sau la dimensiunea maximă a catalogului
+LR pentru mai multe zone. În ambele cazuri aplică metoda câștigătoare la
+dimensiunea folosită. Panoul indică dimensiunea, codul de referință și
+metoda sursei. Urna 2 Joker își folosește pool-ul propriu.
 
-Geometriile eligibile folosesc numai coduri LR oficiale care încap în pool
-și în buget. Se compară completări cu zone care se pot suprapune. Șansa
-oferită se calculează exact prin reuniunea evenimentelor de câștig ale
-variantelor, inclusiv prin numărarea separată a rezultatelor Urnei 2.
+Când configurația cere mai multe numere decât oferă pool-urile disponibile,
+panoul caută în buget completări cu zone care se pot suprapune. Șansa se
+calculează prin reuniunea evenimentelor de câștig, inclusiv pentru Urna 2.
 Se afișează „Maxim demonstrat” când biletul atinge limita superioară.
-La 5/40, pentru un pool de opt numere, Codul 16 atinge limita de 4+
-cu 21 de variante, la 105,50 lei cu taxă.
 
 ### Setări simplificate de generare — 2026-11-21
 
