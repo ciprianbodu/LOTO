@@ -2,25 +2,21 @@
 
 The live single-origin API and batched walk-forward API implement the same
 selection. Nothing is fitted on a target's date. Repeated draws on a date have
-one pool per method, and count as distinct outcomes on the official tickets.
+one pool per method, and count as distinct outcomes on that main-number pool.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import deque
-from functools import lru_cache
 
 import numpy as np
 
-from covering.probability import subset_hit_table
-from loto_enterprise.benchmark.methods import call_method, score_frequency
-from loto_enterprise.core.dynamic_bank import (
-    RECIPE_IDS,
-    RECIPE_WEIGHTS,
-    SIGNAL_NAMES,
-    recipe_scores,
-    signal_ranks,
+from loto_enterprise.benchmark.methods import (
+    METHODS,
+    METHOD_LOAD_ERRORS,
+    call_method,
+    score_frequency,
 )
 from loto_enterprise.core.dynamic_pools import ranked_pools
 from loto_enterprise.core.lotteries import ro_lottery_for_geometry
@@ -28,40 +24,22 @@ from loto_enterprise.core.score_validation import SCORE_VARIANCE_EPSILON
 
 logger = logging.getLogger(__name__)
 
-DYNAMIC_VERSION = "dynamic-lr-v1"
+DYNAMIC_VERSION = "dynamic-lr-v4-compact-pool-4plus"
+POOL_HIT_TARGET = 4
 WARMUP_DRAWS = 250
 WINDOW_DAYS = 104
 MIN_DAYS = 26
 # Fixed before replay: the random scorer is the last row, a comparator only.
-REGISTERED = (
-    "frequency",
-    "freq_window_50",
-    "freq_window_200",
-    "momentum_30_300",
-    "cusum_burst",
-    "runs_persistence",
-    "spectral_phase",
-    "repeat_last_draw",
-    "neighbor_adjacent",
-    "croston_interval",
-    "naive_bayes_last",
-)
-CANDIDATES = (*REGISTERED, *RECIPE_IDS)
+CANDIDATES = ("frequency", *(name for name in METHODS if name.startswith("compact_")))
 
 
-@lru_cache(maxsize=33)
-def _ticket_lookup(scheme):
-    masks, _ = scheme._position_data
-    return subset_hit_table(scheme.n, masks)[1]
-
-
-def _score_rows(history, bounds, universe, ranks, reported):
-    """Main-number scores for this prefix, in CANDIDATES order, then random."""
+def _method_rows(history, bounds, universe, reported, candidates, scorer):
+    """Return candidate and random scores, and a fallback flag for each candidate."""
     registered = []
     unavailable = []
-    for method in (*REGISTERED, "random"):
+    for method in (*candidates, "random"):
         try:
-            scores, _ = call_method(method, history, universe, history_cutoffs=bounds)
+            scores, _ = scorer(method, history, universe, history_cutoffs=bounds)
             row = np.array([scores[i] for i in range(1, universe + 1)], dtype=float)
             if len(scores) != universe or not np.isfinite(row).all() or np.any(row < 0):
                 raise ValueError("scoruri incomplete, negative sau nefinite")
@@ -83,35 +61,22 @@ def _score_rows(history, bounds, universe, ranks, reported):
             row, usable = registered[0], False
         registered.append(row)
         unavailable.append(not usable)
-    # Blends are weighted sums of empirical midranks. Shift the least score
-    # to one rank unit before scaling so recent penalties act on positive scores.
-    blends = recipe_scores(ranks).astype(np.float64)
-    flat = np.ptp(blends, axis=1) == 0
-    blends -= blends.min(axis=1, keepdims=True)
-    blends += 1
-    blends /= blends.max(axis=1, keepdims=True)
-    blends[flat] = registered[0]
-    return (
-        np.vstack([registered[:-1], blends, registered[-1]]),
-        np.r_[unavailable[:-1], flat],
-    )
+    return np.stack(registered), np.asarray(unavailable[:-1], dtype=bool)
+
+
+def _score_rows(history, bounds, universe, reported):
+    return _method_rows(history, bounds, universe, reported, CANDIDATES, call_method)
 
 
 def _winner(totals, days, thresholds):
     if days < MIN_DAYS:
         return 0, "insufficient_history"
-    trials, random = totals[:-1], totals[-1]
-    eligible = np.flatnonzero(
-        np.all(trials >= random, axis=1) & np.any(trials > random, axis=1)
-    )
-    if not len(eligible):
+    # A draw with 4, 5 or 6 main numbers in the proposed pool counts once.
+    counts = totals[:, thresholds.index(POOL_HIT_TARGET)]
+    best = int(np.argmax(counts[:-1]))  # First declared method wins an exact tie.
+    if counts[best] <= counts[-1]:
         return 0, "no_gain_over_random"
-    # Stable ties respect declaration order, with frequency first.
-    for threshold in (5, 6, 4):
-        if threshold in thresholds:
-            values = trials[eligible, thresholds.index(threshold)]
-            eligible = eligible[values == values.max()]
-    return int(eligible[0]), "winner"
+    return best, "winner"
 
 
 def _counts(row, thresholds):
@@ -138,6 +103,56 @@ def dynamic_forecasts(
     The history passed in already respects the caller's scoring lookback.
     When cancelled, only fully prepared forecast origins are returned.
     """
+    if (
+        len(CANDIDATES) != 4
+        or METHOD_LOAD_ERRORS
+        or not all(name in METHODS for name in (*CANDIDATES, "random"))
+    ):
+        reason = METHOD_LOAD_ERRORS.get("methods_compact") or "înregistrare incompletă"
+        raise RuntimeError(f"Catalogul compact LR este indisponibil: {reason}")
+    return _forecast_origins(
+        matrix,
+        cutoffs,
+        scheme,
+        origins,
+        candidates=CANDIDATES,
+        select_winner=_winner,
+        selection_metadata={
+            "version": DYNAMIC_VERSION,
+            "hit_scope": "pool",
+            "pool_hit_target": POOL_HIT_TARGET,
+            "pool_size": scheme.n,
+            "candidate_methods": list(CANDIDATES),
+            "control_method": "random",
+        },
+        max_run=max_run,
+        restrict_min=restrict_min,
+        restrict_max=restrict_max,
+        penalty_draws=penalty_draws,
+        penalty_factor=penalty_factor,
+        should_cancel=should_cancel,
+    )
+
+
+def _forecast_origins(
+    matrix,
+    cutoffs,
+    scheme,
+    origins,
+    *,
+    candidates,
+    select_winner,
+    selection_metadata,
+    archived_ticket_hits=None,
+    prepare_archived_scores=None,
+    max_run=0,
+    restrict_min=0,
+    restrict_max=0,
+    penalty_draws=0,
+    penalty_factor=0.5,
+    should_cancel=None,
+):
+    """Replay causal pool forecasts; archived reports may supply their original ticket scorer."""
     lot = ro_lottery_for_geometry(scheme.game)
     if lot is None:
         raise ValueError("Selecția dinamică necesită o schemă oficială românească")
@@ -191,14 +206,15 @@ def dynamic_forecasts(
         raise ValueError(
             f"Cod {scheme.code} cere {scheme.n} numere în intervalul permis"
         )
-    thresholds = tuple(range(4, lot.pick_n + 1))
+    maximum_hits = lot.draw_n if archived_ticket_hits is None else lot.pick_n
+    thresholds = tuple(range(4, maximum_hits + 1))
     days = all_starts[all_starts >= WARMUP_DRAWS]
     ends = np.r_[days[1:], end] if len(days) else np.empty(0, dtype=int)
     recorded = np.zeros(len(days), dtype=bool)
     for stop in np.searchsorted(days, requested):
         recorded[max(0, stop - WINDOW_DAYS) : stop] = True
 
-    bank_size = len(CANDIDATES)
+    bank_size = len(candidates)
     totals = np.zeros((bank_size + 1, len(thresholds)), dtype=np.int64)
     recent_days = deque()
     evaluation_days = np.flatnonzero(recorded)
@@ -206,13 +222,14 @@ def dynamic_forecasts(
         zip(days[evaluation_days].tolist(), evaluation_days.tolist(), strict=True)
     )
     wanted = set(requested)
-    # A sentinel yields the score for the first unseen row without fabricating
-    # an outcome. Every trajectory at t was computed strictly from rows [:t].
+    # The archived trajectory scorer needs a final sentinel for an unseen row.
     indicators = np.zeros((end + 1, universe), dtype=np.uint8)
     indicators[indices[:, None], matrix - 1] = 1
-    ranks = signal_ranks(indicators, universe)[1] if day_indices else None
-    lookup = _ticket_lookup(scheme)
-    positional_weights = 1 << np.arange(scheme.n)
+    score_rows = (
+        prepare_archived_scores(indicators, universe)
+        if prepare_archived_scores is not None and day_indices
+        else _score_rows
+    )
     results = {}
     reported = set()
     for start in sorted(wanted | day_indices.keys()):
@@ -226,11 +243,11 @@ def dynamic_forecasts(
             totals -= expired
         scores = unavailable = None
         if start in day_indices or (start in wanted and n_days >= MIN_DAYS):
-            scores, unavailable = _score_rows(
-                matrix[:start], bounds[:start], universe, ranks[start], reported
+            scores, unavailable = score_rows(
+                matrix[:start], bounds[:start], universe, reported
             )
         if start in wanted:
-            selected, reason = _winner(totals, n_days, thresholds)
+            selected, reason = select_winner(totals, n_days, thresholds)
             chosen = selected
             if unavailable is not None and unavailable[selected] and selected != 0:
                 chosen, reason = 0, "unusable_current_scores"
@@ -239,20 +256,10 @@ def dynamic_forecasts(
             else:
                 forecast = dict(enumerate(scores[chosen].tolist(), start=1))
             details = {
-                "version": DYNAMIC_VERSION,
-                "method": CANDIDATES[chosen],
-                "weights": {
-                    name: int(w)
-                    for name, w in zip(
-                        SIGNAL_NAMES,
-                        RECIPE_WEIGHTS[chosen - len(REGISTERED)],
-                        strict=True,
-                    )
-                    if w
-                }
-                if chosen >= len(REGISTERED)
-                else {},
-                "selected_method": CANDIDATES[selected],
+                **selection_metadata,
+                "method": candidates[chosen],
+                "weights": {},
+                "selected_method": candidates[selected],
                 "reason": reason,
                 "candidate_count": bank_size,
                 "history_rows": int(start),
@@ -279,8 +286,13 @@ def dynamic_forecasts(
             columns = pools.astype(np.intp) - 1
             daily = np.zeros_like(totals)
             for draw in indicators[start : ends[day]]:
-                best = lookup[draw[columns] @ positional_weights]
-                daily += best[:, None] >= thresholds
+                matches = draw[columns]
+                hits = (
+                    matches.sum(axis=1)
+                    if archived_ticket_hits is None
+                    else archived_ticket_hits(matches)
+                )
+                daily += hits[:, None] >= thresholds
             recent_days.append((day, daily))
             totals += daily
     return results

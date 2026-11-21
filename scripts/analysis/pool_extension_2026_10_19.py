@@ -36,6 +36,8 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
+from scripts.analysis.legacy_methods_2026_11_20 import archived_scoring_sources
+
 from pool_extension_cache_2026_10_19 import load_data, load_scores
 from pool_extension_candidates_2026_10_19 import candidate_specs, generate
 from pool_extension_eval_2026_10_19 import evaluate_bank
@@ -98,8 +100,7 @@ def protected():
 
 
 def current_methods():
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-    from loto_enterprise.benchmark.methods import METHODS
+    from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS
 
     saved = json.loads((ROOT / "best_methods.json").read_bytes())["games"]
     result = {}
@@ -108,7 +109,7 @@ def current_methods():
         result[game] = {}
         for k in meta["ks"]:
             name = cells[f"k{k}"]["scorer"]
-            if name not in METHODS or name in EXCLUDED_FROM_PRODUCTION:
+            if name not in OCTOBER_19_EXPERTS:
                 raise ValueError(
                     f"invalid current diagnostic method: {game}/k{k}/{name}"
                 )
@@ -141,6 +142,7 @@ def specs(meta):
 
 def source_hashes():
     paths = list((ROOT / "loto_enterprise").rglob("*.py"))
+    paths.extend(archived_scoring_sources(ROOT))
     paths += [
         HERE / p
         for p in (

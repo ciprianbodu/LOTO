@@ -426,7 +426,7 @@ def _leader_day(args):
     """Clasamentul liderului pentru o zi (call_method pe randurile dinaintea zilei)."""
     name, game, first_row = args
     logging.disable(logging.WARNING)
-    from loto_enterprise.benchmark.methods import call_method
+    from scripts.analysis.legacy_methods_2026_11_20 import call_method
     from loto_enterprise.core.ranking import rank_by_score
     from loto_enterprise.core.score_validation import has_usable_score_variance
 

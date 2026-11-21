@@ -696,6 +696,8 @@ def _decision_sig(
             from loto_enterprise.core.dynamic_winner import DYNAMIC_VERSION
 
             dynamic_version = DYNAMIC_VERSION
+    from loto_enterprise.benchmark.methods import CATALOG_VERSION
+
     foreign_sfx = _foreign_decision_suffix(lot) if lot is not None else ""
     compact_sfx = "|compact-wf1" if _wheel_pool > _LEGACY_WF_POOL_MAX.get(game_type, 16) else ""
     try:
@@ -751,7 +753,7 @@ def _decision_sig(
             f"{_penalty_sig(recent_penalty_draws, recent_penalty_factor)}"
             f"{_restrict_base_sig(restrict_base_max, restrict_base_min, _MAX_NUM.get(game_type))}"
             f"{_consecutive_sig(max_consecutive_run)}"
-            f"{foreign_sfx}{_scorer_semantics(c)}{compact_sfx}{pinned}"
+            f"{foreign_sfx}{_scorer_semantics(c)}{compact_sfx}{pinned}|catalog={CATALOG_VERSION}"
         )
         return hashlib.md5(raw.encode()).hexdigest()[:8]
     except Exception as exc:
@@ -774,6 +776,7 @@ def _decision_sig(
                     + _consecutive_sig(max_consecutive_run)
                     + foreign_sfx
                     + compact_sfx
+                    + f"|catalog={CATALOG_VERSION}"
                     + (dynamic_version or f"|fixed-target1={current_bench_hit_target()}")
                 ).encode()
             ).hexdigest()[:6]

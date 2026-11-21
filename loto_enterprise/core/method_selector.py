@@ -172,18 +172,8 @@ def has_decision(game_key: str, config_path: str | None = None) -> bool:
 
 
 def _production_forbidden(game_key: str | None = None) -> frozenset[str]:
-    """Metode care NU au voie să scocheze pool-ul de producție.
-
-    = EXCLUDED_FROM_PRODUCTION ∪ EXCLUDED_FROM_SINGLE_PICK (pe urnele cu o
-    singură bilă) din decision.py. Din 2026-10-31, la cererea explicită a
-    utilizatorului, AMBELE liste sunt GOALE — nicio metodă nu mai e interzisă în
-    producție (inclusiv `random`, cu riscul de pool nedeterminist notat în
-    AGENTS.md). Mecanismul de tombstone (disabled_methods.json) a fost eliminat
-    la 14.09.2026: un nume necunoscut e respins oricum de gărzile din
-    `_sanitize_production_name` (nu e în METHODS), nu mai e nevoie de o listă
-    separată de blacklist.
-    """
-    forbidden: set[str] = set()
+    """Excluderile deciziei curente, inclusiv martorul aleator de benchmark."""
+    forbidden: set[str] = {"random"}
     try:
         from loto_enterprise.benchmark.decision import (
             EXCLUDED_FROM_PRODUCTION,
@@ -225,12 +215,7 @@ def _registry_gap_hint(registry_error: str | None = None) -> str:
 def _sanitize_production_name(
     name: str | None, *, context: str, game_key: str | None = None
 ) -> str | None:
-    """None dacă numele e interzis / necunoscut; altfel numele curat din METHODS.
-
-    Respinge: orice nume din `_production_forbidden` (listele sunt GOALE din
-    2026-10-31 — nimic nu mai e interzis) și orice nume care nu e în registry.
-    Altfel UI/audit pretindea un scorer inexistent când rulează de fapt frequency.
-    """
+    """Returnează numele din catalog dacă metoda este eligibilă în producție."""
     if not name:
         return None
     registry_error: str | None = None
@@ -394,7 +379,7 @@ def rejected_decision_scorer(
 ) -> str | None:
     """Numele scris în decizie pe care producția nu-l poate rula, altfel None.
 
-    Interzis (EXCLUDED_FROM_PRODUCTION — gol din 2026-10-31) sau necunoscut
+    Martor exclus din producție (EXCLUDED_FROM_PRODUCTION) sau necunoscut
     registry-ului. Auditul îl raportează ca `attempted`, ca rezultatul să nu
     prezinte rezerva drept câștigătoarea bench-ului.
     """
@@ -1217,7 +1202,7 @@ def summary_line(
         details = g.get("winner_details", {}).get(f"k{pool_size}", {})
         suffix = (
             f" (bench avg_hits={details['avg_hits']:.3f})"
-            if "avg_hits" in details
+            if details.get("winner") == winner and "avg_hits" in details
             else ""
         )
         return f"[{label} · pool K={pool_size}] scorer = {winner}{suffix}"
@@ -1237,9 +1222,10 @@ def all_per_pool_winners(
         if not isinstance(k, str) or not k.startswith("k"):
             continue
         try:
-            out[int(k[1:])] = v
+            pool = int(k[1:])
         except ValueError:
             continue
+        out[pool] = _sanitize_production_name(v, context="per-pool winner", game_key=game_key) or "frequency"
     return out
 
 
@@ -1329,9 +1315,11 @@ def recommend_optimal_config(
             )
         if salvaged:
             rationale = (
-                (rationale + " | " if rationale else "")
-                + "scorer/ensemble sanitizat (nume eliminat din METHODS)"
-            ).strip(" |")
+                f"Metoda din decizia salvată a fost retrasă. Se folosește {scorer} "
+                "până la următorul Re-Bench."
+            )
+            # Păstrăm obiectivul, dar măsurătorile aparțineau metodei retrase.
+            entry = {key: entry[key] for key in ("hit_target", "target_label") if key in entry}
         # Urna 2 are mereu contract top-1; nu lăsăm un JSON vechi/manual cu
         # `hit_target: 3` să o prezinte drept aceeași metrică a pool-urilor.
         if _is_urna2_key(game_key):
@@ -1354,7 +1342,7 @@ def recommend_optimal_config(
             "ensemble": clean_ens,
             "pool_substituted": pool_substituted,
             "rate_col_used": entry.get("rate_col_used"),
-            "rate_col_mismatch": bool(entry.get("rate_col_mismatch", False)),
+            "rate_col_mismatch": salvaged or bool(entry.get("rate_col_mismatch", False)),
             "hit_target": hit_target,
             "target_label": target_label,
             "low_confidence": bool(entry.get("low_confidence", False)) or salvaged,
@@ -1409,7 +1397,12 @@ def get_all_auto_pilot_configs(
             ps = int(k[1:])
         except ValueError:
             continue
-        if "error" in c:
+        if not isinstance(c, dict) or "error" in c:
             continue
-        out[ps] = c
+        resolved = recommend_optimal_config(game_key, ps, config_path)
+        out[ps] = (
+            {**c, **resolved}
+            if resolved["scorer"] == c.get("scorer") and not resolved.get("target_mismatch")
+            else resolved
+        )
     return out

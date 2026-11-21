@@ -80,6 +80,7 @@ from ui_gate import *  # noqa: F403
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from ui_lr_portfolio import lr_portfolio_panel
+from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
 from loto_enterprise.core.ro_text import count
 
@@ -288,16 +289,18 @@ def submit_generation(
     _refresh_status()
 
 
-def apply_autopilot_and_generate() -> None:
-    """Arată metoda deciziei de bench pentru fiecare joc, apoi generează.
+def _autopilot_evidence_note(config: dict) -> str:
+    if config.get("low_confidence"):
+        return " · low_confidence"
+    evidence = config.get("multiplicity") or {}
+    if evidence.get("proven") is False:
+        correction = " (Holm)" if evidence.get("correction") in (None, "", "holm") else ""
+        return f" · avantaj nedemonstrat{correction}"
+    return ""
 
-    NU aplică scorerul: motorul îl citește din best_methods.json la ORICE
-    generare, deci butonul „Generează” dă același pool și aceleași bilete.
-    Diferențele: notificarea per joc (metoda, low_confidence / avantaj
-    nedemonstrat, pool-ul substituit) și sim_depth de telemetrie — fereastra de
-    bench unde avg_hits a picat, stocată în audit; NU taie pool-ul și NU schimbă
-    biletele.
-    """
+
+def apply_autopilot_and_generate() -> None:
+    """Arată selecția aplicabilă pe joc și pornește generarea cu setările curente."""
     # best_methods.json folosește CHEIA jocului (loto_6_49 ...), nu eticheta scurtă
     # (6/49) întoarsă de _game_label_for → altfel lookup-ul eșua mereu → fallback.
     _LABEL_TO_KEY = _LABEL_TO_FOLDS_GAME
@@ -314,7 +317,13 @@ def apply_autopilot_and_generate() -> None:
             if _spec.is_romanian:
                 label = _game_label_for(fname)
                 gk = _LABEL_TO_KEY.get(label, "loto_6_49")
-                cfg = recommend_optimal_config(gk, _pool_size_for(_spec.game_id))
+                pool_size = _pool_size_for(_spec.game_id)
+                if SETTINGS.get("dynamic_method_enabled_val", True):
+                    recs.append(f"{gk}: selecție dinamică 4+ în pool-ul de {pool_size} numere. "
+                                "Metoda se stabilește la generare.")
+                    cfg = None
+                else:
+                    cfg = recommend_optimal_config(gk, pool_size)
             else:
                 # Decizia țării ei; fără bench → frequency (fallback), spus explicit.
                 label = _spec.game_id
@@ -335,13 +344,7 @@ def apply_autopilot_and_generate() -> None:
             if cfg and not cfg.get("fallback"):
                 sd = int(cfg.get("sim_depth_pct", SETTINGS["sim_depth_val"]))
                 per_game[label] = sd
-                low = (
-                    " · low_confidence"
-                    if cfg.get("low_confidence")
-                    else " · avantaj nedemonstrat"
-                    if (cfg.get("multiplicity") or {}).get("proven") is False
-                    else ""
-                )
+                low = _autopilot_evidence_note(cfg)
                 # Substituirea nearest-k: bench-ul n-a evaluat pool-ul cerut, deci
                 # scorer-ul (și cifrele lui) vin de la ALT pool. Până acum se vedea
                 # doar ca linie INFO în loto.log, iar notificarea îl prezenta ca și
@@ -358,17 +361,10 @@ def apply_autopilot_and_generate() -> None:
                 gk2 = _spec.bench_key_urna2 or f"{gk}_urna2"
                 cfg2 = recommend_optimal_config(gk2, 1)
                 if cfg2 and not cfg2.get("fallback"):
-                    low2 = (
-                        " · low_confidence"
-                        if cfg2.get("low_confidence")
-                        else " · avantaj nedemonstrat"
-                        if (cfg2.get("multiplicity") or {}).get("proven") is False
-                        else ""
-                    )
-                    recs.append(f"{gk2}: {cfg2.get('scorer')}{low2}")
+                    recs.append(f"{gk2}: {cfg2.get('scorer')}{_autopilot_evidence_note(cfg2)}")
         if recs:
             ui.notify(
-                "Auto-Pilot (scorer per joc, din Re-Bench): " + " | ".join(recs),
+                "Auto-Pilot · " + " | ".join(recs),
                 type="info",
             )
         else:
@@ -574,8 +570,14 @@ def _launch_bench(args: list[str], label: str) -> None:
     env["LOTO_BENCH_UI_PID"] = str(os.getpid())
     try:
         from bench_outcome import save_context
-        config = _build_config_json()
+        config = _bench_launch_history_config()
         pools = {g.game_id: _pool_size_for(g.game_id) for g in _LOT.GAMES}
+        lr_codes = json.loads(config).get("rebench_lr_codes", {})
+        env[VALIDATION_CODES_ENV] = json.dumps({
+            key: lr_codes.get(lot.game_id) if key == lot.bench_key else None
+            for lot in _LOT.games_for_country(_selected_country())
+            for key in lot.bench_keys
+        })
         config_digest = save_context(run_id, config, pools)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[BENCH] Identitatea surselor nu poate fi fixată: %s", exc)
@@ -748,6 +750,16 @@ def _rebuild_decision_for_target(target: int, notify=None) -> bool:
     return False
 
 
+def _bench_launch_history_config() -> str:
+    """Capture even the LR selections for games whose CSV is loaded after launch."""
+    config = json.loads(_build_config_json())
+    config["rebench_lr_codes"] = {
+        game.game_id: _lr_scheme_for(game.game_id).code
+        for game in _LOT.games_for_country(_LOT.RO)
+    }
+    return json.dumps(config)
+
+
 def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
     """Sursele inițiale și poolurile de la lansare, cu jocurile adăugate ulterior."""
     original, pools = context
@@ -756,25 +768,26 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
     initial = json.loads(original)
     selected = {g.game_id for g in _selected_games()}
     original_by_game = {}
-    original_lr_codes = {}
+    original_lr_codes = dict(initial.get("rebench_lr_codes", {}))
     original_dynamic = {}
     for dataset in initial.get("datasets", []):
         for task in dataset.get("tasks", []):
             original_by_game.setdefault(task.get("game_label"), []).append(dataset)
             original_dynamic[task["game_label"]] = task.get("lr_scheme_code") is not None and task.get("dynamic_method") is True
             if task.get("lr_scheme_code") is not None:
-                original_lr_codes[task["game_label"]] = task["lr_scheme_code"]
+                gid = task["game_label"]
+                if original_lr_codes.setdefault(gid, task["lr_scheme_code"]) != task["lr_scheme_code"]:
+                    raise ValueError(f"{gid}: coduri LR diferite în configurația de la lansare.")
     merged = []
     for dataset in current.get("datasets", []):
         tasks = dataset.get("tasks", [])
         gid = tasks[0].get("game_label") if tasks else None
         if gid in original_by_game:
             continue
-        merged.append(dataset)
+        merged.append({**dataset, "tasks": [dict(task) for task in tasks]})
     for gid, datasets in original_by_game.items():
         if gid in selected:
-            # Păstrăm sursa originală, dar decizia și restul setărilor urmează
-            # configurația curentă, ca înainte; numai poolul este fixat la start.
+            # Sursa, poolul și codul LR provin de la lansare.
             template = next((d["tasks"][0] for d in current.get("datasets", [])
                              if d.get("tasks") and d["tasks"][0].get("game_label") == gid), None)
             for dataset in datasets:
@@ -788,7 +801,7 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
             gid = task.get("game_label")
             if gid in pools:
                 task["pool_size"] = pools[gid]
-            if task.get("lr_scheme_code") is not None:
+            if gid in original_lr_codes or task.get("lr_scheme_code") is not None:
                 from covering.lr_selection import resolve_lr_scheme, select_lr_scheme
 
                 if gid in original_dynamic:
@@ -796,12 +809,10 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
                         task["dynamic_method"] = True
                     else:
                         task.pop("dynamic_method", None)
-                code = original_lr_codes.get(gid, task["lr_scheme_code"])
-                try:
-                    scheme = resolve_lr_scheme(gid, code, task["pool_size"])
-                except ValueError:
-                    if gid in original_lr_codes:
-                        raise
+                if gid in original_lr_codes:
+                    scheme = resolve_lr_scheme(gid, original_lr_codes[gid], task["pool_size"])
+                else:
+                    # Legacy receipts for later-added games persisted only the pool.
                     scheme = select_lr_scheme(gid, task["pool_size"], policy="cost")
                 task.update(lr_scheme_code=scheme.code, max_variants=scheme.size,
                             guarantee=4, wheel_condition=0)
@@ -889,14 +900,15 @@ def _on_bench_finished(*, context=None, config_json=None) -> None:
     )
     if physical_errors and autopilot:
         ui.notify(STATE["_virtual_physical_notice"], type="warning")
-    if full and not STATE.get("active_job_id"):
-        # Sistemul complet poate fi evaluat pe variante generate dacă generatorul
-        # îl acceptă; pentru cereri prea mari rămâne analiza matematică virtuală.
+    official_lr = any(task.get("lr_scheme_code") is not None for task in tasks)
+    if (full or official_lr) and not STATE.get("active_job_id"):
+        # Istoricul schemei LR sau al sistemului complet precedă generarea.
+        # Cererile prea mari pentru generator pot folosi analiza virtuală.
         extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
         if _start_virtual_history(auto_generate_config=cfg_text if autopilot and not physical_errors else None,
                                   automatic=True, simulated=True, materialize_full=True, **extra):
             return
-        if physical_errors:
+        if physical_errors or official_lr:
             return
     if not full and (not autopilot or physical_errors) and not STATE.get("active_job_id"):
         extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
@@ -1272,9 +1284,9 @@ def _bench_intro_text(country: str) -> str:
     cc = _LOT.normalize_country(country)
     if cc == _LOT.RO:
         return (
-            "Un singur bench testează metodele relevante fiecărui joc (exclusiv CPU), "
-            "pe toate nucleele (în paralel). În fiecare joc, metodele concurează în "
-            "ACELAȘI clasament → UN câștigător → UN Auto-Pilot → UN walk-forward. "
+            "Un singur bench compară în paralel metodele fiecărui joc și alege metoda fixă "
+            "pentru fiecare dimensiune de pool. Cu selecția dinamică LR activă, "
+            "metoda urnei principale se realege din extragerile anterioare. "
             f"{_bench_target_rule_text(cc)} "
             "Vezi clasamentul complet la 🏆 Clasament bench."
         )
@@ -1521,11 +1533,7 @@ def _target_bench_folds() -> int:
             if info.get("active")
             else {}
         )
-        total_methods = (
-            sum(len(v) for v in per_game.values())
-            if per_game
-            else len(kept) * len(games)
-        )
+        total_methods = sum(len(per_game.get(game.key, kept)) for game in games)
         n_windows = len([p for p in _PCTS.split(",") if p.strip()])
         return total_methods * max(1, n_windows)
     except Exception as exc:  # noqa: BLE001
@@ -1568,6 +1576,8 @@ def _bench_progress_from(log_path, start_ts=None) -> tuple[float, str] | None:
         # fiecare tick de 1s bloca inutil I/O + event-loop-ul. Ultimul progres
         # este suficient și se află în coada logului.
         txt = "".join(read_tail_lines(log_path, 3000, block=512 * 1024))
+        if PROGRESS_MARKER in txt:
+            return 1.0, txt.rsplit(PROGRESS_MARKER, 1)[1].splitlines()[0].strip()
         # Ultima linie de progres: [1048/2568] [loto_5_40/ml_svm_rbf/60%/REAL/CPU]
         matches = re.findall(r"\[(\d+)/(\d+)\]\s*\[([^\]]+)\]", txt)
         if matches:
@@ -1875,14 +1885,26 @@ def _result_scorers_match_decision(g_label: str, data: dict) -> bool:
     schimbare a țintei 3+/4+, cache-ul găsit sub decizia de acum validează altă
     metodă decât cea care a produs pool-ul afișat. Se compară cu auditul
     rezultatului (`bench_winner`), pe aceeași cale ca motorul; la Joker și Urna 2."""
-    for _key, now, info in _decision_methods_now(g_label, data):
-        if info.get("method") != now:
+    if _result_uses_dynamic_method(data):
+        from loto_enterprise.core.dynamic_winner import CANDIDATES, DYNAMIC_VERSION
+
+        audit = data.get("audit") or {}
+        info = (audit.get("bench_winner") or {}).get(_game_spec_for(g_label, data).bench_key) or {}
+        selection = audit.get("dynamic_selection") or info.get("dynamic_selection") or {}
+        if selection.get("version") != DYNAMIC_VERSION or selection.get("method") not in CANDIDATES:
             return False
+    for _key, methods_now, info in _decision_methods_now(g_label, data):
+        if info.get("method") != methods_now[0]:
+            return False
+        if info.get("ensemble"):
+            members = tuple(member.get("method") for member in info["ensemble"] if isinstance(member, dict))
+            if members != methods_now:
+                return False
     return True
 
 
 def _decision_methods_now(g_label: str, data: dict):
-    """(cheie, metoda deciziei de acum, auditul rezultatului) pentru fiecare cheie
+    """(cheie, metodele deciziei de acum, auditul rezultatului) pentru fiecare cheie
     de bench a jocului (Joker: și Urna 2), pe aceeași cale ca motorul."""
     from loto_enterprise.benchmark.decision import ENSEMBLE_MAX_METHODS
     from loto_enterprise.core.method_selector import (
@@ -1900,14 +1922,14 @@ def _decision_methods_now(g_label: str, data: dict):
     for key, hint in keys:
         if key == lot.bench_key and _result_uses_dynamic_method(data):
             continue  # The main scorer is chosen again from prior draws at each WF step.
-        now = "frequency"
+        methods_now = ("frequency",)
         if has_decision(key, cfg):
             ens = get_ensemble_for_game(
                 key, pool_size=hint, config_path=cfg, max_methods=ENSEMBLE_MAX_METHODS
             )
             if ens:
-                now = ens[0][0]
-        yield key, now, used.get(key) or {}
+                methods_now = tuple(name for name, _fn, _weight in ens)
+        yield key, methods_now, used.get(key) or {}
 
 
 def _generation_used_engine_reserve(g_label: str, data: dict) -> str:
@@ -1919,7 +1941,8 @@ def _generation_used_engine_reserve(g_label: str, data: dict) -> str:
     absent = rezultat fără numele încercat. Gol dacă vreo cheie nepotrivită nu e
     rezerva motorului (decizie mutată cu adevărat)."""
     names: list[str] = []
-    for _key, now, info in _decision_methods_now(g_label, data):
+    for _key, methods_now, info in _decision_methods_now(g_label, data):
+        now = methods_now[0]
         if info.get("method") == now:
             continue
         if not (
@@ -1956,7 +1979,9 @@ def _decision_moved_since_generation(g_label: str, data: dict) -> bool:
     decizia CURENTĂ, deci după un Re-Bench sau o schimbare a țintei 3+/4+ ar
     măsura altă metodă sub pool-ul generat."""
     used = (data.get("audit") or {}).get("bench_winner") or {}
-    if not any((v or {}).get("method") for v in used.values()):
+    if not _result_uses_dynamic_method(data) and not any(
+        (info or {}).get("method") or (info or {}).get("ensemble") for info in used.values()
+    ):
         return False
     try:
         return not _result_scorers_match_decision(g_label, data)
@@ -2605,6 +2630,25 @@ def _start_virtual_history(*, auto_generate_config: str | None = None, automatic
     return True
 
 
+def _history_lr_identity(record, context):
+    """Read the launch and draw identities from the saved history, including older compact rows."""
+    meta = record.get("meta") or {}
+    run_scheme = meta.get("lr_scheme") or {}
+    draw_scheme = (context.get("audit") or {}).get("lr_scheme") or context.get("lr_scheme") or {}
+    codes = [value for value in (
+        (record.get("task") or {}).get("lr_scheme_code"), meta.get("lr_scheme_code"),
+        run_scheme.get("code"), context.get("lr_scheme_code"), draw_scheme.get("code"),
+    ) if value is not None]
+    signatures = [value for value in (
+        run_scheme.get("catalog_signature"), draw_scheme.get("catalog_signature"),
+    ) if value is not None]
+    identity = {"lr_scheme_code": codes[0] if codes else None,
+                "lr_catalog_signature": signatures[0] if signatures else None}
+    if len({str(code) for code in codes}) > 1 or any(value != signatures[0] for value in signatures[1:]):
+        identity["history_system_issue"] = "schema LR păstrată pentru extragere diferă de schema rulării"
+    return identity
+
+
 def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
     records = list(STATE.get("virtual_wf_results") or []) if records is None else list(records)
     status = STATE.get("virtual_wf_status") if show_status else None
@@ -2613,16 +2657,22 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
     modes = {bool(record.get("simulated")) for record in records}
     mixed = len(modes) > 1
     simulated = (modes == {True}) if records else bool(STATE.get("_virtual_history_simulated"))
-    heading = ("📊 Istoric hits — sisteme simulate și virtuale" if mixed else
-               "📊 Istoric hits — simularea variantelor" if simulated else
+    all_lr = bool(records) and simulated and all(
+        not r.get("lr_reference_only") and any(
+            source.get("lr_scheme_code") is not None
+            for source in (r.get("task") or {}, r.get("meta") or {})
+        ) for r in records
+    )
+    heading = ("📊 Istoricul variantelor LR" if all_lr else
+               "📊 Istoricul sistemelor simulate și virtuale" if mixed else
+               "📊 Istoricul variantelor simulate" if simulated else
                "📊 Istoric hits — sistem complet virtual")
     with ui.card().classes("w-full"):
         with ui.expansion(heading, value=True).classes("w-full"):
             if STATE.get("virtual_wf_previous"):
                 ui.label("Istoric din rularea precedentă. Clasamentul poate folosi un Re-Bench mai nou.").classes("text-caption text-warning")
             ui.label(
-                "Metoda aleasă de bench poate folosi unele dintre extragerile evaluate, "
-                "astfel că rezultatul nu dovedește un avantaj predictiv."
+                "Pentru rulările cu metodă fixă, Re-Bench poate include unele dintre extragerile evaluate."
             ).classes("text-caption text-warning")
             if status:
                 ui.label(status).classes("text-caption")
@@ -2632,6 +2682,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                 ui.label(STATE["_virtual_physical_notice"]).classes("text-caption text-warning")
             for record in records:
                 simulated = bool(record.get("simulated"))
+                spec = _analysis_record_spec(record) or _game_spec_for(record["game"])
                 meta = record.get("meta") or {}
                 lr_meta = dict(meta)
                 if lr_meta.get("lr_scheme_code") is None and (record.get("task") or {}).get("lr_scheme_code") is not None:
@@ -2711,8 +2762,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         "best_ticket": int(entry.hits),
                         "generated_variants": [list(getattr(e, "variant", None) or []) for e in per_draw[int(entry.draw_index)]],
                         "expected_variant_count": getattr(entry, "variant_count", None),
-                        "lr_scheme_code": context.get("lr_scheme_code"),
-                        "lr_catalog_signature": ((context.get("audit") or {}).get("lr_scheme") or context.get("lr_scheme") or {}).get("catalog_signature"),
+                        **_history_lr_identity(record, context),
                         "variant_prize_groups": getattr(entry, "variant_prize_groups", None),
                         "virtual_full_system": bool(getattr(entry, "virtual_full_system", False)),
                         "lr_reference_only": bool(record.get("lr_reference_only")),
@@ -2729,24 +2779,33 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                          "nu este o variantă anticipată.")
                     ).classes("text-caption text-warning")
                 if flat:
-                    thresholds = (4, 5, 6) if record["game"] in ("6/49", "5/40") else (4, 5)
-                    def _rate(n):
-                        return f"{n} ({n / len(flat) * 100:.2f}%)"
+                    verified = [data for data in played.values() if not data.get("history_system_issue")]
+                    if len(verified) < len(flat):
+                        ui.label(f"Sistem verificabil pentru {len(verified)} din {len(flat)} extrageri; "
+                                 "procentele pe variante folosesc numai aceste extrageri.").classes("text-caption text-warning")
+                    thresholds = range(4, spec.draw_n + 1)
+                    def _rate(n, total):
+                        return f"{n} ({n / total * 100:.2f}%)" if total else "—"
                     summary = []
                     for threshold in thresholds:
                         summary.append({
                             "threshold": f"{threshold}+",
-                            "pool": _rate(sum(int(p.hits_union) >= threshold for p in flat)),
+                            "pool": _rate(sum(int(p.hits_union) >= threshold for p in flat), len(flat)),
                             "ticket": (
-                                _rate(sum(int(played[int(p.draw_index)]["best_ticket"]) >= threshold for p in flat))
-                                if threshold <= (5 if record["game"] in ("joker", "5/40") else 6) else "—"
+                                _rate(sum(int(data["best_ticket"]) >= threshold for data in verified), len(verified))
+                                if threshold <= spec.pick_n else "—"
                             ),
                         })
-                    ui.label("Hiturile din extragerile validate; maximul pe variantă folosește schema LR când există, altfel sistemul simulat sau virtual.").classes("text-caption")
+                    ui.label(_history_hit_note(spec)).classes("text-caption")
+                    if spec.geometry == "joker":
+                        known = [entry.joker_hit for entry in flat if getattr(entry, "joker_hit", None) is not None]
+                        if known:
+                            ui.label(f"Urna 2: bila Joker nimerită la {sum(known)} din {len(known)} "
+                                     "extrageri cu rezultat cunoscut.").classes("text-caption")
                     ui.table(columns=[
-                        {"name": "threshold", "label": "Hiturile", "field": "threshold"},
+                        {"name": "threshold", "label": "Prag cumulativ", "field": "threshold"},
                         {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
-                        {"name": "ticket", "label": "Maxim pe variantele evaluate" if has_lr else "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "ticket"},
+                        {"name": "ticket", "label": "Pe cel puțin o variantă LR" if has_lr else "Pe cel puțin o variantă simulată" if simulated else "Pe o variantă teoretică", "field": "ticket"},
                     ], rows=summary, row_key="threshold").classes("w-full").props("dense wrap-cells")
                 rows = []
                 pool_records = {}
@@ -2758,7 +2817,12 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     context = entry.ticket_context or {}
                     data = played[int(entry.draw_index)]
                     variant = data["best_variant_raw"]
-                    pool_text, pool_marks = _wf_marked_numbers(data["pool_numbers"], data["drawn"])
+                    issue = data.get("history_system_issue")
+                    try:
+                        pool_text, pool_marks = _wf_marked_numbers(data["pool_numbers"], data["drawn"])
+                    except (TypeError, ValueError, OverflowError):
+                        pool_text, pool_marks = "—", []
+                    pool_size = len({mark["v"] for mark in pool_marks})
                     if record["game"] == "joker" and len(variant) == 6:
                         example = " ".join(map(str, variant[:5])) + f" · Joker {variant[5]}"
                     else:
@@ -2769,13 +2833,16 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                         "draw_index": int(entry.draw_index),
                         "date": str(entry.draw_date or f"#{entry.draw_index}"),
                         "drawn": " ".join(map(str, context.get("actual") or [])) or "—",
-                        "pool": pool_text, "pool_marks": pool_marks,
+                        "pool": pool_text, "pool_marks": pool_marks, "pool_size": pool_size or "—",
                         "system": data["system_label"],
-                        "pool_hits": int(entry.hits_union), "best_hits": data["best_ticket"],
-                        "example": example or "—", "variants": f"{int(data['expected_variant_count'] or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
+                        "pool_hits": int(entry.hits_union), "best_hits": "—" if issue else data["best_ticket"],
+                        "example": "—" if issue else (example or "—"),
+                        **({"joker_hit": {True: "Da", False: "Nu"}.get(getattr(entry, "joker_hit", None), "—")}
+                           if spec.geometry == "joker" else {}),
+                        "variants": "—" if issue else f"{int(data['expected_variant_count'] or len(per_draw[int(entry.draw_index)])):,}".replace(",", "."),
                     })
                 if rows:
-                    ui.label("Afișate numai extragerile cu 4+ în pool (4, 5 sau 6, în funcție de joc).").classes("text-caption")
+                    ui.label("Detalii pentru extragerile cu cel puțin 4 numere nimerite în pool.").classes("text-caption")
                     romanian = str(meta.get("country") or "RO").upper() == "RO" and record["game"] in ("6/49", "5/40", "joker")
                     holder = {}
                     def _pool_page(event, holder=holder):
@@ -2793,10 +2860,13 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     table = ui.table(columns=[
                         {"name": "date", "label": "Extragere", "field": "date"},
                         {"name": "drawn", "label": "Numere extrase", "field": "drawn"},
+                        {"name": "pool_size", "label": "Numere în pool", "field": "pool_size"},
                         {"name": "pool", "label": "Pool-ul de atunci", "field": "pool"},
                         {"name": "pool_hits", "label": "În pool", "field": "pool_hits"},
                         {"name": "system", "label": "Sistem evaluat", "field": "system"},
                         {"name": "best_hits", "label": "Maxim pe variantele evaluate" if has_lr else "Maxim pe variantele simulate" if simulated else "Maxim teoretic pe variantă", "field": "best_hits"},
+                        *([{"name": "joker_hit", "label": "Urna 2 nimerită", "field": "joker_hit"}]
+                          if spec.geometry == "joker" else []),
                         {"name": "example", "label": "Variantă simulată, aleasă după verificare" if simulated else "Exemplu construit după extragere", "field": "example"},
                         {"name": "variants", "label": "Variante în sistemul evaluat" if has_lr else "Variante simulate" if simulated else "Combinații posibile calculate matematic", "field": "variants"},
                         *([{"name": "pool_prize", "label": "Premiu brut estimat · sistem evaluat", "field": "pool_prize"},
@@ -2813,7 +2883,7 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                             n = data["expected_variant_count"]
                             if n is None:
                                 n = len(data["generated_variants"])
-                            if data["virtual_full_system"]:
+                            if data["virtual_full_system"] or data.get("history_system_issue"):
                                 n = None
                             row["pool_cost"] = f"{_thousands(n)} × {price:g} = {_thousands(n * price)} lei" if n is not None and n > 0 and price else "—"
                         table.rows = rows
@@ -4376,10 +4446,11 @@ def main_page() -> None:
         # Alte țări: câmpul numeric comun de dinainte.
         _pool_inputs = []
         if _cc == _LOT.RO:
-            _bind_save(ui.checkbox("Alege dinamic metoda pentru schema LR"), "dynamic_method_enabled_val")
+            _bind_save(ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val")
             ui.label(
-                "La fiecare generare și la fiecare pas walk-forward, metodele sunt comparate pe "
-                "variantele schemei folosind extragerile anterioare. Debifează pentru metoda fixă din Re-Bench."
+                "La fiecare generare și pas walk-forward, metoda se alege după numărul de extrageri "
+                "anterioare cu cel puțin 4 numere în pool-ul de dimensiunea aleasă. "
+                "Premiile se verifică pe variantele schemei LR. Debifează pentru metoda fixă din Re-Bench."
             ).classes("text-caption text-grey")
             for _plabel, _ptitle in (
                 ("6/49", "Pool Loto 6/49"),
@@ -4648,19 +4719,19 @@ def main_page() -> None:
             _rebuild_decision_for_target(target)
 
         ui.select(
-            {3: "3+ Hits", 4: "4+ Hits", 5: "5+ Hits în pool (principal)", 6: "6 Hits în pool"},
+            {3: "3+ în pool", 4: "4+ în pool (implicit)", 5: "5+ în pool", 6: "6 în pool"},
             value=_clamped_bench_target(),
-            label="🎯 Țintă Optimizare / Bench",
+            label="🎯 Ținta Re-Bench pentru pool",
             on_change=_on_target_change,
-        ).classes("w-full")
+        ).props("name=bench_hit_target").classes("w-full")
         ui.label(_bench_target_rule_text(_cc)).bind_text_from(
             SETTINGS, "bench_hit_target", lambda _: _bench_target_rule_text(_cc)
         ).classes("text-caption text-grey")
         ui.label(
-            "Prioritate: pooluri de la 7 numere în sus, cu metodă aleasă pentru fiecare "
-            "dimensiune. Selecția urmărește rata țintei în pool; "
-            "hiturile de pe variantele schemei LR sunt evaluate separat. "
-            "5+ este ținta principală, iar 6+ este raportat separat unde jocul permite."
+            "Re-Bench evaluează pragul selectat pentru fiecare dimensiune de pool, "
+            "cu prioritate de la 7 numere în sus."
+            + (" Selecția dinamică LR folosește pragul 4+ în pool. O extragere cu 5 sau 6 "
+               "numere în pool se numără o singură dată la 4+." if _cc == _LOT.RO else "")
         ).classes("text-caption text-grey")
         ui.label(
             "Validarea folosește istoricul și fereastra din cererea de generare. "
@@ -4681,14 +4752,12 @@ def main_page() -> None:
         ui.label("3. Control Execuție").classes("text-bold")
         _BTN = "w-full"
         _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
-        # Ambele butoane generează cu metoda din decizia bench (motorul o citește
-        # din best_methods.json la orice job); Auto-Pilot doar o arată întâi.
         ui.button(
-            "⚡ Auto-Pilot (arată metoda pe joc + generează)",
+            "⚡ Auto-Pilot (arată selecția pe joc și generează)",
             on_click=apply_autopilot_and_generate,
         ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.button(
-            "🚀 Generează (metoda din decizia bench)",
+            "🚀 Generează",
             on_click=lambda: submit_generation(pure=False),
         ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.separator()
@@ -4777,7 +4846,7 @@ def main_page() -> None:
         status_panel()
         gate_panel()
         history_windows_panel()
-        nested_wfv_panel(_LOT.games_for_country(_cc)[0].bench_key, _lr_scheme_for)
+        nested_wfv_panel(_cc)
         if _LOT.games_for_country(_cc)[0].is_romanian:
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(

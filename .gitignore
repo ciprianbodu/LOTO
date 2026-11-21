@@ -68,6 +68,7 @@ uploaded_data/
 *.tmp
 .bench_cache/
 .wf_cache/
+/chronological_validation/
 raport_complet.txt
 best_methods.json
 # Deciziile de bench ale celorlalte țări (decisions/<CC>/best_methods.json)

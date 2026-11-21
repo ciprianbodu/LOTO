@@ -30,7 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from covering.lr_schemes import lr_schemes, scheme_odds
-from loto_enterprise.benchmark.methods import METHOD_LOAD_ERRORS, call_method
+from scripts.analysis.legacy_methods_2026_11_20 import METHOD_LOAD_ERRORS, call_method
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.ranking import longest_consecutive_run, rank_by_score
 from scripts.analysis.hit_evidence_2026_11_04 import (
@@ -288,7 +288,10 @@ def code_fingerprints():
              Path(__file__).with_name("lr_pool_study_2026_11_04.py"),
              Path(__file__).with_name("hit_evidence_2026_11_04.py"),
              ROOT / "covering/lr_schemes.py", ROOT / "covering/probability.py"]
-    paths += sorted((ROOT / "loto_enterprise/benchmark").glob("methods*.py"))
+    paths += sorted((ROOT / "scripts/analysis/legacy_scoring").glob("methods*.py"))
+    paths += [ROOT / "scripts/analysis/legacy_methods_2026_11_20.py",
+              ROOT / "loto_enterprise/benchmark/methods.py",
+              ROOT / "loto_enterprise/benchmark/methods_common.py"]
     paths += [ROOT / "loto_enterprise/core" / name for name in
               ("ranking.py", "pool_selection.py", "history.py", "draw_validation.py")]
     return {str(path.relative_to(ROOT)): sha256(path.read_bytes()) for path in paths}

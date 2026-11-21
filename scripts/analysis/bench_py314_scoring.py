@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from loto_enterprise.benchmark import methods_common as common
-from loto_enterprise.benchmark import methods_recency as recency
+from scripts.analysis.legacy_scoring import methods_recency as recency
 
 
 def reference_last_seen(ind):

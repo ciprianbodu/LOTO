@@ -48,21 +48,6 @@ logger = logging.getLogger(__name__)
 _FINAL_FLUSH_ATTEMPTS = 10
 _FINAL_FLUSH_BACKOFF_SEC = 0.2
 
-# Co-apariția din aceeași extragere e zero când fiecare rând are o singură bilă.
-# Lista doar evită bucla; fold-ul e failed doar dacă sonda chiar e plată.
-_SINGLE_PICK_FLAT_METHODS = frozenset(
-    {
-        "cooc_last3",
-        "anti_cooc_last",
-        "pair_lift_last",
-        "pagerank_cooc",
-        "pair_transition",
-        "hawkes_cross",
-        "rwr_last_draw",
-    }
-)
-
-
 # ---------------------------------------------------------------------------
 # Game definitions
 # ---------------------------------------------------------------------------
@@ -470,21 +455,6 @@ def _evaluate_fold(
     sampler = HwSampler(interval=0.1).start()
     t0 = time.perf_counter()
     try:
-        if game.is_single_pick and method_name in _SINGLE_PICK_FLAT_METHODS:
-            # O singură sondă: dacă scorul e deja plat, bucla pe fiecare
-            # extragere ar eșua la fel și ar marca fold-ul failed. Dacă sonda
-            # are varianță, metoda chiar se evaluează — lista nu e o excludere.
-            first_cutoff = (
-                game.history_cutoffs[len(train_draws)]
-                if game.history_cutoffs and n_test else len(train_draws)
-            )
-            probe_hist = train_draws[:first_cutoff]
-            probe, _probe_t = call_method(method_name, probe_hist, game.max_num)
-            if not has_usable_score_variance(probe):
-                raise RuntimeError(
-                    f"method '{method_name}' returned unusable scores on all "
-                    f"blocks (empty, flat, non-numeric or non-finite)"
-                )
         if block_size < 1 or n_test < 1:
             raise ValueError("block_size and test length must be positive")
         per_pool_totals = {k: 0 for k in pool_sizes}
@@ -525,7 +495,7 @@ def _evaluate_fold(
             # Keep the original call contract for every existing scorer.
             context = (
                 {"history_cutoffs": game.history_cutoffs[:prefix_end]}
-                if uses_day_context else {}
+                if uses_day_context and game.history_cutoffs else {}
             )
             scores, _t = call_method(method_name, history, game.max_num, **context)
             blocks += block_weight
@@ -1415,6 +1385,8 @@ def _aggregate(
                     if rnd_mean is not None
                     else None,
                     "hit_rate_real": real_mean / game.draw_n,
+                    "rate_4plus_real": _pool_mean(real, f"rate_4plus_{k}"),
+                    "rate_4plus_shuffled": _pool_mean(rnd, f"rate_4plus_{k}"),
                     "rate_5plus_real": _pool_mean(real, f"rate_5plus_{k}"),
                     "rate_5plus_shuffled": _pool_mean(rnd, f"rate_5plus_{k}"),
                     "rate_6plus_real": _pool_mean(real, f"rate_6plus_{k}"),

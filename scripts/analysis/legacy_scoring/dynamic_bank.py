@@ -1,4 +1,4 @@
-"""Cele 1.000 de configurații pentru selecția dinamică de pool, 4+/5+/6+.
+"""Cele 1.000 de configurații arhivate pentru studiile din noiembrie 2026.
 
 Coloana j corespunde numărului j+1. Fiecare scor la momentul t se bazează
 exclusiv pe rândurile [:t]. Apelantul controlează gruparea pe date.

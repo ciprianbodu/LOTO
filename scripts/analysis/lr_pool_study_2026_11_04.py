@@ -30,8 +30,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from covering.lr_schemes import lr_schemes, scheme_odds
-from loto_enterprise.benchmark.methods import (
-    METHODS as _LIVE_METHODS,
+from scripts.analysis.legacy_methods_2026_11_20 import (
+    METHODS as _ARCHIVED_METHODS,
     METHOD_LOAD_ERRORS,
     call_method,
 )
@@ -51,8 +51,8 @@ from scripts.analysis.hit_evidence_2026_11_04 import (
 # valul methods_evalue, 2026-11-14) NU au făcut parte din protocolul executat
 # și arhivat; fără această înghețare semnătura cache-ului studiului
 # (`sorted(METHODS)`) s-ar invalida tacit, iar afirmația „studiul a rulat toate
-# metodele din registry" ar deveni retroactiv falsă. Registry-ul viu rămân
-# disponibil ca `_LIVE_METHODS`.
+# metodele din registry" ar deveni retroactiv falsă. Catalogul complet de la data înlocuirii
+# rămâne disponibil ca `_ARCHIVED_METHODS`.
 _METHODS_AFTER_STUDY = frozenset(
     {
         "bayes_dirichlet_forget",
@@ -61,7 +61,7 @@ _METHODS_AFTER_STUDY = frozenset(
         "selfcalib_online_logit",
     }
 )
-METHODS = {k: v for k, v in _LIVE_METHODS.items() if k not in _METHODS_AFTER_STUDY}
+METHODS = {k: v for k, v in _ARCHIVED_METHODS.items() if k not in _METHODS_AFTER_STUDY}
 
 GAMES = (
     ("loto_6_49", "6/49", 49, 6, 6, 16, 59),
@@ -115,7 +115,10 @@ def load_source(game, universe, draw_n):
 
 def cache_signature(game, history_hash, variants):
     digest = hashlib.sha256()
-    parts = sorted((ROOT / "loto_enterprise/benchmark").glob("methods*.py"))
+    parts = sorted((ROOT / "scripts/analysis/legacy_scoring").glob("methods*.py"))
+    parts += [ROOT / "scripts/analysis/legacy_methods_2026_11_20.py",
+              ROOT / "loto_enterprise/benchmark/methods.py",
+              ROOT / "loto_enterprise/benchmark/methods_common.py"]
     parts += [ROOT / "loto_enterprise/core" / name for name in (
         "ranking.py", "pool_selection.py", "score_validation.py", "history.py",
     )]

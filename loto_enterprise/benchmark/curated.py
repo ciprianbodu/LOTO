@@ -8,11 +8,8 @@ available din registry. Nimic nu se pierde. Mecanismul vechi de tombstone
 (`disabled_methods.json`, blacklist merge-only) a fost eliminat la 14.09.2026 —
 o metodă ștearsă dispare pur și simplu din cod.
 
-Criteriul curent combină avantajul observat față de baseline pe fereastra
-externă cu ACOPERIREA DE SEMNAL DISTINCT: păstrăm numai metode peste random,
-nedegenerate, apoi eliminăm clonele cu |Spearman| >= 0.95. Este o selecție
-reversibilă pe istoric, nu o afirmație că loteria a devenit predictibilă;
-gate-ul oficial din `decision.py` rămâne obligatoriu la fiecare Re-Bench.
+Catalogul compact este comun tuturor jocurilor. Fișierul permite în continuare
+restrângeri explicite pentru un joc sau pentru întregul benchmark.
 """
 
 from __future__ import annotations
@@ -36,8 +33,8 @@ _PATH = Path(__file__).resolve().parents[2] / "curated_methods.json"
 #     corect pe acele jocuri. Rândul `random` rămâne totuși necesar: e singura
 #     referință pentru un joc NECUNOSCUT (`baseline_source="empirical_random"`,
 #     fallback pe `real_random`) și alimentează `random_empirical_rate`, verificarea
-#     de sanitate afișată lângă rata hipergeometrică. (Din 2026-10-31 listele
-#     de excludere din producție sunt goale — vezi decision.py.)
+#     de sanitate afișată lângă rata hipergeometrică. Martorul nu este eligibil
+#     în decizia de producție.
 #   • `frequency` = decision.SAFE_FALLBACK_SCORER, folosit pe ramura fără metode
 #     calificate. Baseline DETERMINIST, deci permis în producție (regula de aur 7).
 REQUIRED_METHODS = ("random", "frequency")
@@ -254,8 +251,7 @@ def log_curation(info: dict) -> None:
         )
         return
     logger.info(
-        "[curated] curated: %d din %d metode (criteriu: peste baseline + semnal "
-        "distinct; selecție istorică reversibilă). Anulare: șterge sau golește "
+        "[curated] %d din %d metode în selecția configurată. Anulare: șterge sau golește "
         "%s + re-bench.",
         info.get("n_after", 0),
         info.get("n_before", 0),

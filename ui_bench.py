@@ -236,22 +236,13 @@ def _country_folds_path(country=None) -> Path:
 
 
 def _baseline_methods() -> frozenset[str]:
-    """Metodele care sunt DOAR baseline de referință, NU candidați de producție.
-
-    Trebuie să rămână SINCRON cu excluderea din decizie (decision.py:
-    `methods = [m for m in ... if m not in EXCLUDED_FROM_PRODUCTION]`). Preferăm
-    constanta din decision.py dacă există; altfel fallback identic cu ce face
-    decizia azi. Din 2026-10-31 lista e GOALĂ (cerere explicită a utilizatorului:
-    nicio metodă nu mai e exclusă) — `random` apare în clasament ca orice altă
-    candidată.
-    NB: `frequency` are family="baseline" în folds.csv, DAR decizia NU o exclude
-    (e și fallback-ul de scoring în producție) → rămâne candidat aici."""
+    """Martorii de referință păstrați în clasament, conform regulii de decizie."""
     try:
         from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION as _EX
 
         return frozenset(str(m) for m in _EX)
     except Exception:  # noqa: BLE001
-        return frozenset()
+        return frozenset({"random"})
 
 
 def _decision_entry(folds_game_key: str, pool: int) -> dict:
@@ -356,9 +347,11 @@ def _decision_entry_method(entry: dict, folds_game_key: str) -> str | None:
     try:
         from loto_enterprise.core.method_selector import _sanitize_ap_production
 
-        scorer, clean, _salvaged = _sanitize_ap_production(entry, folds_game_key)
+        scorer, clean, salvaged = _sanitize_ap_production(entry, folds_game_key)
     except Exception:  # noqa: BLE001
         return None
+    if salvaged:
+        return None  # Dovezile din această celulă aparțin metodei retrase.
     return clean[0]["method"] if clean else scorer
 
 
@@ -659,7 +652,7 @@ def _render_bench_leaderboard_slice(
         _alive_methods = set(_METHODS_NOW)
         _pg_only = set(_load_pg().get(folds_game_key) or [])
     except Exception:  # noqa: BLE001
-        _alive_methods = None
+        _alive_methods = set()
         _pg_only = set()
     rows = []
     _conf_ok = False  # măcar o metodă are Wilson calculabil → sortăm ca decizia
@@ -691,12 +684,9 @@ def _render_bench_leaderboard_slice(
             grp = filter_window_percentiles(raw_grp, _expected_pcts)
             # Folds vechi pot lista metode eliminate — nu le arăta în clasament
             # (decizia le sare deja; UI trebuie să rămână aliniat).
-            if _alive_methods is not None and str(m) not in _alive_methods:
+            if str(m) not in _alive_methods:
                 continue
-            # Clasament per joc = lista curated per_game (plus baseline random).
-            # Din 2026-10-31 `_BASE` e goală (nimic exclus din producție), deci
-            # păstrăm `random` explicit în listă — e în continuare referința de
-            # hazard afișată în titlu și acum candidată eligibilă ca oricare alta.
+            # Lista per joc poate omite martorii, care rămân vizibili fără rang.
             if (
                 _pg_only
                 and str(m) not in _pg_only
@@ -1010,13 +1000,19 @@ def _render_bench_leaderboard_slice(
             folds_game_key, pool, config_path=_decision_path_for_key(folds_game_key)
         )
     except Exception:  # noqa: BLE001
-        chosen_name = winner[0]
+        chosen_name = "frequency"
     # Dacă există generare recentă, 🎯 = membrul ACTIV din audit (nu scorer
     # stale din best_methods.json eliminat din METHODS). Un audit vechi care
     # numește un filtru EXCLUDED nu are voie să devină 🎯.
     _gen_early = _last_generation_bench_info(folds_game_key, pool)
     dynamic = (_gen_early or {}).get("dynamic_selection")
-    if dynamic:
+    generated_names = {
+        item.get("method") for item in (_gen_early or {}).get("ensemble") or []
+        if isinstance(item, dict)
+    }
+    if _gen_early:
+        generated_names.add(_gen_early.get("method"))
+    if dynamic or not generated_names.issubset(_alive_methods - _BASE):
         _gen_early = {}  # This table describes the static Re-Bench decision.
     _gen_usable = (
         isinstance(_gen_early, dict)
@@ -1028,10 +1024,10 @@ def _render_bench_leaderboard_slice(
     _saved_entry = _decision_entry(folds_game_key, pool)
     if _gen_usable:
         _chosen_caption = "Metoda din ultima generare"
-    elif _saved_entry:
+    elif _saved_entry and _decision_entry_method(_saved_entry, folds_game_key):
         _chosen_caption = "Metoda din decizia salvată"
     else:
-        _chosen_caption = "Fără decizie salvată — fallback frequency"
+        _chosen_caption = "Fără decizie compatibilă — fallback frequency"
 
     def _row(i, rec):
         """`i=None` → rând de BASELINE (referință, fără rang și fără pretenția de candidat)."""
@@ -1104,8 +1100,11 @@ def _render_bench_leaderboard_slice(
     title = f"🏆 Clasament bench — {section_label} ({label})"
     with ui.expansion(title, value=True).classes("w-full"):
         if dynamic:
-            ui.label(f"Ultima generare a folosit selecția dinamică LR ({dynamic.get('method')}). "
-                     "Tabelul de mai jos prezintă alternativa cu decizie fixă din Re-Bench.").classes("text-caption")
+            from ui_results import _dynamic_hit_scope
+
+            ui.label(f"Ultima generare a folosit metoda dinamică {dynamic.get('method')}, "
+                     f"evaluată {_dynamic_hit_scope(dynamic)}. "
+                     "Tabelul prezintă decizia fixă din Re-Bench.").classes("text-caption")
         ui.label(
             "🏆 = primul în clasamentul eligibil; 🎯 = metoda din ultima generare sau decizia salvată. "
             "⛔ = exclusă din decizie: date incomplete sau scoruri egale la limita top-K "
@@ -1712,7 +1711,7 @@ def _mail_exact_rating(folds_game_key: str, pool: int, method: str, entry: dict)
         if cell != entry:
             return None
         engine = (cfg.get("_meta") or {}).get("engine_signature")
-        if engine and any(
+        if not isinstance(engine, dict) or any(
             str(engine.get(k, "")) != str(v)
             for k, v in compute_engine_signature().items()
         ):

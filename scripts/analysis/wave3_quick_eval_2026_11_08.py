@@ -18,7 +18,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from loto_enterprise.benchmark.methods import call_method  # noqa: E402
+from scripts.analysis.legacy_methods_2026_11_20 import call_method  # noqa: E402
 
 GAMES = {
     "loto_6_49": ("loto_6_49.csv", ["n1","n2","n3","n4","n5","n6"], 49, 6, 16),

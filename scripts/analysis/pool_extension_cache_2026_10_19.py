@@ -39,7 +39,7 @@ for _key in (
 import numpy as np
 import pandas as pd
 
-from loto_enterprise.benchmark.methods import METHODS, call_method
+from scripts.analysis.legacy_methods_2026_11_20 import METHODS, call_method, archived_scoring_sources
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import (
     chronological_history,
@@ -184,6 +184,7 @@ def load_data(path, *, max_num, draw_n, start=WARMUP) -> dict:
 def _code_source_sha() -> str:
     paths = [Path(__file__).resolve()]
     paths.extend(sorted((ROOT / "loto_enterprise").rglob("*.py")))
+    paths.extend(archived_scoring_sources(ROOT))
     digest = hashlib.sha256()
     for path in paths:
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))

@@ -1,4 +1,4 @@
-"""Traiectorii cauzale din banca istorică din 9 noiembrie, folosite în producție.
+"""Traiectorii cauzale păstrate pentru reproducerea studiilor din noiembrie 2026.
 
 Convenția fiecărei traiectorii este cea a studiului fixat. Unele stări
 amortizate (Holt și CUSUM) emit scorul înaintea actualizării cu t-1.

@@ -165,16 +165,17 @@ def compute_engine_signature() -> dict[str, str | int]:
     except Exception:  # noqa: BLE001
         CACHE_VERSION = "?"
     try:
-        from loto_enterprise.benchmark.methods import METHODS
+        from loto_enterprise.benchmark.methods import CATALOG_VERSION, METHODS
 
         names = sorted(str(n) for n in METHODS)
     except Exception:  # noqa: BLE001
         names = []
+        CATALOG_VERSION = "unavailable"
     from loto_enterprise.core.wf_sig import method_cache_semantics
 
     # Same numerical revisions as the per-method fold namespace. Empty suffixes
     # preserve the legacy digest for registries without revised scorers.
-    payload = "\n".join(f"{name}{method_cache_semantics(name)}" for name in names)
+    payload = "\n".join([CATALOG_VERSION, *(f"{name}{method_cache_semantics(name)}" for name in names)])
     digest = hashlib.md5(payload.encode("utf-8")).hexdigest()[:16]
     return {
         "bench_cache_version": str(CACHE_VERSION),
@@ -318,12 +319,10 @@ def check_freshness(
 
     # Motorul se compară ÎNAINTE de date: dacă scorurile sau setul de metode
     # s-au schimbat, `folds.csv` și decizia din el descriu alt sistem, oricât de
-    # neatinse ar fi CSV-urile. O semnătură lipsă (best_methods.json scris
-    # înainte de 15.09.2026) nu se tratează ca nepotrivire — n-avem cu ce
-    # compara, iar o alarmă la fiecare pornire ar fi zgomot; se stampilează la
-    # primul bench.
+    # neatinse ar fi CSV-urile. O decizie fără semnătură nu identifică
+    # metodele care au produs-o și necesită un Re-Bench pe catalogul actual.
     _cached_engine = cfg.get("_meta", {}).get("engine_signature")
-    _engine_changed = False
+    _engine_changed = True
     if isinstance(_cached_engine, dict) and _cached_engine:
         _current_engine = compute_engine_signature()
         _engine_changed = any(

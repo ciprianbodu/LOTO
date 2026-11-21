@@ -35,8 +35,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
-from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS, archived_scoring_sources
 from pool_combination_cache_2026_10_19 import load_scores
 from pool_combination_eval_2026_10_19 import evaluate_bank
 from pool_combinations_2026_10_19 import candidate_specs, iter_candidates
@@ -92,6 +91,7 @@ def sha(path):
 
 def source_hashes():
     paths = list((ROOT / "loto_enterprise").rglob("*.py"))
+    paths.extend(archived_scoring_sources(ROOT))
     paths += [
         HERE / name
         for name in (
@@ -113,7 +113,7 @@ def source_hashes():
 
 
 def methods():
-    return sorted(set(METHODS) - EXCLUDED_FROM_PRODUCTION)
+    return list(OCTOBER_19_EXPERTS)
 
 
 def specs():

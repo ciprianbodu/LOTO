@@ -19,7 +19,9 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
-Snapshot verificat la 2026-09-15:
+Catalogul activ la 20.11.2026 este `compact-v1`, comun tuturor celor 13 jocuri și ambelor urne Joker. Re-Bench compară trei metode: frecvențe pe ferestre (`compact_multiscale_shrink`), tranziții între zile (`compact_transition_prior`) și intervale de reapariție (`compact_renewal_hazard`). `frequency` este eligibilă și servește ca rezervă. `random` este reperul de comparație. O decizie veche trebuie recalculată prin Re-Bench. Metodele retrase se găsesc în `scripts/analysis/legacy_scoring/` pentru reproducerea studiilor. [Rezultatele validării pe 13 jocuri](scripts/analysis/compact_catalog_2026_11_20.md)
+
+Snapshot istoric verificat la 2026-09-15:
 
 - branch de productie: `main`;
 - UI: NiceGUI, `app_nicegui.py` + `ui_runtime.py` / `ui_results.py` / `ui_bench.py` / `ui_hits.py`, port 8000;
@@ -2070,6 +2072,12 @@ Ramase de decis (nu s-au schimbat):
   perioada testata, aceasta nu este o validare externa a selectiei metodei.
   `selection_validation="fixed_current_decision"` documenteaza limita.
 
+### Validarea cronologică după Re-Bench — 2026-11-20
+
+După publicarea deciziei, Re-Bench din interfață rulează automat comparația cronologică pentru jocurile țării. Panoul marchează regula cu cele mai multe extrageri cu cel puțin patru numere în poolul efectiv al jocului. Clasamentul folosește numai reguli care și-au ales metoda din extragerile anterioare. O extragere cu cinci sau șase hituri intră o singură dată în totalul 4+. Panoul afișează separat pragurile 5+ și 6 unde sunt posibile. Pentru Joker Urna 2 se numără bilele ghicite. Regulile retrospective servesc comparației. Rezultatele se păstrează local, împreună cu obiectivul folosit în rulare.
+
+În România, codurile LR și dimensiunile pool-urilor sunt fixate la lansarea Re-Bench, inclusiv pentru jocurile al căror fișier se încarcă ulterior. Tabelul 4+ arată numărul de bile din pool-ul salvat pe fiecare rând. Costul și premiul estimat folosesc codul LR al rulării, iar codurile deduse din istoricul vechi sunt marcate ca atare.
+
 ### Pool informativ pentru Joker Urna 2 — 2026-11-20
 
 În setările pentru România, glisorul „Pool Joker (Urna 2)” controlează câte bile din clasamentul urnei a doua apar în rezultat. Setarea acceptă 1–20 și pornește de la 5. Lista și frecvențele candidaților se calculează din istoricul Urnei 2. Prima bilă din listă este cea atașată fiecărei variante a schemei LR. Costul, premiile și verificarea walk-forward se calculează pe combinațiile jucate.
@@ -2082,9 +2090,9 @@ Arhiva folosită de actualizator se oprea la 15 noiembrie, în timp ce Loteria R
 
 În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.
 
-Motorul compară 1.000 de combinații de semnale și 11 metode din registru, pe variantele codului LR ales. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea oricare dintre rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Un candidat se califică dacă atinge cel puțin numărătorile martorului `random` la toate pragurile posibile pe variante (4+, 5+, 6) și îl depășește la cel puțin unul. Dintre candidații calificați, prioritățile sunt 5+, apoi 6 unde este posibil, apoi 4+. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează metoda, ponderile pentru combinații, motivul alegerii și numărătorile ambelor metode din fereastra de selecție.
+Din 20 noiembrie, motorul compară cele trei metode din catalogul compact și `frequency`, la dimensiunea poolului din codul LR ales. Versiunea anterioară compara 1.000 de combinații de semnale și 11 metode. După 250 de extrageri inițiale, folosește cel mult ultimele 104 zile de extragere, cu minimum 26 de zile evaluate. Pentru fiecare zi generează poolurile înainte de a vedea rezultatele zilei. Opțiunile pentru istoric, intervalul numerelor, penalizare și consecutive se aplică și în walk-forward. Obiectivul de selecție este numărul de extrageri cu cel puțin patru dintre numerele din pool. Premiile se calculează ulterior pe variantele codului LR. Candidatul trebuie să depășească martorul `random` la acest prag. Egalitățile se rezolvă în ordinea fixă a băncii, cu `frequency` prima. Metoda de rezervă este `frequency`. Auditul consemnează versiunea selectorului, candidații, metoda aleasă, obiectivul și numărătorile la toate pragurile posibile.
 
-Validarea istorică pe 1.775 de extrageri până la 15 noiembrie a dat 17 evenimente 4+ pe variante pentru regula dinamică, 10 pentru `random` și 12 pentru `frequency`. La 5+ și 6, atât regula dinamică, cât și `random` au obținut zero. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
+Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de extrageri până la 15 noiembrie, a înregistrat 17 evenimente 4+ pe variante, față de 10 pentru `random` și 12 pentru `frequency`. La hazard uniform se așteptau 11,05 evenimente 4+, cu probabilitate 0,0569 pentru cel puțin 17. Comanda `python -m scripts.analysis.validate_dynamic_lr_2026_11_19 --help` descrie reluarea studiului. [Rezultatele și comparațiile pereche](scripts/analysis/dynamic_lr_validation_2026_11_19.json)
 
 ### Portofolii de scheme reduse la același buget — 2026-11-18
 
@@ -2401,56 +2409,23 @@ UI-ul face polling la o secunda, fara reload complet.
   `auto_pilot_per_pool`. Auditul (`bench_winner`) marcheaza rezerva: `fallback`,
   `no_decision` (si la Romania fara decizie) sau `attempted` (numele respins,
   sau scorerul deciziei care a crapat ori a dat scoruri goale la generare).
-- `random` este baseline structural pentru benchmark. **Din 2026-10-31 nu mai
-  este interzis in productie** (`EXCLUDED_FROM_PRODUCTION` goală, §2): poate fi
-  scorer Auto-Pilot dacă apare în `best_methods.json`, cu avertismentul că
-  pool-ul devine nedeterminist (seed-ul depinde de istoric). În practică
-  decizia refăcută din folds.csv curent nu a ales `random` pe niciun pool.
-- `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw` si `haar_multiscale`
-  raman in registry pentru bench; **din 2026-10-31 sunt eligibile si in
-  productie** (listele de excludere goale). Decizia refăcută le alege acum
-  automat: `neighbor_adjacent` pe 5/40 k12/k15/k16/k17, `rwr_last_draw` pe
-  Joker Urna 1 k6/k8/k10.
-- Pe o urna cu o singura bila (Joker Urna 2 si echivalentele straine),
-  `markov_self_state` si `vlmm_self_k3` aleg bila precedenta in 66%, respectiv
-  63% din pasi chiar pe extrageri uniforme (5% la intamplare); masurat
-  2026-10-31 pe 100 de istorice uniforme (seed 20261007): clasa „bila
-  precedenta” = `{haar_multiscale 1,00, markov_self_state 0,71,
-  repeat_last_draw 1,00, vlmm_self_k3 0,71}`. **Din 2026-10-31
-  `EXCLUDED_FROM_SINGLE_PICK` e goală**: productia le poate rula dacă sunt
-  numite în `best_methods.json`, dar decizia automată tot le sare la
-  `draw_n == 1` prin curarea `per_game` (urna2 = 48 de metode, fără ele).
-  Pe jocurile cu pool raman metode de recenta, judecate de bench.
-  `test_no_structural_filters` masoara rata pe extrageri uniforme si opreste
-  orice alta metoda care ar repeta bila in majoritatea pasilor; de la
-  2026-10-31 testul single-pick e de caracterizare (assertă că listele sunt
-  goale și măsoară clasa), nu de excludere.
+- Istoricul pe care îl primește fiecare scorer compact se termină înaintea zilei țintă.
+  Toate extragerile din aceeași zi împart prefixul. Pentru Urna 2 intră în
+  calcul numai bilele ei. Scorul poate fi apelat cu `history_cutoffs` când
+  fișierul conține mai multe tiraje în aceeași zi.
+- Martorul `random` rămâne în tabelul de benchmark. O decizie salvată care îl
+  numește drept câștigător folosește rezerva `frequency`.
 
 ### 4.3 Metode active si curate
 
-- Registry-ul (`methods.py`) incarca cele patru module de metode prin
-  `methods_common.make_registry`; o coliziune de nume intre module se logheaza,
-  nu se ascunde. Nu mai exista mecanism de tombstone (`disabled_methods.json`):
-  o metoda stearsa dispare din cod, iar un nume necunoscut cade pe `frequency`.
-- Nu reintroduce metode GPU/neural, nici filtre structurale (paritate, sume,
-  decade, pozitie, secvente) deghizate in metode: acelea constrang combinatia,
-  nu prezic un numar. Istoric, dacă un astfel de filtru intra în METHODS intra
-  și în `EXCLUDED_FROM_PRODUCTION` (martor de bench, nu scorer):
-  `neighbor_adjacent`, `repeat_last_draw`, `rwr_last_draw`, `haar_multiscale`.
-  **Din 2026-10-31 ambele liste sunt goale** — la cererea explicită a
-  utilizatorului nicio metodă nu mai e exclusă din producție; filtrele
-  last-draw rămân în registry și pot fi alese de decizie (au câștigat pool-uri
-  5/40 și Joker Urna 1, vezi §2). Limita de consecutive (§6) nu e o metoda: e o
-  optiune explicita a utilizatorului pe compozitia pool-ului, aplicata dupa
-  scor, absenta din bench, fara afirmatie predictiva.
-- `test_no_structural_filters.py` masoara scorurile pentru clase statice;
-  nu constituie dovada unui avantaj predictiv.
-- `curated_methods.json` este reversibil si controleaza costul benchmarkului;
-  azi contine toate metodele de productie + `frequency` pe fiecare joc (fara
-  preselectie pe istoric). Exceptie: `per_game.joker_urna2` nu are
-  `markov_self_state`, `vlmm_self_k3` (bila precedenta, §4.2) si
-  `naive_bayes_last`, care dadea pe Urna 2 acelasi clasament ca `markov_pairs`
-  (658 din 658 de pasi). `random` si `frequency` trebuie sa ramana in lista activa.
+- Registrul activ încarcă cele trei metode CPU din `methods_compact.py`.
+  Metodele retrase sunt disponibile studiilor datate prin
+  `scripts.analysis.legacy_methods_2026_11_20`.
+- Limita de consecutive din §6 se aplică la construirea poolului. Testele
+  verifică și comportamentul scorerilor la reetichetarea numerelor.
+- Lista `active` din `curated_methods.json` controlează metodele evaluate.
+  Configurația implicită include cele trei metode compacte, `frequency` și
+  `random` pentru fiecare joc. O intrare `per_game` restrânge lista jocului.
 - Un run CLI cu `--quick`, `--methods`, sub trei ferestre (`--percentiles`),
   pe alt `--istoric` sau cu `--block-size` diferit de 1 nu trebuie sa rescrie
   decizia de productie fara `--force-decision` (`reduced_run_reason`).
@@ -2672,13 +2647,13 @@ UI-ul face polling la o secunda, fara reload complet.
 
 | Cheie | Geometrie | Tinta deciziei |
 |---|---:|---|
-| `loto_6_49` | 6/49 | 3+ implicit sau 4+ |
-| `loto_5_40` | 6 extrase din 40, bilet de 5 | mereu 4+ (3 numere nu aduc premiu) |
-| `joker_urna1` | 5/45 | 3+ implicit sau 4+ |
+| `loto_6_49` | 6/49 | 4+ implicit, reglabil 3–6 |
+| `loto_5_40` | 6 extrase din 40, bilet de 5 | 4+ implicit, reglabil 4–6 în pool |
+| `joker_urna1` | 5/45 | 4+ implicit, reglabil 3–5 |
 | `joker_urna2` | 1/20 | top-1, independent de tinta globala |
 
-`LOTO_BENCH_TARGET` accepta numai 3 sau 4 pentru jocurile de pool. Orice alta
-valoare este clampata. Tinta efectiva per joc vine din
+`LOTO_BENCH_TARGET` acceptă 3, 4, 5 sau 6 pentru jocurile de pool, cu 4 implicit.
+Ținta efectivă per joc vine din
 `hit_target.game_hit_target`: 5/40 are minim 4 (`GAME_MIN_HIT_TARGET`), deci
 selectorul global 3 nu il coboara, iar 4 il lasa pe 4. Geometria
 (extrase, bilet) per joc este `hit_target.GAME_DRAW_PICK`; decizia o ia de acolo

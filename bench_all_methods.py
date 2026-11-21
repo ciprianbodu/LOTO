@@ -173,26 +173,27 @@ def resolve_bench_paths(
 def resolve_bench_target(environ=None, ui_state_file=None) -> tuple[int, str]:
     """Ținta deciziei (3..6) și de unde vine.
 
-    `LOTO_BENCH_TARGET` (pus de UI la Re-Bench) are prioritate. Fără ea, ținta
-    salvată de UI în `.ui_state.json`: ACTUALIZARI.bat și verifica_mediu.py
-    recomandă `bench_all_methods.py` din linia de comandă, iar implicitul 3
-    scria decizia pe 3+ cu 4+ selectat în UI. Fără niciuna, 5+."""
-    from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
+    Variabila de mediu are prioritate față de ținta salvată în UI.
+    Implicit se numără toate extragerile cu cel puțin patru numere în pool."""
+    from loto_enterprise.benchmark.hit_target import (
+        DEFAULT_BENCH_HIT_TARGET, clamp_bench_hit_target, saved_bench_hit_target,
+    )
 
     env = os.environ if environ is None else environ
     raw = env.get("LOTO_BENCH_TARGET")
     if raw is not None and str(raw).strip():
-        return clamp_bench_hit_target(raw, default=5), "LOTO_BENCH_TARGET"
+        return clamp_bench_hit_target(raw), "LOTO_BENCH_TARGET"
     path = Path(UI_STATE_FILE if ui_state_file is None else ui_state_file)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = None
     if isinstance(data, dict) and data.get("bench_hit_target") is not None:
-        if data.get("bench_target_revision") != 1:
-            return 5, "migrare țintă principală 5+"
-        return clamp_bench_hit_target(data["bench_hit_target"], default=5), path.name
-    return 5, "implicit"
+        target, migrated = saved_bench_hit_target(data)
+        if migrated and str(data["bench_hit_target"]).strip() == "5":
+            return target, "migrare țintă principală 4+"
+        return target, path.name
+    return DEFAULT_BENCH_HIT_TARGET, "implicit"
 
 
 def render_priority_pool_decisions(console, cfg, report):
@@ -200,7 +201,7 @@ def render_priority_pool_decisions(console, cfg, report):
     from rich.table import Table
 
     table = Table(title="Auto-Pilot: ținta în pool, prioritate de la 7 numere")
-    for title in ("Joc", "Pool", "Metodă aleasă", "Țintă", "Rată 5+", "Rată 6+"):
+    for title in ("Joc", "Pool", "Metodă aleasă", "Țintă", "Rată 4+", "Rată 5+", "Rată 6+"):
         table.add_column(title)
     for game_key, game in cfg.get("games", {}).items():
         measured = report.get("games", {}).get(game_key, {})
@@ -210,7 +211,7 @@ def render_priority_pool_decisions(console, cfg, report):
             method = entry.get("scorer", "frequency")
             stats = measured.get("per_method", {}).get(method, {}).get("per_pool", {}).get(key, {})
             rates = []
-            for target in (5, 6):
+            for target in (4, 5, 6):
                 value = stats.get(f"rate_{target}plus_real")
                 if target > int(measured.get("draw_n", 6)) or value is None:
                     rates.append("—")
@@ -399,6 +400,16 @@ def main() -> int:
         ],
     )
 
+    _explicit = bool(args.quick or args.methods)
+    if not _explicit:
+        from loto_enterprise.benchmark.methods import require_complete_catalog
+
+        try:
+            require_complete_catalog()
+        except RuntimeError as exc:
+            logging.error("[bench] %s", exc)
+            return 1
+
     # Ținta deciziei: aceeași ca în UI și când bench-ul pornește din consolă.
     bench_target, _target_source = resolve_bench_target()
     os.environ["LOTO_BENCH_TARGET"] = str(bench_target)
@@ -411,7 +422,6 @@ def main() -> int:
 
     # Starea curării în log (acum că handler-ele există). --methods/--quick sunt
     # override-uri EXPLICITE ale utilizatorului → ocolesc curarea, deliberat.
-    _explicit = bool(args.quick or args.methods)
     if _explicit and CURATION_INFO.get("active"):
         logging.info(
             "[curated] curare IGNORATĂ: lista de metode e dată explicit "
@@ -503,7 +513,7 @@ def main() -> int:
             if priority:
                 console.print(
                     f"    Prioritate predicții pool: {priority[0]}..{priority[-1]}; "
-                    "rate 5+ și 6+ măsurate separat."
+                    "rate cumulative 4+, 5+ și 6+ măsurate separat."
                 )
             if lr_game:
                 lr_sizes = sorted({s.n for s in lr_schemes(lr_game) if s.n in priority})
@@ -816,6 +826,14 @@ def main() -> int:
             f"ținta {bench_target}+)"
         )
     console.print()
+    if not _skip_decision and not _decision_failed and (run_id := os.environ.get("LOTO_BENCH_RUN_ID")):
+        from loto_enterprise.benchmark.chronological_validation import VALIDATION_CODES_ENV, run_validation
+
+        if plan := os.environ.get(VALIDATION_CODES_ENV):
+            try:
+                run_validation(country, run_id, json.loads(plan))
+            except Exception:  # noqa: BLE001
+                logging.exception("[bench] Validarea cronologică nu a putut fi salvată.")
     return 1 if _decision_failed else 0
 
 

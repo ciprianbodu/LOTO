@@ -38,7 +38,9 @@ import numpy as np
 import pandas as pd
 
 from loto_enterprise.benchmark import decision
-from loto_enterprise.benchmark.methods import METHODS, call_method
+from scripts.analysis.legacy_methods_2026_11_20 import (
+    OCTOBER_19_EXPERTS, SEPTEMBER_METHODS as METHODS, call_method,
+)
 from loto_enterprise.benchmark.runner import GameDef, _align_urna2_with_engine, discover_games
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history, history_dates, training_cutoffs
@@ -84,7 +86,7 @@ def evaluate_method(
         cutoff = int(cutoffs[index])
         try:
             if cutoff != previous_cutoff:
-                scores, _elapsed = call_method(method, draws[:cutoff], max_num)
+                scores, _elapsed = call_method(method, draws[:cutoff], max_num, history_cutoffs=cutoffs[:cutoff])
                 if not has_usable_score_variance(scores):
                     raise ValueError("unusable_scores")
                 ranked = rank_by_score(scores, max_num)
@@ -161,9 +163,15 @@ def select_from_past(
     frame = selection_frame(series, available, game.key, pool_size)
     # Funcția e pură: nu apelează save_decision și nu citește folds/best_methods.
     target_context = patch.object(decision, "BENCH_HIT_TARGET", target) if game.draw_n > 1 else nullcontext()
+    # The replay measured all 52, then applied the production eligibility of its era.
+    candidates = tuple(
+        name for name in METHODS if name in series and name in OCTOBER_19_EXPERTS
+        and not (game.draw_n == 1 and name in {"markov_self_state", "vlmm_self_k3"})
+    )
     with target_context:
         config = decision.decide_optimal_config_for_pool(
-            frame, game.key, pool_size, game.draw_n, game.max_num, game.pick_n or game.draw_n
+            frame, game.key, pool_size, game.draw_n, game.max_num, game.pick_n or game.draw_n,
+            candidate_methods=candidates,
         )
     if "error" in config:
         raise ValueError(config["error"])

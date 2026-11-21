@@ -28,8 +28,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
-from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS, archived_scoring_sources
 from loto_enterprise.core.pool_selection import apply_consecutive_limit
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
@@ -88,7 +87,11 @@ def sha(path: Path) -> str:
 
 
 def source_hashes() -> dict[str, str]:
-    paths = sorted((ROOT / "loto_enterprise" / "benchmark").glob("methods*.py"))
+    paths = archived_scoring_sources(ROOT)
+    paths += [
+        ROOT / "loto_enterprise/benchmark/methods.py",
+        ROOT / "loto_enterprise/benchmark/methods_common.py",
+    ]
     paths += [
         ROOT / "loto_enterprise/core/ranking.py",
         ROOT / "loto_enterprise/core/pool_selection.py",
@@ -114,7 +117,7 @@ def protocol() -> dict:
         "baseline": BASELINE,
         "pool_sizes": list(KS),
         "warmup_rows": WARMUP,
-        "methods": sorted(set(METHODS) - EXCLUDED_FROM_PRODUCTION),
+        "methods": list(OCTOBER_19_EXPERTS),
         "new_candidates": list(NEW_NAMES),
         "experts": list(EXPERTS),
         "candidate_parameters": {

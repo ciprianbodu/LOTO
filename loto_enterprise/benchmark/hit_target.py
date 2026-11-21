@@ -17,6 +17,8 @@ from loto_enterprise.core.lotteries import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_BENCH_HIT_TARGET = 4
+BENCH_TARGET_REVISION = 2
 
 _REPLAY_TARGET: ContextVar[int | None] = ContextVar("replay_target", default=None)
 
@@ -40,10 +42,10 @@ def fixed_replay_target():
         _REPLAY_TARGET.reset(token)
 
 
-def clamp_bench_hit_target(value, *, default: int = 3) -> int:
+def clamp_bench_hit_target(value, *, default: int = DEFAULT_BENCH_HIT_TARGET) -> int:
     try:
         n = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         # Eșecul de parsare cădea tăcut pe `default` — spre deosebire de o valoare
         # doar în afara intervalului (3/4), care logează mai jos. O valoare
         # neparsabilă (ex. "4.0" scrisă programatic din str(float(x))) trecea
@@ -62,6 +64,18 @@ def clamp_bench_hit_target(value, *, default: int = 3) -> int:
         )
         return default
     return n
+
+
+def saved_bench_hit_target(settings: dict) -> tuple[int, bool]:
+    """Resolve the saved static pool target and whether its settings need migration."""
+    target = clamp_bench_hit_target(settings.get("bench_hit_target", DEFAULT_BENCH_HIT_TARGET))
+    revision = settings.get("bench_target_revision")
+    if type(revision) is int and revision >= BENCH_TARGET_REVISION:
+        return target, False
+    # Older releases persisted 5 even when the user never touched the selector.
+    if target == 5:
+        target = DEFAULT_BENCH_HIT_TARGET
+    return target, bool(settings)
 
 
 # Ținta minimă PER JOC. Loto 5/40: se extrag 6 numere, biletul are 5, iar 3

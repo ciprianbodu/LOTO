@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .methods_common import indicator, make_registry, vector_to_scores
+from loto_enterprise.benchmark.methods_common import indicator, make_registry, vector_to_scores
 
 # Orizontul efectiv al uitării bayesiene: 1/(1−λ) ≈ 333 extrageri. Fixat a
 # priori (nu calibrat pe rezultate — calibrarea pe același istoric evaluat de

@@ -417,13 +417,26 @@ def history_played_system(game: str, row: dict) -> dict:
         return result
     if str(row.get("country") or "RO").upper() != "RO":
         return result
-    pool = sorted({int(n) for n in row.get("pool_numbers") or []})
-    if len(set(row.get("drawn") or [])) != (5 if label == "joker" else 6):
-        return result
-    schemes = lr_schemes(label, len(pool))
-    if not schemes:
-        return result
     code = row.get("lr_scheme_code")
+    if code is not None:
+        result["system_label"] = f"Schemă redusă LR · Cod {code}"
+    if result.get("history_system_issue"):
+        return result
+    from loto_enterprise.core.pool_prize import _GEOMETRY, _numbers
+
+    geometry = _GEOMETRY.get(_GAMES.get(label))
+    if geometry is None:
+        if code is not None:
+            result["history_system_issue"] = f"joc necunoscut pentru codul LR: {game}"
+        return result
+    _, draw_count, maximum = geometry
+    try:
+        pool = sorted(_numbers(row.get("pool_numbers"), None, maximum))
+        drawn = _numbers(row.get("drawn"), draw_count, maximum)
+    except (TypeError, ValueError) as exc:
+        if code is not None:
+            result["history_system_issue"] = f"pool sau extragere incompatibilă cu codul LR: {exc}"
+        return result
     if code is not None:
         from covering.lr_selection import resolve_lr_scheme, lr_scheme_signature
         try:
@@ -435,12 +448,14 @@ def history_played_system(game: str, row: dict) -> dict:
             result["history_system_issue"] = str(exc)
             return result
     else:
+        schemes = lr_schemes(label, len(pool))
+        if not schemes:
+            return result
         scheme = min(schemes, key=lambda s: (s.size, s.code))
     expected = row.get("expected_variant_count")
     if code is not None and expected is not None and expected != scheme.size:
         result["history_system_issue"] = "numărul variantelor păstrate nu corespunde codului LR"
         return result
-    drawn = {int(n) for n in row.get("drawn") or []}
     example, hits = best_variant(scheme, pool, drawn)
     if label == "joker":
         raw = row.get("best_variant_raw") or []
@@ -453,9 +468,11 @@ def history_played_system(game: str, row: dict) -> dict:
             example.append(int(chosen))
         except (TypeError, ValueError, OverflowError):
             result["history_system_issue"] = "bila Joker jucată nu este păstrată în istoric"
+    inferred = code is None or row.get("lr_scheme_inferred") is True
     result.update(
         lr_scheme_code=scheme.code, lr_scheme_game=label,
-        system_label=f"Schemă redusă LR · {scheme.label}",
+        system_label=f"Schemă redusă LR · {scheme.label}" + (" (dedus din pool)" if inferred else ""),
+        lr_scheme_inferred=inferred,
         expected_variant_count=scheme.size, generated_variants=[],
         variant_prize_groups=None, virtual_full_system=False,
         best_variant_raw=example, best_ticket=hits,

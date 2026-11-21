@@ -1,4 +1,4 @@
-"""Exploratory secondary replay of the live LR selector on previously studied holdouts.
+"""Exploratory secondary replay of the 2026-11-19 LR selection rule on prior holdouts.
 
 The pooled uniform tails convolve the three binomial distributions with the
 distinct exact ticket probabilities of the official schemes. This assumes
@@ -12,6 +12,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from functools import lru_cache
 from itertools import pairwise
 from pathlib import Path
 from time import perf_counter
@@ -26,14 +27,12 @@ if str(ROOT) not in sys.path:
 
 from covering.lr_schemes import scheme_odds, scheme_tickets
 from covering.lr_selection import lr_scheme_signature, resolve_lr_scheme
-from loto_enterprise.benchmark.methods import call_method
+from covering.probability import subset_hit_table
 from loto_enterprise.core.draw_validation import valid_draw_matrix
-from loto_enterprise.core.dynamic_winner import (
-    CANDIDATES,
-    DYNAMIC_VERSION,
-    choose_dynamic_winner,
-    dynamic_forecasts,
+from scripts.analysis.legacy_scoring.dynamic_bank import (
+    RECIPE_IDS, RECIPE_WEIGHTS, SIGNAL_NAMES, recipe_scores, signal_ranks,
 )
+from loto_enterprise.core.dynamic_winner import _forecast_origins, _method_rows
 from loto_enterprise.core.history import (
     chronological_history,
     history_dates,
@@ -42,9 +41,17 @@ from loto_enterprise.core.history import (
 from loto_enterprise.core.pool_selection import select_pool_from_scores
 from loto_enterprise.core.ranking import rank_by_score
 from scripts.analysis.lr_pool_study_2026_11_04 import load_source
+from scripts.analysis.legacy_methods_2026_11_20 import call_method
 
 HERE = Path(__file__).resolve().parent
 ARCHIVE = HERE / "tail_1000_results.json"
+ARCHIVED_VERSION = "dynamic-lr-v1"
+REGISTERED = (
+    "frequency", "freq_window_50", "freq_window_200", "momentum_30_300",
+    "cusum_burst", "runs_persistence", "spectral_phase", "repeat_last_draw",
+    "neighbor_adjacent", "croston_interval", "naive_bayes_last",
+)
+CANDIDATES = (*REGISTERED, *RECIPE_IDS)
 SETTINGS = {"max_run": 2, "penalty_draws": 0}
 REFERENCES = ("frequency", "random")
 AS_OF = "2026-11-15"
@@ -54,6 +61,86 @@ GAMES = (
     ("loto_5_40", "5/40", 40, 6, 5, 8, 16, "2022-03-27", 465, (5, 0)),
     ("joker", "joker", 45, 5, 5, 10, 24, "2021-04-04", 592, (3, 0)),
 )
+
+
+def _archived_winner(totals, days, thresholds):
+    """Original 26-day minimum, no losses to random and the 5+, 6+, 4+ priority."""
+    if days < 26:
+        return 0, "insufficient_history"
+    trials, random = totals[:-1], totals[-1]
+    eligible = np.flatnonzero(np.all(trials >= random, axis=1) & np.any(trials > random, axis=1))
+    if not len(eligible):
+        return 0, "no_gain_over_random"
+    for threshold in (5, 6, 4):
+        if threshold in thresholds:
+            values = trials[eligible, thresholds.index(threshold)]
+            eligible = eligible[values == values.max()]
+    return int(eligible[0]), "winner"
+
+
+def _archived_four_plus_winner(totals, days, thresholds):
+    if days < 26:
+        return 0, "insufficient_history"
+    counts = totals[:, thresholds.index(4)]
+    best = int(np.argmax(counts[:-1]))
+    return (best, "winner") if counts[best] > counts[-1] else (0, "no_gain_over_random")
+
+
+def _prepare_archived_scores(indicators, universe):
+    ranks = signal_ranks(indicators, universe)[1]
+
+    def score(history, bounds, universe, reported):
+        registered, unavailable = _method_rows(history, bounds, universe, reported, REGISTERED, call_method)
+        blends = recipe_scores(ranks[len(history)]).astype(np.float64)
+        flat = np.ptp(blends, axis=1) == 0
+        blends -= blends.min(axis=1, keepdims=True)
+        blends += 1
+        blends /= blends.max(axis=1, keepdims=True)
+        blends[flat] = registered[0]
+        return np.vstack([registered[:-1], blends, registered[-1]]), np.r_[unavailable, flat]
+
+    return score
+
+
+@lru_cache(maxsize=3)
+def _archived_ticket_scorer(scheme):
+    masks, _ = scheme._position_data
+    best_hits = subset_hit_table(scheme.n, masks)[1]
+    positional_weights = 1 << np.arange(scheme.n)
+
+    def score(matches):
+        return best_hits[matches @ positional_weights]
+
+    return score
+
+
+def archived_forecasts(matrix, bounds, scheme, origins, *, version=ARCHIVED_VERSION, settings=None):
+    """Replay the original 1,011 candidates with their recorded v1/v2/v3 objective."""
+    metadata = {"version": version}
+    if version == "dynamic-lr-v3-pool-4plus":
+        metadata.update(hit_scope="pool", pool_hit_target=4, pool_size=scheme.n)
+    elif version == "dynamic-lr-v2-ticket-4plus":
+        metadata["ticket_hit_target"] = 4
+    elif version != ARCHIVED_VERSION:
+        raise ValueError(f"Unknown archived LR selector: {version!r}")
+    forecasts = _forecast_origins(
+        matrix,
+        bounds,
+        scheme,
+        origins,
+        candidates=CANDIDATES,
+        select_winner=_archived_winner if version == ARCHIVED_VERSION else _archived_four_plus_winner,
+        prepare_archived_scores=_prepare_archived_scores,
+        archived_ticket_hits=None if version == "dynamic-lr-v3-pool-4plus" else _archived_ticket_scorer(scheme),
+        selection_metadata=metadata,
+        **(SETTINGS if settings is None else settings),
+    )
+    recipes = dict(zip(RECIPE_IDS, RECIPE_WEIGHTS, strict=True))
+    for _, details in forecasts.values():
+        weights = recipes.get(details["method"])
+        if weights is not None:
+            details["weights"] = {name: int(w) for name, w in zip(SIGNAL_NAMES, weights, strict=True) if w}
+    return forecasts
 
 
 def as_counts(hits, thresholds):
@@ -120,9 +207,7 @@ def evaluate(game, original):
         raise ValueError(f"Rezultate istorice incompatibile pentru {key}")
     next_origin = len(matrix)
     started = perf_counter()
-    predictions = dynamic_forecasts(
-        matrix, bounds, scheme, [*origins, next_origin], **SETTINGS
-    )
+    predictions = archived_forecasts(matrix, bounds, scheme, [*origins, next_origin])
     batch_seconds = perf_counter() - started
 
     by_strategy = {strategy: {} for strategy in ("dynamic", *REFERENCES)}
@@ -184,14 +269,13 @@ def evaluate(game, original):
             "neither": int(sum(~dynamic & ~random)),
         }
 
-    # The batch call above sees the full archive. An independent call physically
-    # truncates it, exercising the entry point used by live production.
+    # Verify the archived rule at single origins using physically truncated histories.
     checked = []
     for origin in (origins[0], next_origin):
         t0 = perf_counter()
-        standalone = choose_dynamic_winner(
-            matrix[:origin], bounds[:origin], scheme, **SETTINGS
-        )
+        standalone = archived_forecasts(
+            matrix[:origin], bounds[:origin], scheme, [origin]
+        )[origin]
         if standalone != predictions[origin]:
             raise AssertionError(f"{key}: batch/live mismatch at origin {origin}")
         checked.append(
@@ -239,7 +323,7 @@ def main():
     frozen = json.loads(ARCHIVE.read_bytes())["games"] if ARCHIVE.is_file() else {}
     output = {
         "analysis": "Analiză secundară exploratorie pe perioadele finale folosite în studiul anterior.",
-        "selector_version": DYNAMIC_VERSION,
+        "selector_version": ARCHIVED_VERSION,
         "competing_methods": len(CANDIDATES),
         "joker_bonus_comparator": "registered frequency for all three strategies",
         "settings": SETTINGS,

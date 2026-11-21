@@ -1,0 +1,960 @@
+{
+  "pool_size": 10,
+  "warmup_draws": 250,
+  "selection": "Most 4+ on first floor(70%) of eligible dates in each game; ties by method name.",
+  "controls": "Registered history-seeded random, recency-weighted frequency, archived dmd_forecast.",
+  "scope": "Main-drum top ten by raw score; EuroMillions stars and other bonus balls excluded.",
+  "games": {
+    "de_lotto": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/germania_lotto_6aus49.csv",
+      "snapshot_csv_sha256": "d1a6185b23b9770281f78e8defabfefebe1098efad8728716ffdc21218906e16",
+      "archive_draws": 6579,
+      "archive_start": "1955-10-09",
+      "train_start": "1960-07-31",
+      "train_end": "2010-11-10",
+      "train_dates": 3900,
+      "train_draws": 4657,
+      "test_start": "2010-11-13",
+      "test_end": "2026-11-18",
+      "test_dates": 1672,
+      "test_draws": 1672,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_transition_prior",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 47,
+          "test": {
+            "4": 23,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 23,
+          "p_uniform_4plus": 0.2636278653529116,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 44,
+          "test": {
+            "4": 23,
+            "5": 4,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 23,
+          "p_uniform_4plus": 0.2636278653529116,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 73,
+          "test": {
+            "4": 20,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 20,
+          "p_uniform_4plus": 0.5128605918206556,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 53,
+          "test": {
+            "4": 27,
+            "5": 3,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 27,
+          "p_uniform_4plus": 0.07023519939990784
+        },
+        "frequency": {
+          "train_4plus": 51,
+          "test": {
+            "4": 18,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 18,
+          "p_uniform_4plus": 0.6893316765598583
+        },
+        "dmd_forecast": {
+          "train_4plus": 57,
+          "test": {
+            "4": 16,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 16,
+          "p_uniform_4plus": 0.8347721955830911
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "pl_lotto": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/polonia_lotto_6din49.csv",
+      "snapshot_csv_sha256": "278218dc81ca0ddc6bf162047e25234a39146a0f80cf918395909ffeabf6f270",
+      "archive_draws": 7433,
+      "archive_start": "1957-01-27",
+      "train_start": "1961-12-03",
+      "train_end": "2014-12-11",
+      "train_dates": 4358,
+      "train_draws": 5314,
+      "test_start": "2014-12-13",
+      "test_end": "2026-11-19",
+      "test_dates": 1869,
+      "test_draws": 1869,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_renewal_hazard",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 64,
+          "test": {
+            "4": 27,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 27,
+          "p_uniform_4plus": 0.17409324151199113,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 74,
+          "test": {
+            "4": 14,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 14,
+          "p_uniform_4plus": 0.9745797193549495,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 60,
+          "test": {
+            "4": 21,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 21,
+          "p_uniform_4plus": 0.6253287534248666,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 73,
+          "test": {
+            "4": 18,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 18,
+          "p_uniform_4plus": 0.8396816334267995
+        },
+        "frequency": {
+          "train_4plus": 49,
+          "test": {
+            "4": 15,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 15,
+          "p_uniform_4plus": 0.9559281121574785
+        },
+        "dmd_forecast": {
+          "train_4plus": 74,
+          "test": {
+            "4": 23,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 23,
+          "p_uniform_4plus": 0.4555215845424789
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "es_primitiva": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/spania_la_primitiva_6din49.csv",
+      "snapshot_csv_sha256": "6256b522cb1d0c17ca84b89c7a7014d499340883048373460600a77248738608",
+      "archive_draws": 4217,
+      "archive_start": "1985-10-17",
+      "train_start": "1990-06-30",
+      "train_end": "2017-06-24",
+      "train_dates": 2776,
+      "train_draws": 2776,
+      "test_start": "2017-06-29",
+      "test_end": "2026-11-19",
+      "test_dates": 1191,
+      "test_draws": 1191,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_multiscale_shrink",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 35,
+          "test": {
+            "4": 16,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 16,
+          "p_uniform_4plus": 0.3408533032348998,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 29,
+          "test": {
+            "4": 13,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 13,
+          "p_uniform_4plus": 0.6533275616551516,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 28,
+          "test": {
+            "4": 13,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 13,
+          "p_uniform_4plus": 0.6533275616551516,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 25,
+          "test": {
+            "4": 15,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 15,
+          "p_uniform_4plus": 0.441099229792057
+        },
+        "frequency": {
+          "train_4plus": 31,
+          "test": {
+            "4": 12,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 12,
+          "p_uniform_4plus": 0.7505097419832901
+        },
+        "dmd_forecast": {
+          "train_4plus": 32,
+          "test": {
+            "4": 14,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 14,
+          "p_uniform_4plus": 0.5476718889737073
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "at_lotto": {
+      "geometry": "6/45",
+      "source": "_ISTORIC/externe/austria_lotto_6aus45.csv",
+      "snapshot_csv_sha256": "1bb98690407ca3f020c76580950e3e774772f5b72fb065e7b3d1805f78ca22b6",
+      "archive_draws": 3705,
+      "archive_start": "1986-09-07",
+      "train_start": "1991-06-30",
+      "train_end": "2017-10-04",
+      "train_dates": 2418,
+      "train_draws": 2418,
+      "test_start": "2017-10-08",
+      "test_end": "2026-11-18",
+      "test_dates": 1037,
+      "test_draws": 1037,
+      "fair_rates": {
+        "4": 0.016449234259784458,
+        "5": 0.0011086474501108647,
+        "6": 2.5782498839787553e-05
+      },
+      "frozen_method": "compact_multiscale_shrink",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 36,
+          "test": {
+            "4": 22,
+            "5": 3,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 22,
+          "p_uniform_4plus": 0.13993686447761725,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 29,
+          "test": {
+            "4": 15,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 15,
+          "p_uniform_4plus": 0.7257783253590132,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 32,
+          "test": {
+            "4": 19,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 19,
+          "p_uniform_4plus": 0.34959362575422054,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 54,
+          "test": {
+            "4": 10,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 10,
+          "p_uniform_4plus": 0.9755162929847015
+        },
+        "frequency": {
+          "train_4plus": 39,
+          "test": {
+            "4": 19,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 19,
+          "p_uniform_4plus": 0.34959362575422054
+        },
+        "dmd_forecast": {
+          "train_4plus": 47,
+          "test": {
+            "4": 15,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 15,
+          "p_uniform_4plus": 0.7257783253590132
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "be_lotto": {
+      "geometry": "6/45",
+      "source": "_ISTORIC/externe/belgia_lotto_6din45.csv",
+      "snapshot_csv_sha256": "87fd0544faf50c1ffe66ca53f590c8e0d813c83eb42bfc69688026c65828222c",
+      "archive_draws": 1580,
+      "archive_start": "2011-10-01",
+      "train_start": "2014-02-22",
+      "train_end": "2023-01-21",
+      "train_dates": 931,
+      "train_draws": 931,
+      "test_start": "2023-01-25",
+      "test_end": "2026-11-18",
+      "test_dates": 399,
+      "test_draws": 399,
+      "fair_rates": {
+        "4": 0.016449234259784458,
+        "5": 0.0011086474501108647,
+        "6": 2.5782498839787553e-05
+      },
+      "frozen_method": "compact_multiscale_shrink",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 17,
+          "test": {
+            "4": 8,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 8,
+          "p_uniform_4plus": 0.33597437384976686,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 15,
+          "test": {
+            "4": 8,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 8,
+          "p_uniform_4plus": 0.33597437384976686,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 11,
+          "test": {
+            "4": 8,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 8,
+          "p_uniform_4plus": 0.33597437384976686,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 14,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.9897462826599591
+        },
+        "frequency": {
+          "train_4plus": 11,
+          "test": {
+            "4": 9,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 9,
+          "p_uniform_4plus": 0.2145516795366156
+        },
+        "dmd_forecast": {
+          "train_4plus": 22,
+          "test": {
+            "4": 9,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 9,
+          "p_uniform_4plus": 0.2145516795366156
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "hu_hatos": {
+      "geometry": "6/45",
+      "source": "_ISTORIC/externe/ungaria_hatoslotto_6din45.csv",
+      "snapshot_csv_sha256": "503e466276d7ecce1cb0b5ce1ba3c7c1d2e563e86f8c02398b93793475d8929a",
+      "archive_draws": 1866,
+      "archive_start": "1988-10-29",
+      "train_start": "1997-02-23",
+      "train_end": "2018-10-21",
+      "train_dates": 1131,
+      "train_draws": 1131,
+      "test_start": "2018-10-28",
+      "test_end": "2026-11-19",
+      "test_dates": 485,
+      "test_draws": 485,
+      "fair_rates": {
+        "4": 0.016449234259784458,
+        "5": 0.0011086474501108647,
+        "6": 2.5782498839787553e-05
+      },
+      "frozen_method": "compact_renewal_hazard",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 22,
+          "test": {
+            "4": 11,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 11,
+          "p_uniform_4plus": 0.18026242601723264,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 25,
+          "test": {
+            "4": 6,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 6,
+          "p_uniform_4plus": 0.8090065347952393,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 22,
+          "test": {
+            "4": 7,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 7,
+          "p_uniform_4plus": 0.6859322777059591,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 11,
+          "test": {
+            "4": 6,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 6,
+          "p_uniform_4plus": 0.8090065347952393
+        },
+        "frequency": {
+          "train_4plus": 13,
+          "test": {
+            "4": 7,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 7,
+          "p_uniform_4plus": 0.6859322777059591
+        },
+        "dmd_forecast": {
+          "train_4plus": 18,
+          "test": {
+            "4": 5,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 5,
+          "p_uniform_4plus": 0.9009939321197273
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "cz_sportka": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/cehia_sportka_6din49.csv",
+      "snapshot_csv_sha256": "9664b73f49cdbe25704f731337f7926cd4da39636b7d0cc210b8432cb273b7d4",
+      "archive_draws": 7666,
+      "archive_start": "1994-01-09",
+      "train_start": "1995-11-01",
+      "train_end": "2019-07-07",
+      "train_dates": 2595,
+      "train_draws": 5190,
+      "test_start": "2019-07-10",
+      "test_end": "2026-11-18",
+      "test_dates": 1113,
+      "test_draws": 2226,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_transition_prior",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 74,
+          "test": {
+            "4": 25,
+            "5": 3,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 15,
+          "p_uniform_4plus": 0.6323261424373933,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 69,
+          "test": {
+            "4": 21,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 6,
+          "p_uniform_4plus": 0.8775574320803196,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 79,
+          "test": {
+            "4": 22,
+            "5": 2,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 11,
+          "p_uniform_4plus": 0.8294768214085685,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 55,
+          "test": {
+            "4": 24,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 10,
+          "p_uniform_4plus": 0.7053475301505296
+        },
+        "frequency": {
+          "train_4plus": 55,
+          "test": {
+            "4": 19,
+            "5": 3,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 8,
+          "p_uniform_4plus": 0.9446013968708976
+        },
+        "dmd_forecast": {
+          "train_4plus": 63,
+          "test": {
+            "4": 25,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 16,
+          "p_uniform_4plus": 0.6323261424373933
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "sk_loto": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/slovacia_loto_6din49.csv",
+      "snapshot_csv_sha256": "9f663ac0b3570ff0de24714cd0543bf03e98b7a8653f63313a98c683f17d8035",
+      "archive_draws": 5210,
+      "archive_start": "2002-10-02",
+      "train_start": "2003-12-21",
+      "train_end": "2020-08-19",
+      "train_dates": 1736,
+      "train_draws": 3472,
+      "test_start": "2020-08-23",
+      "test_end": "2026-11-18",
+      "test_dates": 744,
+      "test_draws": 1488,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_renewal_hazard",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 43,
+          "test": {
+            "4": 17,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 6,
+          "p_uniform_4plus": 0.5921590830535173,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 45,
+          "test": {
+            "4": 19,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 11,
+          "p_uniform_4plus": 0.40262265508165423,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 43,
+          "test": {
+            "4": 21,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 11,
+          "p_uniform_4plus": 0.23903532510387618,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 46,
+          "test": {
+            "4": 13,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 5,
+          "p_uniform_4plus": 0.8950984825281845
+        },
+        "frequency": {
+          "train_4plus": 51,
+          "test": {
+            "4": 12,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 8,
+          "p_uniform_4plus": 0.936371699289283
+        },
+        "dmd_forecast": {
+          "train_4plus": 50,
+          "test": {
+            "4": 20,
+            "5": 1,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 9,
+          "p_uniform_4plus": 0.3156310820503293
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    },
+    "bg_toto2": {
+      "geometry": "6/49",
+      "source": "_ISTORIC/externe/bulgaria_toto2_6din49.csv",
+      "snapshot_csv_sha256": "8232ab6cfdc2b44c87d7ed389ddf8b076a30d7abbd555af0a9b628a8b5df4ed6",
+      "archive_draws": 710,
+      "archive_start": "2020-01-02",
+      "train_start": "2022-05-26",
+      "train_end": "2025-06-26",
+      "train_dates": 322,
+      "train_draws": 322,
+      "test_start": "2025-06-29",
+      "test_end": "2026-11-08",
+      "test_dates": 138,
+      "test_draws": 138,
+      "fair_rates": {
+        "4": 0.011845693621826832,
+        "5": 0.0007178298112618187,
+        "6": 1.5017360068238884e-05
+      },
+      "frozen_method": "compact_renewal_hazard",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 2,
+          "test": {
+            "4": 5,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 5,
+          "p_uniform_4plus": 0.024831083762350263,
+          "p_holm_all_method_games": 0.7449325128705079
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 7,
+          "test": {
+            "4": 5,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 5,
+          "p_uniform_4plus": 0.024831083762350263,
+          "p_holm_all_method_games": 0.7449325128705079
+        },
+        "compact_transition_prior": {
+          "train_4plus": 6,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.4874121816271101,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 4,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.4874121816271101
+        },
+        "frequency": {
+          "train_4plus": 3,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.4874121816271101
+        },
+        "dmd_forecast": {
+          "train_4plus": 5,
+          "test": {
+            "4": 1,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 1,
+          "p_uniform_4plus": 0.8068841436201677
+        }
+      },
+      "p_holm_frozen_across_games": 0.24831083762350264
+    },
+    "eu_euromillions": {
+      "geometry": "5/50",
+      "source": "_ISTORIC/externe/euromillions_5din50_stele.csv",
+      "snapshot_csv_sha256": "218549189dde8dd3ad24390c67f2f6d5aa42c62ed7063b974ffbedc68a1753c8",
+      "archive_draws": 1999,
+      "archive_start": "2004-02-13",
+      "train_start": "2008-11-28",
+      "train_end": "2021-11-05",
+      "train_dates": 1224,
+      "train_draws": 1224,
+      "test_start": "2021-11-09",
+      "test_end": "2026-11-17",
+      "test_dates": 525,
+      "test_draws": 525,
+      "fair_rates": {
+        "4": 0.004083520549755517,
+        "5": 0.00011893749174045196,
+        "6": 0.0
+      },
+      "frozen_method": "compact_multiscale_shrink",
+      "fallback_dates": {},
+      "methods": {
+        "compact_multiscale_shrink": {
+          "train_4plus": 8,
+          "test": {
+            "4": 4,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 4,
+          "p_uniform_4plus": 0.16938374075493323,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_renewal_hazard": {
+          "train_4plus": 3,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.6321197136086836,
+          "p_holm_all_method_games": 1.0
+        },
+        "compact_transition_prior": {
+          "train_4plus": 5,
+          "test": {
+            "4": 1,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 1,
+          "p_uniform_4plus": 0.8833103538813932,
+          "p_holm_all_method_games": 1.0
+        },
+        "random": {
+          "train_4plus": 6,
+          "test": {
+            "4": 2,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 2,
+          "p_uniform_4plus": 0.6321197136086836
+        },
+        "frequency": {
+          "train_4plus": 3,
+          "test": {
+            "4": 4,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 4,
+          "p_uniform_4plus": 0.16938374075493323
+        },
+        "dmd_forecast": {
+          "train_4plus": 4,
+          "test": {
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "first_draw_per_date_4plus": 0,
+          "p_uniform_4plus": 1.0
+        }
+      },
+      "p_holm_frozen_across_games": 1.0
+    }
+  },
+  "aggregate": {
+    "train_draws": 27435,
+    "test_draws": 11030,
+    "test_game_dates": 9173,
+    "expected_test": {
+      "4": 135.42626135142913,
+      "5": 8.35400503469816,
+      "6": 0.1784371990969945
+    },
+    "methods": {
+      "compact_multiscale_shrink": {
+        "test": {
+          "4": 158,
+          "5": 11,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.030412298506006116,
+        "p_holm_across_compact_methods": 0.09123689551801835
+      },
+      "compact_renewal_hazard": {
+        "test": {
+          "4": 126,
+          "5": 10,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.803702952564989,
+        "p_holm_across_compact_methods": 1.0
+      },
+      "compact_transition_prior": {
+        "test": {
+          "4": 134,
+          "5": 9,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.560759081460152,
+        "p_holm_across_compact_methods": 1.0
+      },
+      "random": {
+        "test": {
+          "4": 119,
+          "5": 10,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.9307358532917352
+      },
+      "frequency": {
+        "test": {
+          "4": 117,
+          "5": 8,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.9517889646554405
+      },
+      "dmd_forecast": {
+        "test": {
+          "4": 128,
+          "5": 9,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.7511375392984909
+      },
+      "frozen": {
+        "test": {
+          "4": 136,
+          "5": 11,
+          "6": 0
+        },
+        "p_uniform_4plus": 0.49184881435271716
+      }
+    }
+  }
+}

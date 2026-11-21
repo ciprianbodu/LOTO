@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 import numpy as np
 
-from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_methods_2026_11_20 import METHODS
 from scripts.analysis import pool_combination_cache_2026_10_19 as _reuse
 from scripts.analysis import pool_score_cache_2026_10_19 as _base
 

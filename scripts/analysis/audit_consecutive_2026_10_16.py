@@ -22,7 +22,7 @@ from loto_enterprise.core.history import chronological_history,training_cutoffs
 from loto_enterprise.core.method_selector import get_ensemble_for_game,combine_ensemble_scores,get_winner_name
 from loto_enterprise.core.ranking import rank_by_score,longest_consecutive_run
 from loto_enterprise.core.pool_selection import apply_consecutive_limit
-from loto_enterprise.benchmark.methods import METHODS,call_method
+from scripts.analysis.legacy_methods_2026_11_20 import METHODS,call_method
 def main():
     root=Path(__file__).parent
     parser=argparse.ArgumentParser(description=__doc__)

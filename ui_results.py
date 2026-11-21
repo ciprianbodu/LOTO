@@ -1298,7 +1298,7 @@ def _wf_summary(flat, data: dict | None = None, game: str | None = None) -> str 
                 f" | la întâmplare ({description}) 3+/4+/5+: {rates[0] * 100:.1f}%/"
                 f"{rates[1] * 100:.2f}%/{_five_plus_pct(rates[2])} pe extragere"
                 + (
-                    " | selecție dinamică pe variante LR, refăcută doar din zilele anterioare fiecărei extrageri"
+                    " | selecție dinamică LR, refăcută din zilele anterioare fiecărei extrageri"
                     if _result_uses_dynamic_method(data) else
                     " | metoda e cea din decizia de azi, aleasă pe ferestre bench care"
                     " cuprind aceste extrageri: nu e o validare externă"
@@ -1676,6 +1676,14 @@ def _consecutive_pool_warning(
     )
 
 
+def _dynamic_hit_scope(selection: dict) -> str:
+    if selection.get("hit_scope") == "pool":
+        size = selection.get("pool_size")
+        return f"în pool-ul de {size} numere" if size else "în pool"
+    # The two earlier versions stored best-ticket counts, including legacy audits without a scope.
+    return "pe cel puțin o variantă LR"
+
+
 def _dynamic_selection_lines(selection: dict) -> list[str]:
     """Dovezile din momentul generării, inclusiv comparatorul pe aceleași extrageri."""
     draws = int(selection.get("validation_draws") or 0)
@@ -1699,20 +1707,28 @@ def _dynamic_selection_lines(selection: dict) -> list[str]:
         lines.append("Scor calculat din rangurile semnalelor: " + formula.lstrip("+") + ".")
     hits = selection.get("hits") or {}
     random = selection.get("random_hits") or {}
+    scope = _dynamic_hit_scope(selection)
     if draws and hits:
         values = [
             f"{t}+ {hits[str(t)]} față de {random.get(str(t), '—')}"
             for t in (4, 5, 6) if str(t) in hits
         ]
         if values:
-            lines.append("Extrageri cu acest prag pe cel puțin o variantă LR "
-                         "(metoda aleasă față de martorul aleator): " + ", ".join(values) + ".")
+            lines.append(f"Extrageri cu acest prag {scope} (metoda aleasă față de martorul aleator) · "
+                         + ", ".join(values) + ".")
+    elif selection.get("pool_hit_target") == 4 or selection.get("ticket_hit_target") == 4:
+        lines.append(f"Criteriul de selecție este numărul extragerilor cu cel puțin 4 numere {scope}.")
     reasons = {
         "insufficient_history": "Rezervă frequency până la 26 de zile de validare cu cel puțin 250 de extrageri anterioare.",
-        "no_gain_over_random": "Rezervă frequency. Nicio metodă nu a îmbunătățit un prag păstrând celelalte praguri la nivelul martorului.",
+        "no_gain_over_random": "Rezervă frequency. Nicio metodă nu a depășit martorul conform criteriului salvat în această rulare.",
         "unusable_current_scores": "Rezervă frequency. Metoda selectată nu a produs scoruri utilizabile pentru această extragere.",
-        "winner": "Metoda îmbunătățește cel puțin un prag față de martor și îl egalează sau îl depășește la celelalte. Ordinea de departajare este 5+, 6 dacă este posibil, apoi 4+.",
+        "winner": "Metoda a îndeplinit criteriul de selecție folosit în această rulare.",
     }
+    if selection.get("pool_hit_target") == 4 or selection.get("ticket_hit_target") == 4:
+        reasons["winner"] = (f"Metoda a obținut cele mai multe extrageri cu cel puțin 4 numere {scope} "
+                             "și a depășit martorul aleator la acest prag.")
+        reasons["no_gain_over_random"] = ("Rezervă frequency. Nicio metodă nu a depășit martorul aleator "
+                                          f"la numărul de extrageri cu cel puțin 4 numere {scope}.")
     if reason := reasons.get(selection.get("reason")):
         lines.append(reason)
     lines.append("Numărătorile provin din fereastra folosită pentru alegere. "

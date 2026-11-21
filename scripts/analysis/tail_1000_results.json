@@ -1,0 +1,7393 @@
+{
+  "protocol": {
+    "seed": 20261119,
+    "warmup_prior_draws": 250,
+    "max_consecutive_run": 2,
+    "selection_share_days": 0.7,
+    "selection_blocks": 4,
+    "tie_break": "larger number first",
+    "alpha_Holm": 0.05
+  },
+  "software": {
+    "python": "3.15.0",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1"
+  },
+  "configs": {
+    "C0001": {
+      "frequency_cumulative": 1
+    },
+    "C0002": {
+      "frequency_cumulative": -1
+    },
+    "C0003": {
+      "ewma_10": 1
+    },
+    "C0004": {
+      "ewma_10": -1
+    },
+    "C0005": {
+      "ewma_120": 1
+    },
+    "C0006": {
+      "ewma_120": -1
+    },
+    "C0007": {
+      "trend_24_96": 1
+    },
+    "C0008": {
+      "trend_24_96": -1
+    },
+    "C0009": {
+      "gap_age": 1
+    },
+    "C0010": {
+      "gap_age": -1
+    },
+    "C0011": {
+      "gap_z": 1
+    },
+    "C0012": {
+      "gap_z": -1
+    },
+    "C0013": {
+      "gap_bayes": 1
+    },
+    "C0014": {
+      "gap_bayes": -1
+    },
+    "C0015": {
+      "weibull_085": 1
+    },
+    "C0016": {
+      "weibull_085": -1
+    },
+    "C0017": {
+      "phase_2": 1
+    },
+    "C0018": {
+      "phase_2": -1
+    },
+    "C0019": {
+      "phase_3": 1
+    },
+    "C0020": {
+      "phase_3": -1
+    },
+    "C0021": {
+      "markov_120": 1
+    },
+    "C0022": {
+      "markov_120": -1
+    },
+    "C0023": {
+      "context_kernel_256": 1
+    },
+    "C0024": {
+      "context_kernel_256": -1
+    },
+    "C0025": {
+      "holt_damped": 1
+    },
+    "C0026": {
+      "holt_damped": -1
+    },
+    "C0027": {
+      "cusum_6": 1
+    },
+    "C0028": {
+      "cusum_6": -1
+    },
+    "C0029": {
+      "block_entropy_100": 1
+    },
+    "C0030": {
+      "block_entropy_100": -1
+    },
+    "C0031": {
+      "logistic_online": 1
+    },
+    "C0032": {
+      "logistic_online": -1
+    },
+    "C0033": {
+      "frequency_cumulative": 1,
+      "ewma_10": 1
+    },
+    "C0034": {
+      "frequency_cumulative": 2,
+      "ewma_10": 1
+    },
+    "C0035": {
+      "frequency_cumulative": 1,
+      "ewma_10": 2
+    },
+    "C0036": {
+      "frequency_cumulative": 1,
+      "ewma_120": 1
+    },
+    "C0037": {
+      "frequency_cumulative": 2,
+      "ewma_120": 1
+    },
+    "C0038": {
+      "frequency_cumulative": 1,
+      "ewma_120": 2
+    },
+    "C0039": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 1
+    },
+    "C0040": {
+      "frequency_cumulative": 2,
+      "trend_24_96": 1
+    },
+    "C0041": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 2
+    },
+    "C0042": {
+      "frequency_cumulative": 1,
+      "gap_age": 1
+    },
+    "C0043": {
+      "frequency_cumulative": 2,
+      "gap_age": 1
+    },
+    "C0044": {
+      "frequency_cumulative": 1,
+      "gap_age": 2
+    },
+    "C0045": {
+      "frequency_cumulative": 1,
+      "gap_z": 1
+    },
+    "C0046": {
+      "frequency_cumulative": 2,
+      "gap_z": 1
+    },
+    "C0047": {
+      "frequency_cumulative": 1,
+      "gap_z": 2
+    },
+    "C0048": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 1
+    },
+    "C0049": {
+      "frequency_cumulative": 2,
+      "gap_bayes": 1
+    },
+    "C0050": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 2
+    },
+    "C0051": {
+      "frequency_cumulative": 1,
+      "weibull_085": 1
+    },
+    "C0052": {
+      "frequency_cumulative": 2,
+      "weibull_085": 1
+    },
+    "C0053": {
+      "frequency_cumulative": 1,
+      "weibull_085": 2
+    },
+    "C0054": {
+      "frequency_cumulative": 1,
+      "phase_2": 1
+    },
+    "C0055": {
+      "frequency_cumulative": 2,
+      "phase_2": 1
+    },
+    "C0056": {
+      "frequency_cumulative": 1,
+      "phase_2": 2
+    },
+    "C0057": {
+      "frequency_cumulative": 1,
+      "phase_3": 1
+    },
+    "C0058": {
+      "frequency_cumulative": 2,
+      "phase_3": 1
+    },
+    "C0059": {
+      "frequency_cumulative": 1,
+      "phase_3": 2
+    },
+    "C0060": {
+      "frequency_cumulative": 1,
+      "markov_120": 1
+    },
+    "C0061": {
+      "frequency_cumulative": 2,
+      "markov_120": 1
+    },
+    "C0062": {
+      "frequency_cumulative": 1,
+      "markov_120": 2
+    },
+    "C0063": {
+      "frequency_cumulative": 1,
+      "context_kernel_256": 1
+    },
+    "C0064": {
+      "frequency_cumulative": 2,
+      "context_kernel_256": 1
+    },
+    "C0065": {
+      "frequency_cumulative": 1,
+      "context_kernel_256": 2
+    },
+    "C0066": {
+      "frequency_cumulative": 1,
+      "holt_damped": 1
+    },
+    "C0067": {
+      "frequency_cumulative": 2,
+      "holt_damped": 1
+    },
+    "C0068": {
+      "frequency_cumulative": 1,
+      "holt_damped": 2
+    },
+    "C0069": {
+      "frequency_cumulative": 1,
+      "cusum_6": 1
+    },
+    "C0070": {
+      "frequency_cumulative": 2,
+      "cusum_6": 1
+    },
+    "C0071": {
+      "frequency_cumulative": 1,
+      "cusum_6": 2
+    },
+    "C0072": {
+      "frequency_cumulative": 1,
+      "block_entropy_100": 1
+    },
+    "C0073": {
+      "frequency_cumulative": 2,
+      "block_entropy_100": 1
+    },
+    "C0074": {
+      "frequency_cumulative": 1,
+      "block_entropy_100": 2
+    },
+    "C0075": {
+      "frequency_cumulative": 1,
+      "logistic_online": 1
+    },
+    "C0076": {
+      "frequency_cumulative": 2,
+      "logistic_online": 1
+    },
+    "C0077": {
+      "frequency_cumulative": 1,
+      "logistic_online": 2
+    },
+    "C0078": {
+      "ewma_10": 1,
+      "ewma_120": 1
+    },
+    "C0079": {
+      "ewma_10": 2,
+      "ewma_120": 1
+    },
+    "C0080": {
+      "ewma_10": 1,
+      "ewma_120": 2
+    },
+    "C0081": {
+      "ewma_10": 1,
+      "trend_24_96": 1
+    },
+    "C0082": {
+      "ewma_10": 2,
+      "trend_24_96": 1
+    },
+    "C0083": {
+      "ewma_10": 1,
+      "trend_24_96": 2
+    },
+    "C0084": {
+      "ewma_10": 1,
+      "gap_age": 1
+    },
+    "C0085": {
+      "ewma_10": 2,
+      "gap_age": 1
+    },
+    "C0086": {
+      "ewma_10": 1,
+      "gap_age": 2
+    },
+    "C0087": {
+      "ewma_10": 1,
+      "gap_z": 1
+    },
+    "C0088": {
+      "ewma_10": 2,
+      "gap_z": 1
+    },
+    "C0089": {
+      "ewma_10": 1,
+      "gap_z": 2
+    },
+    "C0090": {
+      "ewma_10": 1,
+      "gap_bayes": 1
+    },
+    "C0091": {
+      "ewma_10": 2,
+      "gap_bayes": 1
+    },
+    "C0092": {
+      "ewma_10": 1,
+      "gap_bayes": 2
+    },
+    "C0093": {
+      "ewma_10": 1,
+      "weibull_085": 1
+    },
+    "C0094": {
+      "ewma_10": 2,
+      "weibull_085": 1
+    },
+    "C0095": {
+      "ewma_10": 1,
+      "weibull_085": 2
+    },
+    "C0096": {
+      "ewma_10": 1,
+      "phase_2": 1
+    },
+    "C0097": {
+      "ewma_10": 2,
+      "phase_2": 1
+    },
+    "C0098": {
+      "ewma_10": 1,
+      "phase_2": 2
+    },
+    "C0099": {
+      "ewma_10": 1,
+      "phase_3": 1
+    },
+    "C0100": {
+      "ewma_10": 2,
+      "phase_3": 1
+    },
+    "C0101": {
+      "ewma_10": 1,
+      "phase_3": 2
+    },
+    "C0102": {
+      "ewma_10": 1,
+      "markov_120": 1
+    },
+    "C0103": {
+      "ewma_10": 2,
+      "markov_120": 1
+    },
+    "C0104": {
+      "ewma_10": 1,
+      "markov_120": 2
+    },
+    "C0105": {
+      "ewma_10": 1,
+      "context_kernel_256": 1
+    },
+    "C0106": {
+      "ewma_10": 2,
+      "context_kernel_256": 1
+    },
+    "C0107": {
+      "ewma_10": 1,
+      "context_kernel_256": 2
+    },
+    "C0108": {
+      "ewma_10": 1,
+      "holt_damped": 1
+    },
+    "C0109": {
+      "ewma_10": 2,
+      "holt_damped": 1
+    },
+    "C0110": {
+      "ewma_10": 1,
+      "holt_damped": 2
+    },
+    "C0111": {
+      "ewma_10": 1,
+      "cusum_6": 1
+    },
+    "C0112": {
+      "ewma_10": 2,
+      "cusum_6": 1
+    },
+    "C0113": {
+      "ewma_10": 1,
+      "cusum_6": 2
+    },
+    "C0114": {
+      "ewma_10": 1,
+      "block_entropy_100": 1
+    },
+    "C0115": {
+      "ewma_10": 2,
+      "block_entropy_100": 1
+    },
+    "C0116": {
+      "ewma_10": 1,
+      "block_entropy_100": 2
+    },
+    "C0117": {
+      "ewma_10": 1,
+      "logistic_online": 1
+    },
+    "C0118": {
+      "ewma_10": 2,
+      "logistic_online": 1
+    },
+    "C0119": {
+      "ewma_10": 1,
+      "logistic_online": 2
+    },
+    "C0120": {
+      "ewma_120": 1,
+      "trend_24_96": 1
+    },
+    "C0121": {
+      "ewma_120": 2,
+      "trend_24_96": 1
+    },
+    "C0122": {
+      "ewma_120": 1,
+      "trend_24_96": 2
+    },
+    "C0123": {
+      "ewma_120": 1,
+      "gap_age": 1
+    },
+    "C0124": {
+      "ewma_120": 2,
+      "gap_age": 1
+    },
+    "C0125": {
+      "ewma_120": 1,
+      "gap_age": 2
+    },
+    "C0126": {
+      "ewma_120": 1,
+      "gap_z": 1
+    },
+    "C0127": {
+      "ewma_120": 2,
+      "gap_z": 1
+    },
+    "C0128": {
+      "ewma_120": 1,
+      "gap_z": 2
+    },
+    "C0129": {
+      "ewma_120": 1,
+      "gap_bayes": 1
+    },
+    "C0130": {
+      "ewma_120": 2,
+      "gap_bayes": 1
+    },
+    "C0131": {
+      "ewma_120": 1,
+      "gap_bayes": 2
+    },
+    "C0132": {
+      "ewma_120": 1,
+      "weibull_085": 1
+    },
+    "C0133": {
+      "ewma_120": 2,
+      "weibull_085": 1
+    },
+    "C0134": {
+      "ewma_120": 1,
+      "weibull_085": 2
+    },
+    "C0135": {
+      "ewma_120": 1,
+      "phase_2": 1
+    },
+    "C0136": {
+      "ewma_120": 2,
+      "phase_2": 1
+    },
+    "C0137": {
+      "ewma_120": 1,
+      "phase_2": 2
+    },
+    "C0138": {
+      "ewma_120": 1,
+      "phase_3": 1
+    },
+    "C0139": {
+      "ewma_120": 2,
+      "phase_3": 1
+    },
+    "C0140": {
+      "ewma_120": 1,
+      "phase_3": 2
+    },
+    "C0141": {
+      "ewma_120": 1,
+      "markov_120": 1
+    },
+    "C0142": {
+      "ewma_120": 2,
+      "markov_120": 1
+    },
+    "C0143": {
+      "ewma_120": 1,
+      "markov_120": 2
+    },
+    "C0144": {
+      "ewma_120": 1,
+      "context_kernel_256": 1
+    },
+    "C0145": {
+      "ewma_120": 2,
+      "context_kernel_256": 1
+    },
+    "C0146": {
+      "ewma_120": 1,
+      "context_kernel_256": 2
+    },
+    "C0147": {
+      "ewma_120": 1,
+      "holt_damped": 1
+    },
+    "C0148": {
+      "ewma_120": 2,
+      "holt_damped": 1
+    },
+    "C0149": {
+      "ewma_120": 1,
+      "holt_damped": 2
+    },
+    "C0150": {
+      "ewma_120": 1,
+      "cusum_6": 1
+    },
+    "C0151": {
+      "ewma_120": 2,
+      "cusum_6": 1
+    },
+    "C0152": {
+      "ewma_120": 1,
+      "cusum_6": 2
+    },
+    "C0153": {
+      "ewma_120": 1,
+      "block_entropy_100": 1
+    },
+    "C0154": {
+      "ewma_120": 2,
+      "block_entropy_100": 1
+    },
+    "C0155": {
+      "ewma_120": 1,
+      "block_entropy_100": 2
+    },
+    "C0156": {
+      "ewma_120": 1,
+      "logistic_online": 1
+    },
+    "C0157": {
+      "ewma_120": 2,
+      "logistic_online": 1
+    },
+    "C0158": {
+      "ewma_120": 1,
+      "logistic_online": 2
+    },
+    "C0159": {
+      "trend_24_96": 1,
+      "gap_age": 1
+    },
+    "C0160": {
+      "trend_24_96": 2,
+      "gap_age": 1
+    },
+    "C0161": {
+      "trend_24_96": 1,
+      "gap_age": 2
+    },
+    "C0162": {
+      "trend_24_96": 1,
+      "gap_z": 1
+    },
+    "C0163": {
+      "trend_24_96": 2,
+      "gap_z": 1
+    },
+    "C0164": {
+      "trend_24_96": 1,
+      "gap_z": 2
+    },
+    "C0165": {
+      "trend_24_96": 1,
+      "gap_bayes": 1
+    },
+    "C0166": {
+      "trend_24_96": 2,
+      "gap_bayes": 1
+    },
+    "C0167": {
+      "trend_24_96": 1,
+      "gap_bayes": 2
+    },
+    "C0168": {
+      "trend_24_96": 1,
+      "weibull_085": 1
+    },
+    "C0169": {
+      "trend_24_96": 2,
+      "weibull_085": 1
+    },
+    "C0170": {
+      "trend_24_96": 1,
+      "weibull_085": 2
+    },
+    "C0171": {
+      "trend_24_96": 1,
+      "phase_2": 1
+    },
+    "C0172": {
+      "trend_24_96": 2,
+      "phase_2": 1
+    },
+    "C0173": {
+      "trend_24_96": 1,
+      "phase_2": 2
+    },
+    "C0174": {
+      "trend_24_96": 1,
+      "phase_3": 1
+    },
+    "C0175": {
+      "trend_24_96": 2,
+      "phase_3": 1
+    },
+    "C0176": {
+      "trend_24_96": 1,
+      "phase_3": 2
+    },
+    "C0177": {
+      "trend_24_96": 1,
+      "markov_120": 1
+    },
+    "C0178": {
+      "trend_24_96": 2,
+      "markov_120": 1
+    },
+    "C0179": {
+      "trend_24_96": 1,
+      "markov_120": 2
+    },
+    "C0180": {
+      "trend_24_96": 1,
+      "context_kernel_256": 1
+    },
+    "C0181": {
+      "trend_24_96": 2,
+      "context_kernel_256": 1
+    },
+    "C0182": {
+      "trend_24_96": 1,
+      "context_kernel_256": 2
+    },
+    "C0183": {
+      "trend_24_96": 1,
+      "holt_damped": 1
+    },
+    "C0184": {
+      "trend_24_96": 2,
+      "holt_damped": 1
+    },
+    "C0185": {
+      "trend_24_96": 1,
+      "holt_damped": 2
+    },
+    "C0186": {
+      "trend_24_96": 1,
+      "cusum_6": 1
+    },
+    "C0187": {
+      "trend_24_96": 2,
+      "cusum_6": 1
+    },
+    "C0188": {
+      "trend_24_96": 1,
+      "cusum_6": 2
+    },
+    "C0189": {
+      "trend_24_96": 1,
+      "block_entropy_100": 1
+    },
+    "C0190": {
+      "trend_24_96": 2,
+      "block_entropy_100": 1
+    },
+    "C0191": {
+      "trend_24_96": 1,
+      "block_entropy_100": 2
+    },
+    "C0192": {
+      "trend_24_96": 1,
+      "logistic_online": 1
+    },
+    "C0193": {
+      "trend_24_96": 2,
+      "logistic_online": 1
+    },
+    "C0194": {
+      "trend_24_96": 1,
+      "logistic_online": 2
+    },
+    "C0195": {
+      "gap_age": 1,
+      "gap_z": 1
+    },
+    "C0196": {
+      "gap_age": 2,
+      "gap_z": 1
+    },
+    "C0197": {
+      "gap_age": 1,
+      "gap_z": 2
+    },
+    "C0198": {
+      "gap_age": 1,
+      "gap_bayes": 1
+    },
+    "C0199": {
+      "gap_age": 2,
+      "gap_bayes": 1
+    },
+    "C0200": {
+      "gap_age": 1,
+      "gap_bayes": 2
+    },
+    "C0201": {
+      "gap_age": 1,
+      "weibull_085": 1
+    },
+    "C0202": {
+      "gap_age": 2,
+      "weibull_085": 1
+    },
+    "C0203": {
+      "gap_age": 1,
+      "weibull_085": 2
+    },
+    "C0204": {
+      "gap_age": 1,
+      "phase_2": 1
+    },
+    "C0205": {
+      "gap_age": 2,
+      "phase_2": 1
+    },
+    "C0206": {
+      "gap_age": 1,
+      "phase_2": 2
+    },
+    "C0207": {
+      "gap_age": 1,
+      "phase_3": 1
+    },
+    "C0208": {
+      "gap_age": 2,
+      "phase_3": 1
+    },
+    "C0209": {
+      "gap_age": 1,
+      "phase_3": 2
+    },
+    "C0210": {
+      "gap_age": 1,
+      "markov_120": 1
+    },
+    "C0211": {
+      "gap_age": 2,
+      "markov_120": 1
+    },
+    "C0212": {
+      "gap_age": 1,
+      "markov_120": 2
+    },
+    "C0213": {
+      "gap_age": 1,
+      "context_kernel_256": 1
+    },
+    "C0214": {
+      "gap_age": 2,
+      "context_kernel_256": 1
+    },
+    "C0215": {
+      "gap_age": 1,
+      "context_kernel_256": 2
+    },
+    "C0216": {
+      "gap_age": 1,
+      "holt_damped": 1
+    },
+    "C0217": {
+      "gap_age": 2,
+      "holt_damped": 1
+    },
+    "C0218": {
+      "gap_age": 1,
+      "holt_damped": 2
+    },
+    "C0219": {
+      "gap_age": 1,
+      "cusum_6": 1
+    },
+    "C0220": {
+      "gap_age": 2,
+      "cusum_6": 1
+    },
+    "C0221": {
+      "gap_age": 1,
+      "cusum_6": 2
+    },
+    "C0222": {
+      "gap_age": 1,
+      "block_entropy_100": 1
+    },
+    "C0223": {
+      "gap_age": 2,
+      "block_entropy_100": 1
+    },
+    "C0224": {
+      "gap_age": 1,
+      "block_entropy_100": 2
+    },
+    "C0225": {
+      "gap_age": 1,
+      "logistic_online": 1
+    },
+    "C0226": {
+      "gap_age": 2,
+      "logistic_online": 1
+    },
+    "C0227": {
+      "gap_age": 1,
+      "logistic_online": 2
+    },
+    "C0228": {
+      "gap_z": 1,
+      "gap_bayes": 1
+    },
+    "C0229": {
+      "gap_z": 2,
+      "gap_bayes": 1
+    },
+    "C0230": {
+      "gap_z": 1,
+      "gap_bayes": 2
+    },
+    "C0231": {
+      "gap_z": 1,
+      "weibull_085": 1
+    },
+    "C0232": {
+      "gap_z": 2,
+      "weibull_085": 1
+    },
+    "C0233": {
+      "gap_z": 1,
+      "weibull_085": 2
+    },
+    "C0234": {
+      "gap_z": 1,
+      "phase_2": 1
+    },
+    "C0235": {
+      "gap_z": 2,
+      "phase_2": 1
+    },
+    "C0236": {
+      "gap_z": 1,
+      "phase_2": 2
+    },
+    "C0237": {
+      "gap_z": 1,
+      "phase_3": 1
+    },
+    "C0238": {
+      "gap_z": 2,
+      "phase_3": 1
+    },
+    "C0239": {
+      "gap_z": 1,
+      "phase_3": 2
+    },
+    "C0240": {
+      "gap_z": 1,
+      "markov_120": 1
+    },
+    "C0241": {
+      "gap_z": 2,
+      "markov_120": 1
+    },
+    "C0242": {
+      "gap_z": 1,
+      "markov_120": 2
+    },
+    "C0243": {
+      "gap_z": 1,
+      "context_kernel_256": 1
+    },
+    "C0244": {
+      "gap_z": 2,
+      "context_kernel_256": 1
+    },
+    "C0245": {
+      "gap_z": 1,
+      "context_kernel_256": 2
+    },
+    "C0246": {
+      "gap_z": 1,
+      "holt_damped": 1
+    },
+    "C0247": {
+      "gap_z": 2,
+      "holt_damped": 1
+    },
+    "C0248": {
+      "gap_z": 1,
+      "holt_damped": 2
+    },
+    "C0249": {
+      "gap_z": 1,
+      "cusum_6": 1
+    },
+    "C0250": {
+      "gap_z": 2,
+      "cusum_6": 1
+    },
+    "C0251": {
+      "gap_z": 1,
+      "cusum_6": 2
+    },
+    "C0252": {
+      "gap_z": 1,
+      "block_entropy_100": 1
+    },
+    "C0253": {
+      "gap_z": 2,
+      "block_entropy_100": 1
+    },
+    "C0254": {
+      "gap_z": 1,
+      "block_entropy_100": 2
+    },
+    "C0255": {
+      "gap_z": 1,
+      "logistic_online": 1
+    },
+    "C0256": {
+      "gap_z": 2,
+      "logistic_online": 1
+    },
+    "C0257": {
+      "gap_z": 1,
+      "logistic_online": 2
+    },
+    "C0258": {
+      "gap_bayes": 1,
+      "weibull_085": 1
+    },
+    "C0259": {
+      "gap_bayes": 2,
+      "weibull_085": 1
+    },
+    "C0260": {
+      "gap_bayes": 1,
+      "weibull_085": 2
+    },
+    "C0261": {
+      "gap_bayes": 1,
+      "phase_2": 1
+    },
+    "C0262": {
+      "gap_bayes": 2,
+      "phase_2": 1
+    },
+    "C0263": {
+      "gap_bayes": 1,
+      "phase_2": 2
+    },
+    "C0264": {
+      "gap_bayes": 1,
+      "phase_3": 1
+    },
+    "C0265": {
+      "gap_bayes": 2,
+      "phase_3": 1
+    },
+    "C0266": {
+      "gap_bayes": 1,
+      "phase_3": 2
+    },
+    "C0267": {
+      "gap_bayes": 1,
+      "markov_120": 1
+    },
+    "C0268": {
+      "gap_bayes": 2,
+      "markov_120": 1
+    },
+    "C0269": {
+      "gap_bayes": 1,
+      "markov_120": 2
+    },
+    "C0270": {
+      "gap_bayes": 1,
+      "context_kernel_256": 1
+    },
+    "C0271": {
+      "gap_bayes": 2,
+      "context_kernel_256": 1
+    },
+    "C0272": {
+      "gap_bayes": 1,
+      "context_kernel_256": 2
+    },
+    "C0273": {
+      "gap_bayes": 1,
+      "holt_damped": 1
+    },
+    "C0274": {
+      "gap_bayes": 2,
+      "holt_damped": 1
+    },
+    "C0275": {
+      "gap_bayes": 1,
+      "holt_damped": 2
+    },
+    "C0276": {
+      "gap_bayes": 1,
+      "cusum_6": 1
+    },
+    "C0277": {
+      "gap_bayes": 2,
+      "cusum_6": 1
+    },
+    "C0278": {
+      "gap_bayes": 1,
+      "cusum_6": 2
+    },
+    "C0279": {
+      "gap_bayes": 1,
+      "block_entropy_100": 1
+    },
+    "C0280": {
+      "gap_bayes": 2,
+      "block_entropy_100": 1
+    },
+    "C0281": {
+      "gap_bayes": 1,
+      "block_entropy_100": 2
+    },
+    "C0282": {
+      "gap_bayes": 1,
+      "logistic_online": 1
+    },
+    "C0283": {
+      "gap_bayes": 2,
+      "logistic_online": 1
+    },
+    "C0284": {
+      "gap_bayes": 1,
+      "logistic_online": 2
+    },
+    "C0285": {
+      "weibull_085": 1,
+      "phase_2": 1
+    },
+    "C0286": {
+      "weibull_085": 2,
+      "phase_2": 1
+    },
+    "C0287": {
+      "weibull_085": 1,
+      "phase_2": 2
+    },
+    "C0288": {
+      "weibull_085": 1,
+      "phase_3": 1
+    },
+    "C0289": {
+      "weibull_085": 2,
+      "phase_3": 1
+    },
+    "C0290": {
+      "weibull_085": 1,
+      "phase_3": 2
+    },
+    "C0291": {
+      "weibull_085": 1,
+      "markov_120": 1
+    },
+    "C0292": {
+      "weibull_085": 2,
+      "markov_120": 1
+    },
+    "C0293": {
+      "weibull_085": 1,
+      "markov_120": 2
+    },
+    "C0294": {
+      "weibull_085": 1,
+      "context_kernel_256": 1
+    },
+    "C0295": {
+      "weibull_085": 2,
+      "context_kernel_256": 1
+    },
+    "C0296": {
+      "weibull_085": 1,
+      "context_kernel_256": 2
+    },
+    "C0297": {
+      "weibull_085": 1,
+      "holt_damped": 1
+    },
+    "C0298": {
+      "weibull_085": 2,
+      "holt_damped": 1
+    },
+    "C0299": {
+      "weibull_085": 1,
+      "holt_damped": 2
+    },
+    "C0300": {
+      "weibull_085": 1,
+      "cusum_6": 1
+    },
+    "C0301": {
+      "weibull_085": 2,
+      "cusum_6": 1
+    },
+    "C0302": {
+      "weibull_085": 1,
+      "cusum_6": 2
+    },
+    "C0303": {
+      "weibull_085": 1,
+      "block_entropy_100": 1
+    },
+    "C0304": {
+      "weibull_085": 2,
+      "block_entropy_100": 1
+    },
+    "C0305": {
+      "weibull_085": 1,
+      "block_entropy_100": 2
+    },
+    "C0306": {
+      "weibull_085": 1,
+      "logistic_online": 1
+    },
+    "C0307": {
+      "weibull_085": 2,
+      "logistic_online": 1
+    },
+    "C0308": {
+      "weibull_085": 1,
+      "logistic_online": 2
+    },
+    "C0309": {
+      "phase_2": 1,
+      "phase_3": 1
+    },
+    "C0310": {
+      "phase_2": 2,
+      "phase_3": 1
+    },
+    "C0311": {
+      "phase_2": 1,
+      "phase_3": 2
+    },
+    "C0312": {
+      "phase_2": 1,
+      "markov_120": 1
+    },
+    "C0313": {
+      "phase_2": 2,
+      "markov_120": 1
+    },
+    "C0314": {
+      "phase_2": 1,
+      "markov_120": 2
+    },
+    "C0315": {
+      "phase_2": 1,
+      "context_kernel_256": 1
+    },
+    "C0316": {
+      "phase_2": 2,
+      "context_kernel_256": 1
+    },
+    "C0317": {
+      "phase_2": 1,
+      "context_kernel_256": 2
+    },
+    "C0318": {
+      "phase_2": 1,
+      "holt_damped": 1
+    },
+    "C0319": {
+      "phase_2": 2,
+      "holt_damped": 1
+    },
+    "C0320": {
+      "phase_2": 1,
+      "holt_damped": 2
+    },
+    "C0321": {
+      "phase_2": 1,
+      "cusum_6": 1
+    },
+    "C0322": {
+      "phase_2": 2,
+      "cusum_6": 1
+    },
+    "C0323": {
+      "phase_2": 1,
+      "cusum_6": 2
+    },
+    "C0324": {
+      "phase_2": 1,
+      "block_entropy_100": 1
+    },
+    "C0325": {
+      "phase_2": 2,
+      "block_entropy_100": 1
+    },
+    "C0326": {
+      "phase_2": 1,
+      "block_entropy_100": 2
+    },
+    "C0327": {
+      "phase_2": 1,
+      "logistic_online": 1
+    },
+    "C0328": {
+      "phase_2": 2,
+      "logistic_online": 1
+    },
+    "C0329": {
+      "phase_2": 1,
+      "logistic_online": 2
+    },
+    "C0330": {
+      "phase_3": 1,
+      "markov_120": 1
+    },
+    "C0331": {
+      "phase_3": 2,
+      "markov_120": 1
+    },
+    "C0332": {
+      "phase_3": 1,
+      "markov_120": 2
+    },
+    "C0333": {
+      "phase_3": 1,
+      "context_kernel_256": 1
+    },
+    "C0334": {
+      "phase_3": 2,
+      "context_kernel_256": 1
+    },
+    "C0335": {
+      "phase_3": 1,
+      "context_kernel_256": 2
+    },
+    "C0336": {
+      "phase_3": 1,
+      "holt_damped": 1
+    },
+    "C0337": {
+      "phase_3": 2,
+      "holt_damped": 1
+    },
+    "C0338": {
+      "phase_3": 1,
+      "holt_damped": 2
+    },
+    "C0339": {
+      "phase_3": 1,
+      "cusum_6": 1
+    },
+    "C0340": {
+      "phase_3": 2,
+      "cusum_6": 1
+    },
+    "C0341": {
+      "phase_3": 1,
+      "cusum_6": 2
+    },
+    "C0342": {
+      "phase_3": 1,
+      "block_entropy_100": 1
+    },
+    "C0343": {
+      "phase_3": 2,
+      "block_entropy_100": 1
+    },
+    "C0344": {
+      "phase_3": 1,
+      "block_entropy_100": 2
+    },
+    "C0345": {
+      "phase_3": 1,
+      "logistic_online": 1
+    },
+    "C0346": {
+      "phase_3": 2,
+      "logistic_online": 1
+    },
+    "C0347": {
+      "phase_3": 1,
+      "logistic_online": 2
+    },
+    "C0348": {
+      "markov_120": 1,
+      "context_kernel_256": 1
+    },
+    "C0349": {
+      "markov_120": 2,
+      "context_kernel_256": 1
+    },
+    "C0350": {
+      "markov_120": 1,
+      "context_kernel_256": 2
+    },
+    "C0351": {
+      "markov_120": 1,
+      "holt_damped": 1
+    },
+    "C0352": {
+      "markov_120": 2,
+      "holt_damped": 1
+    },
+    "C0353": {
+      "markov_120": 1,
+      "holt_damped": 2
+    },
+    "C0354": {
+      "markov_120": 1,
+      "cusum_6": 1
+    },
+    "C0355": {
+      "markov_120": 2,
+      "cusum_6": 1
+    },
+    "C0356": {
+      "markov_120": 1,
+      "cusum_6": 2
+    },
+    "C0357": {
+      "markov_120": 1,
+      "block_entropy_100": 1
+    },
+    "C0358": {
+      "markov_120": 2,
+      "block_entropy_100": 1
+    },
+    "C0359": {
+      "markov_120": 1,
+      "block_entropy_100": 2
+    },
+    "C0360": {
+      "markov_120": 1,
+      "logistic_online": 1
+    },
+    "C0361": {
+      "markov_120": 2,
+      "logistic_online": 1
+    },
+    "C0362": {
+      "markov_120": 1,
+      "logistic_online": 2
+    },
+    "C0363": {
+      "context_kernel_256": 1,
+      "holt_damped": 1
+    },
+    "C0364": {
+      "context_kernel_256": 2,
+      "holt_damped": 1
+    },
+    "C0365": {
+      "context_kernel_256": 1,
+      "holt_damped": 2
+    },
+    "C0366": {
+      "context_kernel_256": 1,
+      "cusum_6": 1
+    },
+    "C0367": {
+      "context_kernel_256": 2,
+      "cusum_6": 1
+    },
+    "C0368": {
+      "context_kernel_256": 1,
+      "cusum_6": 2
+    },
+    "C0369": {
+      "context_kernel_256": 1,
+      "block_entropy_100": 1
+    },
+    "C0370": {
+      "context_kernel_256": 2,
+      "block_entropy_100": 1
+    },
+    "C0371": {
+      "context_kernel_256": 1,
+      "block_entropy_100": 2
+    },
+    "C0372": {
+      "context_kernel_256": 1,
+      "logistic_online": 1
+    },
+    "C0373": {
+      "context_kernel_256": 2,
+      "logistic_online": 1
+    },
+    "C0374": {
+      "context_kernel_256": 1,
+      "logistic_online": 2
+    },
+    "C0375": {
+      "holt_damped": 1,
+      "cusum_6": 1
+    },
+    "C0376": {
+      "holt_damped": 2,
+      "cusum_6": 1
+    },
+    "C0377": {
+      "holt_damped": 1,
+      "cusum_6": 2
+    },
+    "C0378": {
+      "holt_damped": 1,
+      "block_entropy_100": 1
+    },
+    "C0379": {
+      "holt_damped": 2,
+      "block_entropy_100": 1
+    },
+    "C0380": {
+      "holt_damped": 1,
+      "block_entropy_100": 2
+    },
+    "C0381": {
+      "holt_damped": 1,
+      "logistic_online": 1
+    },
+    "C0382": {
+      "holt_damped": 2,
+      "logistic_online": 1
+    },
+    "C0383": {
+      "holt_damped": 1,
+      "logistic_online": 2
+    },
+    "C0384": {
+      "cusum_6": 1,
+      "block_entropy_100": 1
+    },
+    "C0385": {
+      "cusum_6": 2,
+      "block_entropy_100": 1
+    },
+    "C0386": {
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0387": {
+      "cusum_6": 1,
+      "logistic_online": 1
+    },
+    "C0388": {
+      "cusum_6": 2,
+      "logistic_online": 1
+    },
+    "C0389": {
+      "cusum_6": 1,
+      "logistic_online": 2
+    },
+    "C0390": {
+      "block_entropy_100": 1,
+      "logistic_online": 1
+    },
+    "C0391": {
+      "block_entropy_100": 2,
+      "logistic_online": 1
+    },
+    "C0392": {
+      "block_entropy_100": 1,
+      "logistic_online": 2
+    },
+    "C0393": {
+      "ewma_10": 3,
+      "trend_24_96": -2,
+      "weibull_085": 1
+    },
+    "C0394": {
+      "weibull_085": 1,
+      "context_kernel_256": 2,
+      "logistic_online": -4
+    },
+    "C0395": {
+      "frequency_cumulative": 1,
+      "gap_z": 3,
+      "markov_120": 3
+    },
+    "C0396": {
+      "ewma_10": 3,
+      "phase_3": 4,
+      "markov_120": -1
+    },
+    "C0397": {
+      "frequency_cumulative": -1,
+      "gap_age": 4,
+      "markov_120": 3
+    },
+    "C0398": {
+      "ewma_10": 2,
+      "gap_age": 3,
+      "cusum_6": -2
+    },
+    "C0399": {
+      "ewma_10": -4,
+      "ewma_120": 3,
+      "holt_damped": 4
+    },
+    "C0400": {
+      "gap_z": 1,
+      "weibull_085": 3,
+      "cusum_6": 4
+    },
+    "C0401": {
+      "gap_age": 3,
+      "phase_3": 1,
+      "holt_damped": 1
+    },
+    "C0402": {
+      "gap_bayes": 3,
+      "markov_120": -1,
+      "cusum_6": 3
+    },
+    "C0403": {
+      "gap_bayes": 1,
+      "context_kernel_256": -1,
+      "holt_damped": 3
+    },
+    "C0404": {
+      "gap_age": 2,
+      "gap_bayes": 2,
+      "context_kernel_256": 1
+    },
+    "C0405": {
+      "gap_age": 1,
+      "gap_z": -4,
+      "weibull_085": 1
+    },
+    "C0406": {
+      "ewma_10": 2,
+      "context_kernel_256": 1,
+      "cusum_6": 3
+    },
+    "C0407": {
+      "trend_24_96": 4,
+      "gap_age": -1,
+      "cusum_6": 4
+    },
+    "C0408": {
+      "gap_age": 3,
+      "weibull_085": 1,
+      "phase_3": 4
+    },
+    "C0409": {
+      "ewma_120": 4,
+      "gap_age": 1,
+      "gap_bayes": 4
+    },
+    "C0410": {
+      "ewma_10": 1,
+      "phase_2": 2,
+      "context_kernel_256": -1
+    },
+    "C0411": {
+      "frequency_cumulative": 1,
+      "gap_age": 4,
+      "block_entropy_100": -1
+    },
+    "C0412": {
+      "gap_bayes": 1,
+      "phase_2": 2,
+      "cusum_6": -2
+    },
+    "C0413": {
+      "gap_age": 2,
+      "gap_z": 2,
+      "markov_120": 1
+    },
+    "C0414": {
+      "trend_24_96": 1,
+      "weibull_085": 1,
+      "markov_120": 1
+    },
+    "C0415": {
+      "gap_age": 2,
+      "gap_z": -1,
+      "block_entropy_100": 3
+    },
+    "C0416": {
+      "phase_2": 3,
+      "phase_3": -2,
+      "logistic_online": 1
+    },
+    "C0417": {
+      "ewma_120": 2,
+      "phase_3": 3,
+      "logistic_online": -4
+    },
+    "C0418": {
+      "frequency_cumulative": 2,
+      "ewma_120": 1,
+      "logistic_online": -3
+    },
+    "C0419": {
+      "gap_age": 1,
+      "phase_3": 1,
+      "cusum_6": 1
+    },
+    "C0420": {
+      "weibull_085": 1,
+      "phase_3": 1,
+      "logistic_online": 3
+    },
+    "C0421": {
+      "gap_age": -2,
+      "markov_120": 1,
+      "holt_damped": 3
+    },
+    "C0422": {
+      "gap_z": -4,
+      "gap_bayes": 4,
+      "cusum_6": 3
+    },
+    "C0423": {
+      "frequency_cumulative": -4,
+      "phase_2": 1,
+      "holt_damped": 2
+    },
+    "C0424": {
+      "trend_24_96": 2,
+      "gap_z": 4,
+      "gap_bayes": -1
+    },
+    "C0425": {
+      "phase_3": 1,
+      "holt_damped": 3,
+      "cusum_6": -4
+    },
+    "C0426": {
+      "frequency_cumulative": 3,
+      "ewma_120": -3,
+      "gap_bayes": 4
+    },
+    "C0427": {
+      "trend_24_96": 3,
+      "weibull_085": 3,
+      "holt_damped": -4
+    },
+    "C0428": {
+      "frequency_cumulative": 1,
+      "phase_2": 2,
+      "holt_damped": 2
+    },
+    "C0429": {
+      "frequency_cumulative": 2,
+      "phase_2": 1,
+      "holt_damped": -1
+    },
+    "C0430": {
+      "ewma_10": 1,
+      "trend_24_96": 1,
+      "markov_120": 1
+    },
+    "C0431": {
+      "ewma_120": -3,
+      "cusum_6": 4,
+      "logistic_online": 4
+    },
+    "C0432": {
+      "frequency_cumulative": -2,
+      "gap_bayes": 1,
+      "cusum_6": 1
+    },
+    "C0433": {
+      "gap_bayes": 1,
+      "cusum_6": 1,
+      "logistic_online": 1
+    },
+    "C0434": {
+      "gap_bayes": 3,
+      "phase_2": 4,
+      "logistic_online": 1
+    },
+    "C0435": {
+      "trend_24_96": 1,
+      "gap_age": 2,
+      "weibull_085": -3
+    },
+    "C0436": {
+      "ewma_120": 3,
+      "markov_120": 1,
+      "logistic_online": -2
+    },
+    "C0437": {
+      "trend_24_96": 3,
+      "phase_2": -4,
+      "phase_3": 4
+    },
+    "C0438": {
+      "gap_z": 2,
+      "phase_3": -1,
+      "block_entropy_100": 2
+    },
+    "C0439": {
+      "ewma_10": 4,
+      "markov_120": 1,
+      "cusum_6": -4
+    },
+    "C0440": {
+      "ewma_120": 3,
+      "trend_24_96": 4,
+      "cusum_6": 4
+    },
+    "C0441": {
+      "gap_bayes": 3,
+      "phase_3": -1,
+      "holt_damped": 3
+    },
+    "C0442": {
+      "frequency_cumulative": -4,
+      "phase_3": 3,
+      "context_kernel_256": 2
+    },
+    "C0443": {
+      "trend_24_96": 3,
+      "gap_age": 2,
+      "weibull_085": -3
+    },
+    "C0444": {
+      "weibull_085": 3,
+      "context_kernel_256": 1,
+      "logistic_online": -4
+    },
+    "C0445": {
+      "trend_24_96": 1,
+      "gap_bayes": -1,
+      "holt_damped": 2
+    },
+    "C0446": {
+      "frequency_cumulative": -2,
+      "ewma_120": 3,
+      "logistic_online": 2
+    },
+    "C0447": {
+      "frequency_cumulative": -1,
+      "ewma_120": 4,
+      "phase_2": 1
+    },
+    "C0448": {
+      "ewma_120": -1,
+      "weibull_085": 2,
+      "phase_2": 1
+    },
+    "C0449": {
+      "gap_bayes": 4,
+      "context_kernel_256": 1,
+      "cusum_6": 2
+    },
+    "C0450": {
+      "gap_age": 3,
+      "gap_bayes": 4,
+      "weibull_085": -2
+    },
+    "C0451": {
+      "frequency_cumulative": 2,
+      "phase_2": 1,
+      "block_entropy_100": 4
+    },
+    "C0452": {
+      "frequency_cumulative": 2,
+      "ewma_120": 1,
+      "context_kernel_256": -3
+    },
+    "C0453": {
+      "holt_damped": 1,
+      "block_entropy_100": -2,
+      "logistic_online": 1
+    },
+    "C0454": {
+      "ewma_120": 3,
+      "phase_2": 4,
+      "block_entropy_100": 2
+    },
+    "C0455": {
+      "gap_age": 1,
+      "weibull_085": 4,
+      "cusum_6": 1
+    },
+    "C0456": {
+      "trend_24_96": 3,
+      "gap_z": 2,
+      "gap_bayes": 4
+    },
+    "C0457": {
+      "trend_24_96": 1,
+      "gap_bayes": 2,
+      "markov_120": -1
+    },
+    "C0458": {
+      "weibull_085": 4,
+      "phase_2": -1,
+      "holt_damped": 2
+    },
+    "C0459": {
+      "gap_z": 3,
+      "weibull_085": 2,
+      "phase_2": 2
+    },
+    "C0460": {
+      "weibull_085": 2,
+      "cusum_6": 4,
+      "block_entropy_100": -3
+    },
+    "C0461": {
+      "gap_age": 3,
+      "gap_z": 1,
+      "weibull_085": 3
+    },
+    "C0462": {
+      "ewma_10": 3,
+      "markov_120": -1,
+      "block_entropy_100": 4
+    },
+    "C0463": {
+      "trend_24_96": 4,
+      "weibull_085": 4,
+      "block_entropy_100": 1
+    },
+    "C0464": {
+      "gap_z": 1,
+      "cusum_6": 1,
+      "logistic_online": 1
+    },
+    "C0465": {
+      "ewma_10": -2,
+      "weibull_085": 4,
+      "markov_120": 1
+    },
+    "C0466": {
+      "frequency_cumulative": 1,
+      "phase_3": 1,
+      "block_entropy_100": 1
+    },
+    "C0467": {
+      "context_kernel_256": 2,
+      "cusum_6": 3,
+      "block_entropy_100": -4
+    },
+    "C0468": {
+      "gap_age": -2,
+      "holt_damped": 1,
+      "cusum_6": 1
+    },
+    "C0469": {
+      "frequency_cumulative": -1,
+      "trend_24_96": 3,
+      "markov_120": 4
+    },
+    "C0470": {
+      "ewma_120": 3,
+      "phase_2": 3,
+      "cusum_6": 4
+    },
+    "C0471": {
+      "gap_age": 4,
+      "cusum_6": 3,
+      "block_entropy_100": 3
+    },
+    "C0472": {
+      "gap_bayes": -2,
+      "holt_damped": 1,
+      "logistic_online": 4
+    },
+    "C0473": {
+      "gap_age": 4,
+      "phase_2": 1,
+      "holt_damped": -2
+    },
+    "C0474": {
+      "gap_bayes": 1,
+      "weibull_085": 1,
+      "holt_damped": -3
+    },
+    "C0475": {
+      "frequency_cumulative": 4,
+      "gap_z": 2,
+      "cusum_6": 3
+    },
+    "C0476": {
+      "gap_age": 2,
+      "phase_3": 1,
+      "markov_120": 1
+    },
+    "C0477": {
+      "phase_3": 1,
+      "context_kernel_256": 1,
+      "block_entropy_100": 4
+    },
+    "C0478": {
+      "phase_3": -2,
+      "context_kernel_256": 1,
+      "holt_damped": 1
+    },
+    "C0479": {
+      "gap_age": 1,
+      "gap_z": 1,
+      "weibull_085": 1
+    },
+    "C0480": {
+      "ewma_120": 2,
+      "context_kernel_256": 4,
+      "holt_damped": 1
+    },
+    "C0481": {
+      "ewma_120": 2,
+      "weibull_085": 2,
+      "holt_damped": 1
+    },
+    "C0482": {
+      "frequency_cumulative": 4,
+      "gap_age": 1,
+      "markov_120": 4
+    },
+    "C0483": {
+      "ewma_10": 1,
+      "markov_120": 1,
+      "logistic_online": 4
+    },
+    "C0484": {
+      "ewma_120": 1,
+      "gap_bayes": -3,
+      "phase_2": 3
+    },
+    "C0485": {
+      "phase_2": 3,
+      "markov_120": -3,
+      "logistic_online": 4
+    },
+    "C0486": {
+      "ewma_10": 1,
+      "gap_z": -1,
+      "gap_bayes": 3
+    },
+    "C0487": {
+      "weibull_085": 4,
+      "markov_120": -1,
+      "cusum_6": 4
+    },
+    "C0488": {
+      "phase_2": 3,
+      "phase_3": 1,
+      "holt_damped": 3
+    },
+    "C0489": {
+      "ewma_10": 1,
+      "trend_24_96": 4,
+      "phase_3": 3
+    },
+    "C0490": {
+      "phase_3": 2,
+      "cusum_6": -1,
+      "block_entropy_100": 2
+    },
+    "C0491": {
+      "gap_age": 2,
+      "markov_120": 1,
+      "logistic_online": -2
+    },
+    "C0492": {
+      "ewma_10": 1,
+      "markov_120": 3,
+      "logistic_online": 3
+    },
+    "C0493": {
+      "ewma_10": 1,
+      "gap_z": 1,
+      "holt_damped": -3
+    },
+    "C0494": {
+      "ewma_120": 1,
+      "gap_bayes": 4,
+      "phase_3": 1
+    },
+    "C0495": {
+      "ewma_10": 2,
+      "context_kernel_256": -3,
+      "logistic_online": 1
+    },
+    "C0496": {
+      "trend_24_96": 3,
+      "weibull_085": 3,
+      "block_entropy_100": 2
+    },
+    "C0497": {
+      "gap_z": 2,
+      "block_entropy_100": 1,
+      "logistic_online": 3
+    },
+    "C0498": {
+      "frequency_cumulative": 3,
+      "ewma_120": -1,
+      "gap_bayes": 1
+    },
+    "C0499": {
+      "weibull_085": 1,
+      "cusum_6": 4,
+      "logistic_online": 2
+    },
+    "C0500": {
+      "ewma_120": -1,
+      "phase_3": 3,
+      "cusum_6": 3
+    },
+    "C0501": {
+      "phase_2": 1,
+      "context_kernel_256": 2,
+      "holt_damped": 2
+    },
+    "C0502": {
+      "trend_24_96": 2,
+      "phase_2": -1,
+      "markov_120": 2
+    },
+    "C0503": {
+      "trend_24_96": 2,
+      "gap_bayes": -3,
+      "block_entropy_100": 3
+    },
+    "C0504": {
+      "weibull_085": 1,
+      "context_kernel_256": 4,
+      "logistic_online": 3
+    },
+    "C0505": {
+      "gap_age": 2,
+      "gap_bayes": 3,
+      "block_entropy_100": 4
+    },
+    "C0506": {
+      "gap_age": -1,
+      "weibull_085": 3,
+      "phase_3": 3
+    },
+    "C0507": {
+      "frequency_cumulative": 2,
+      "gap_age": 2,
+      "cusum_6": 3
+    },
+    "C0508": {
+      "ewma_120": 1,
+      "gap_bayes": 3,
+      "holt_damped": 3
+    },
+    "C0509": {
+      "gap_z": 1,
+      "context_kernel_256": -1,
+      "cusum_6": 2
+    },
+    "C0510": {
+      "ewma_10": 2,
+      "ewma_120": 2,
+      "cusum_6": 1
+    },
+    "C0511": {
+      "frequency_cumulative": 2,
+      "weibull_085": 3,
+      "phase_2": 1
+    },
+    "C0512": {
+      "ewma_120": 1,
+      "gap_age": 2,
+      "cusum_6": -4
+    },
+    "C0513": {
+      "trend_24_96": -2,
+      "gap_age": 3,
+      "holt_damped": 2
+    },
+    "C0514": {
+      "gap_bayes": 1,
+      "markov_120": 3,
+      "logistic_online": 2
+    },
+    "C0515": {
+      "ewma_10": 1,
+      "gap_z": 3,
+      "context_kernel_256": -3
+    },
+    "C0516": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 3,
+      "phase_2": 4
+    },
+    "C0517": {
+      "gap_z": 2,
+      "holt_damped": 1,
+      "logistic_online": -3
+    },
+    "C0518": {
+      "ewma_120": 2,
+      "gap_age": 3,
+      "phase_3": 4
+    },
+    "C0519": {
+      "gap_bayes": -2,
+      "markov_120": 1,
+      "cusum_6": 1
+    },
+    "C0520": {
+      "gap_z": 3,
+      "gap_bayes": 1,
+      "phase_3": 3
+    },
+    "C0521": {
+      "gap_age": 1,
+      "holt_damped": 2,
+      "cusum_6": 3
+    },
+    "C0522": {
+      "gap_age": 2,
+      "weibull_085": 1,
+      "block_entropy_100": 1
+    },
+    "C0523": {
+      "frequency_cumulative": 3,
+      "gap_z": 3,
+      "markov_120": 1
+    },
+    "C0524": {
+      "frequency_cumulative": 3,
+      "ewma_120": 3,
+      "block_entropy_100": 1
+    },
+    "C0525": {
+      "gap_z": 4,
+      "gap_bayes": 1,
+      "block_entropy_100": -3
+    },
+    "C0526": {
+      "frequency_cumulative": -1,
+      "gap_age": 3,
+      "phase_2": 3
+    },
+    "C0527": {
+      "trend_24_96": 3,
+      "gap_bayes": 1,
+      "phase_3": 2
+    },
+    "C0528": {
+      "gap_age": 2,
+      "weibull_085": 2,
+      "block_entropy_100": 1
+    },
+    "C0529": {
+      "frequency_cumulative": 2,
+      "markov_120": 2,
+      "holt_damped": -1
+    },
+    "C0530": {
+      "phase_2": 1,
+      "cusum_6": -1,
+      "logistic_online": 1
+    },
+    "C0531": {
+      "ewma_10": -3,
+      "phase_2": 4,
+      "cusum_6": 1
+    },
+    "C0532": {
+      "trend_24_96": 1,
+      "gap_age": 1,
+      "holt_damped": 2
+    },
+    "C0533": {
+      "gap_z": 1,
+      "holt_damped": 4,
+      "block_entropy_100": -2
+    },
+    "C0534": {
+      "frequency_cumulative": 2,
+      "phase_2": -1,
+      "markov_120": 2
+    },
+    "C0535": {
+      "frequency_cumulative": -4,
+      "trend_24_96": 1,
+      "weibull_085": 3
+    },
+    "C0536": {
+      "ewma_120": 3,
+      "cusum_6": 2,
+      "block_entropy_100": -3
+    },
+    "C0537": {
+      "weibull_085": 3,
+      "markov_120": 2,
+      "logistic_online": -3
+    },
+    "C0538": {
+      "trend_24_96": 3,
+      "context_kernel_256": 1,
+      "cusum_6": -1
+    },
+    "C0539": {
+      "frequency_cumulative": -3,
+      "gap_z": 1,
+      "phase_3": 4
+    },
+    "C0540": {
+      "phase_2": 3,
+      "cusum_6": 3,
+      "block_entropy_100": 4
+    },
+    "C0541": {
+      "frequency_cumulative": 1,
+      "weibull_085": 3,
+      "block_entropy_100": -3
+    },
+    "C0542": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 4,
+      "gap_bayes": 1
+    },
+    "C0543": {
+      "ewma_120": -4,
+      "block_entropy_100": 1,
+      "logistic_online": 2
+    },
+    "C0544": {
+      "frequency_cumulative": -1,
+      "gap_bayes": 2,
+      "phase_2": 4
+    },
+    "C0545": {
+      "gap_z": 1,
+      "phase_2": 4,
+      "logistic_online": 1
+    },
+    "C0546": {
+      "gap_z": 3,
+      "gap_bayes": -2,
+      "holt_damped": 3
+    },
+    "C0547": {
+      "ewma_120": -2,
+      "gap_z": 1,
+      "holt_damped": 1
+    },
+    "C0548": {
+      "ewma_10": 1,
+      "gap_age": -1,
+      "cusum_6": 1
+    },
+    "C0549": {
+      "frequency_cumulative": 3,
+      "trend_24_96": -2,
+      "logistic_online": 4
+    },
+    "C0550": {
+      "frequency_cumulative": 1,
+      "weibull_085": 3,
+      "phase_2": -2
+    },
+    "C0551": {
+      "trend_24_96": 3,
+      "gap_bayes": -4,
+      "block_entropy_100": 2
+    },
+    "C0552": {
+      "trend_24_96": 3,
+      "gap_z": 1,
+      "phase_2": 3
+    },
+    "C0553": {
+      "ewma_120": 2,
+      "context_kernel_256": 3,
+      "cusum_6": 1
+    },
+    "C0554": {
+      "ewma_120": 4,
+      "holt_damped": 1,
+      "block_entropy_100": 2
+    },
+    "C0555": {
+      "phase_2": 3,
+      "context_kernel_256": 3,
+      "block_entropy_100": 4
+    },
+    "C0556": {
+      "ewma_120": -3,
+      "gap_z": 2,
+      "markov_120": 3
+    },
+    "C0557": {
+      "frequency_cumulative": -3,
+      "ewma_120": 1,
+      "gap_z": 4
+    },
+    "C0558": {
+      "ewma_10": 2,
+      "trend_24_96": 4,
+      "holt_damped": 1
+    },
+    "C0559": {
+      "frequency_cumulative": 2,
+      "ewma_10": -1,
+      "phase_3": 2
+    },
+    "C0560": {
+      "weibull_085": 4,
+      "phase_3": 2,
+      "markov_120": -1
+    },
+    "C0561": {
+      "gap_z": 4,
+      "gap_bayes": 2,
+      "block_entropy_100": 3
+    },
+    "C0562": {
+      "phase_2": 4,
+      "phase_3": -2,
+      "holt_damped": 1
+    },
+    "C0563": {
+      "trend_24_96": -2,
+      "context_kernel_256": 3,
+      "cusum_6": 3
+    },
+    "C0564": {
+      "weibull_085": 3,
+      "phase_3": -2,
+      "markov_120": 1
+    },
+    "C0565": {
+      "gap_age": 4,
+      "gap_bayes": 2,
+      "logistic_online": 1
+    },
+    "C0566": {
+      "frequency_cumulative": 2,
+      "phase_2": -1,
+      "block_entropy_100": 2
+    },
+    "C0567": {
+      "gap_bayes": 4,
+      "phase_3": 1,
+      "cusum_6": 1
+    },
+    "C0568": {
+      "trend_24_96": 1,
+      "phase_2": 4,
+      "phase_3": -1
+    },
+    "C0569": {
+      "weibull_085": 4,
+      "phase_2": 3,
+      "phase_3": 1
+    },
+    "C0570": {
+      "ewma_10": 3,
+      "trend_24_96": 1,
+      "holt_damped": 1
+    },
+    "C0571": {
+      "ewma_10": 4,
+      "context_kernel_256": 1,
+      "holt_damped": 3
+    },
+    "C0572": {
+      "weibull_085": 1,
+      "phase_3": 2,
+      "holt_damped": 3
+    },
+    "C0573": {
+      "frequency_cumulative": 3,
+      "trend_24_96": -4,
+      "cusum_6": 1
+    },
+    "C0574": {
+      "frequency_cumulative": 3,
+      "markov_120": 1,
+      "holt_damped": 3
+    },
+    "C0575": {
+      "phase_2": -3,
+      "cusum_6": 4,
+      "block_entropy_100": 2
+    },
+    "C0576": {
+      "trend_24_96": 3,
+      "weibull_085": -4,
+      "block_entropy_100": 2
+    },
+    "C0577": {
+      "ewma_10": 4,
+      "gap_bayes": 3,
+      "context_kernel_256": -2
+    },
+    "C0578": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 3,
+      "phase_3": 1
+    },
+    "C0579": {
+      "ewma_10": 2,
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0580": {
+      "frequency_cumulative": 2,
+      "ewma_120": 1,
+      "logistic_online": 1
+    },
+    "C0581": {
+      "frequency_cumulative": -3,
+      "ewma_120": 2,
+      "gap_age": 4
+    },
+    "C0582": {
+      "ewma_120": 1,
+      "gap_age": 1,
+      "gap_bayes": 3
+    },
+    "C0583": {
+      "weibull_085": 1,
+      "holt_damped": 4,
+      "cusum_6": 4
+    },
+    "C0584": {
+      "trend_24_96": -3,
+      "phase_3": 2,
+      "cusum_6": 3
+    },
+    "C0585": {
+      "frequency_cumulative": 4,
+      "ewma_10": -1,
+      "trend_24_96": 4
+    },
+    "C0586": {
+      "ewma_10": 1,
+      "ewma_120": 1,
+      "block_entropy_100": 1
+    },
+    "C0587": {
+      "frequency_cumulative": 2,
+      "phase_3": 1,
+      "markov_120": 2
+    },
+    "C0588": {
+      "ewma_120": 1,
+      "gap_z": 1,
+      "context_kernel_256": 3
+    },
+    "C0589": {
+      "ewma_10": 1,
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0590": {
+      "trend_24_96": 2,
+      "markov_120": 3,
+      "context_kernel_256": 2
+    },
+    "C0591": {
+      "gap_bayes": 3,
+      "markov_120": 3,
+      "cusum_6": -4
+    },
+    "C0592": {
+      "weibull_085": 1,
+      "phase_2": 1,
+      "block_entropy_100": 1
+    },
+    "C0593": {
+      "ewma_120": 3,
+      "gap_age": 1,
+      "gap_bayes": -1
+    },
+    "C0594": {
+      "frequency_cumulative": -2,
+      "phase_2": 1,
+      "markov_120": 1
+    },
+    "C0595": {
+      "phase_2": 1,
+      "phase_3": 2,
+      "cusum_6": 2
+    },
+    "C0596": {
+      "gap_bayes": 3,
+      "holt_damped": 2,
+      "cusum_6": 2
+    },
+    "C0597": {
+      "weibull_085": 2,
+      "markov_120": 1,
+      "block_entropy_100": 1
+    },
+    "C0598": {
+      "frequency_cumulative": 1,
+      "weibull_085": 1,
+      "logistic_online": 2
+    },
+    "C0599": {
+      "frequency_cumulative": 2,
+      "gap_age": 1,
+      "phase_2": 2
+    },
+    "C0600": {
+      "ewma_10": 1,
+      "ewma_120": 1,
+      "markov_120": 1
+    },
+    "C0601": {
+      "gap_age": 2,
+      "context_kernel_256": 2,
+      "holt_damped": -1
+    },
+    "C0602": {
+      "ewma_10": 2,
+      "trend_24_96": -3,
+      "context_kernel_256": 2
+    },
+    "C0603": {
+      "trend_24_96": -4,
+      "gap_age": 3,
+      "logistic_online": 2
+    },
+    "C0604": {
+      "trend_24_96": 2,
+      "gap_age": -1,
+      "logistic_online": 3
+    },
+    "C0605": {
+      "frequency_cumulative": 1,
+      "ewma_120": -2,
+      "weibull_085": 1
+    },
+    "C0606": {
+      "gap_bayes": 2,
+      "block_entropy_100": -2,
+      "logistic_online": 3
+    },
+    "C0607": {
+      "ewma_10": 2,
+      "gap_z": 4,
+      "cusum_6": 1
+    },
+    "C0608": {
+      "trend_24_96": -1,
+      "gap_bayes": 4,
+      "cusum_6": 2
+    },
+    "C0609": {
+      "ewma_10": 2,
+      "markov_120": 1,
+      "context_kernel_256": 2
+    },
+    "C0610": {
+      "ewma_10": 1,
+      "gap_bayes": 3,
+      "phase_3": 3
+    },
+    "C0611": {
+      "frequency_cumulative": 2,
+      "ewma_120": 3,
+      "gap_age": 4
+    },
+    "C0612": {
+      "gap_z": 1,
+      "block_entropy_100": 2,
+      "logistic_online": 1
+    },
+    "C0613": {
+      "gap_age": 3,
+      "weibull_085": 4,
+      "context_kernel_256": 4
+    },
+    "C0614": {
+      "ewma_10": 1,
+      "gap_bayes": 4,
+      "cusum_6": 1
+    },
+    "C0615": {
+      "trend_24_96": 2,
+      "gap_age": 1,
+      "weibull_085": -2
+    },
+    "C0616": {
+      "frequency_cumulative": 1,
+      "trend_24_96": -1,
+      "context_kernel_256": 1
+    },
+    "C0617": {
+      "gap_z": 1,
+      "holt_damped": 2,
+      "cusum_6": 2
+    },
+    "C0618": {
+      "ewma_120": 3,
+      "phase_3": 4,
+      "logistic_online": 2
+    },
+    "C0619": {
+      "frequency_cumulative": -3,
+      "gap_z": 2,
+      "logistic_online": 3
+    },
+    "C0620": {
+      "ewma_10": 3,
+      "ewma_120": 2,
+      "trend_24_96": 4
+    },
+    "C0621": {
+      "ewma_10": -1,
+      "weibull_085": 3,
+      "phase_2": 2
+    },
+    "C0622": {
+      "ewma_120": 4,
+      "holt_damped": 1,
+      "block_entropy_100": 1
+    },
+    "C0623": {
+      "ewma_10": 4,
+      "gap_bayes": 3,
+      "markov_120": 1
+    },
+    "C0624": {
+      "ewma_10": 2,
+      "ewma_120": 3,
+      "gap_age": 1
+    },
+    "C0625": {
+      "ewma_10": 1,
+      "phase_3": 1,
+      "block_entropy_100": -1
+    },
+    "C0626": {
+      "gap_bayes": -1,
+      "markov_120": 3,
+      "block_entropy_100": 1
+    },
+    "C0627": {
+      "context_kernel_256": 4,
+      "holt_damped": 3,
+      "cusum_6": 1
+    },
+    "C0628": {
+      "gap_age": -1,
+      "gap_z": 1,
+      "block_entropy_100": 4
+    },
+    "C0629": {
+      "trend_24_96": 1,
+      "gap_age": 1,
+      "context_kernel_256": 2
+    },
+    "C0630": {
+      "gap_age": 1,
+      "phase_3": 2,
+      "context_kernel_256": 1
+    },
+    "C0631": {
+      "frequency_cumulative": 3,
+      "cusum_6": 3,
+      "block_entropy_100": 2
+    },
+    "C0632": {
+      "markov_120": 2,
+      "holt_damped": 1,
+      "logistic_online": 1
+    },
+    "C0633": {
+      "ewma_10": 4,
+      "gap_age": 1,
+      "gap_z": 4
+    },
+    "C0634": {
+      "gap_bayes": -3,
+      "weibull_085": 1,
+      "cusum_6": 1
+    },
+    "C0635": {
+      "ewma_10": 2,
+      "holt_damped": 2,
+      "cusum_6": 1
+    },
+    "C0636": {
+      "frequency_cumulative": 2,
+      "phase_2": -3,
+      "phase_3": 2
+    },
+    "C0637": {
+      "ewma_120": -2,
+      "gap_z": 3,
+      "block_entropy_100": 4
+    },
+    "C0638": {
+      "frequency_cumulative": 1,
+      "ewma_10": 2,
+      "markov_120": 3
+    },
+    "C0639": {
+      "phase_2": 1,
+      "phase_3": -4,
+      "cusum_6": 4
+    },
+    "C0640": {
+      "gap_age": 3,
+      "holt_damped": -4,
+      "block_entropy_100": 2
+    },
+    "C0641": {
+      "gap_z": -1,
+      "holt_damped": 2,
+      "cusum_6": 1
+    },
+    "C0642": {
+      "gap_age": 1,
+      "markov_120": 1,
+      "logistic_online": 2
+    },
+    "C0643": {
+      "weibull_085": -2,
+      "phase_3": 3,
+      "block_entropy_100": 3
+    },
+    "C0644": {
+      "weibull_085": 1,
+      "cusum_6": 1,
+      "logistic_online": 4
+    },
+    "C0645": {
+      "ewma_10": 1,
+      "gap_z": 2,
+      "markov_120": -1
+    },
+    "C0646": {
+      "gap_bayes": -2,
+      "phase_3": 2,
+      "context_kernel_256": 1
+    },
+    "C0647": {
+      "ewma_120": 3,
+      "phase_2": 1,
+      "markov_120": 4
+    },
+    "C0648": {
+      "weibull_085": 2,
+      "phase_3": 4,
+      "context_kernel_256": 3
+    },
+    "C0649": {
+      "frequency_cumulative": 4,
+      "gap_bayes": 3,
+      "phase_3": 3
+    },
+    "C0650": {
+      "gap_bayes": 3,
+      "markov_120": 4,
+      "holt_damped": 1
+    },
+    "C0651": {
+      "gap_age": 3,
+      "holt_damped": 1,
+      "block_entropy_100": -2
+    },
+    "C0652": {
+      "markov_120": 1,
+      "block_entropy_100": 4,
+      "logistic_online": 2
+    },
+    "C0653": {
+      "phase_3": 3,
+      "holt_damped": 4,
+      "cusum_6": 2
+    },
+    "C0654": {
+      "ewma_10": 1,
+      "trend_24_96": 1,
+      "holt_damped": 1
+    },
+    "C0655": {
+      "ewma_120": 1,
+      "gap_age": -2,
+      "cusum_6": 1
+    },
+    "C0656": {
+      "frequency_cumulative": 2,
+      "gap_age": 1,
+      "holt_damped": -1
+    },
+    "C0657": {
+      "ewma_120": 3,
+      "phase_2": 3,
+      "markov_120": 4
+    },
+    "C0658": {
+      "frequency_cumulative": 1,
+      "gap_age": 2,
+      "phase_3": 1
+    },
+    "C0659": {
+      "frequency_cumulative": 1,
+      "gap_z": 4,
+      "cusum_6": -4
+    },
+    "C0660": {
+      "frequency_cumulative": 4,
+      "trend_24_96": 3,
+      "context_kernel_256": 3
+    },
+    "C0661": {
+      "frequency_cumulative": 3,
+      "block_entropy_100": 2,
+      "logistic_online": 2
+    },
+    "C0662": {
+      "phase_2": 1,
+      "phase_3": 4,
+      "context_kernel_256": -4
+    },
+    "C0663": {
+      "ewma_10": -2,
+      "weibull_085": 1,
+      "phase_3": 1
+    },
+    "C0664": {
+      "phase_2": -2,
+      "context_kernel_256": 3,
+      "logistic_online": 4
+    },
+    "C0665": {
+      "frequency_cumulative": 3,
+      "gap_age": 1,
+      "gap_bayes": 2
+    },
+    "C0666": {
+      "gap_z": 1,
+      "weibull_085": 2,
+      "markov_120": 3
+    },
+    "C0667": {
+      "markov_120": 1,
+      "holt_damped": 2,
+      "block_entropy_100": -1
+    },
+    "C0668": {
+      "gap_bayes": -4,
+      "markov_120": 2,
+      "logistic_online": 3
+    },
+    "C0669": {
+      "ewma_10": 3,
+      "phase_2": 3,
+      "cusum_6": 2
+    },
+    "C0670": {
+      "gap_age": 1,
+      "gap_bayes": 2,
+      "block_entropy_100": 4
+    },
+    "C0671": {
+      "gap_z": 2,
+      "markov_120": 1,
+      "block_entropy_100": 3
+    },
+    "C0672": {
+      "ewma_120": 4,
+      "phase_2": 1,
+      "logistic_online": 3
+    },
+    "C0673": {
+      "gap_z": 1,
+      "cusum_6": 4,
+      "logistic_online": 1
+    },
+    "C0674": {
+      "ewma_10": 2,
+      "holt_damped": 2,
+      "cusum_6": -3
+    },
+    "C0675": {
+      "ewma_120": 4,
+      "cusum_6": 2,
+      "block_entropy_100": -1
+    },
+    "C0676": {
+      "gap_bayes": 3,
+      "phase_2": 3,
+      "block_entropy_100": 2
+    },
+    "C0677": {
+      "ewma_10": 3,
+      "gap_age": 1,
+      "context_kernel_256": -1
+    },
+    "C0678": {
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "holt_damped": -3
+    },
+    "C0679": {
+      "frequency_cumulative": 2,
+      "gap_z": 4,
+      "logistic_online": 1
+    },
+    "C0680": {
+      "weibull_085": 3,
+      "phase_2": 2,
+      "cusum_6": 3
+    },
+    "C0681": {
+      "ewma_10": 2,
+      "ewma_120": 2,
+      "gap_z": 1
+    },
+    "C0682": {
+      "gap_z": 3,
+      "gap_bayes": 4,
+      "logistic_online": 2
+    },
+    "C0683": {
+      "weibull_085": 1,
+      "cusum_6": 1,
+      "block_entropy_100": -4
+    },
+    "C0684": {
+      "gap_age": -3,
+      "weibull_085": 4,
+      "context_kernel_256": 1
+    },
+    "C0685": {
+      "trend_24_96": -1,
+      "cusum_6": 2,
+      "logistic_online": 2
+    },
+    "C0686": {
+      "frequency_cumulative": 3,
+      "phase_3": 2,
+      "markov_120": 1
+    },
+    "C0687": {
+      "ewma_10": -1,
+      "gap_age": 2,
+      "markov_120": 3
+    },
+    "C0688": {
+      "weibull_085": 1,
+      "markov_120": -2,
+      "context_kernel_256": 3
+    },
+    "C0689": {
+      "gap_bayes": 2,
+      "phase_2": 1,
+      "holt_damped": 2
+    },
+    "C0690": {
+      "frequency_cumulative": -2,
+      "phase_3": 1,
+      "logistic_online": 1
+    },
+    "C0691": {
+      "frequency_cumulative": -3,
+      "ewma_120": 4,
+      "phase_2": 3
+    },
+    "C0692": {
+      "frequency_cumulative": -1,
+      "ewma_120": 4,
+      "trend_24_96": 2
+    },
+    "C0693": {
+      "gap_z": 1,
+      "phase_3": 3,
+      "markov_120": 2
+    },
+    "C0694": {
+      "trend_24_96": -1,
+      "holt_damped": 2,
+      "logistic_online": 4
+    },
+    "C0695": {
+      "phase_3": -2,
+      "holt_damped": 3,
+      "logistic_online": 1
+    },
+    "C0696": {
+      "trend_24_96": 1,
+      "holt_damped": -1,
+      "logistic_online": 1
+    },
+    "C0697": {
+      "gap_age": 2,
+      "weibull_085": 2,
+      "phase_3": 2,
+      "context_kernel_256": 3,
+      "logistic_online": 3
+    },
+    "C0698": {
+      "gap_z": 2,
+      "phase_2": 1,
+      "context_kernel_256": 1,
+      "cusum_6": 2,
+      "block_entropy_100": 2
+    },
+    "C0699": {
+      "ewma_10": 3,
+      "ewma_120": 3,
+      "gap_age": 2,
+      "markov_120": 1,
+      "holt_damped": 1
+    },
+    "C0700": {
+      "frequency_cumulative": 1,
+      "ewma_120": 4,
+      "weibull_085": 1,
+      "context_kernel_256": 2,
+      "block_entropy_100": 3
+    },
+    "C0701": {
+      "ewma_10": 2,
+      "gap_age": 3,
+      "gap_z": 3,
+      "markov_120": -3,
+      "block_entropy_100": 4
+    },
+    "C0702": {
+      "gap_bayes": 2,
+      "context_kernel_256": 2,
+      "holt_damped": -2,
+      "cusum_6": 2,
+      "logistic_online": 3
+    },
+    "C0703": {
+      "ewma_120": 3,
+      "gap_z": 3,
+      "phase_2": 3,
+      "phase_3": 2,
+      "logistic_online": 4
+    },
+    "C0704": {
+      "frequency_cumulative": 3,
+      "gap_age": 1,
+      "gap_z": 2,
+      "phase_2": 3,
+      "holt_damped": 3
+    },
+    "C0705": {
+      "gap_age": 1,
+      "gap_bayes": 1,
+      "weibull_085": 3,
+      "holt_damped": 4,
+      "block_entropy_100": 4
+    },
+    "C0706": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 4,
+      "weibull_085": 2,
+      "phase_2": 1,
+      "cusum_6": 3
+    },
+    "C0707": {
+      "frequency_cumulative": 1,
+      "gap_age": -2,
+      "phase_3": 1,
+      "holt_damped": 1,
+      "block_entropy_100": 2
+    },
+    "C0708": {
+      "ewma_120": 4,
+      "gap_age": 3,
+      "phase_2": 2,
+      "cusum_6": 4,
+      "logistic_online": 1
+    },
+    "C0709": {
+      "trend_24_96": -4,
+      "gap_z": 1,
+      "gap_bayes": 2,
+      "holt_damped": 1,
+      "logistic_online": 1
+    },
+    "C0710": {
+      "ewma_120": 1,
+      "trend_24_96": 3,
+      "gap_age": 3,
+      "phase_2": -3,
+      "markov_120": 4
+    },
+    "C0711": {
+      "frequency_cumulative": 1,
+      "ewma_120": -2,
+      "gap_bayes": 1,
+      "phase_2": 2,
+      "cusum_6": 1
+    },
+    "C0712": {
+      "ewma_10": 4,
+      "gap_bayes": 3,
+      "weibull_085": 3,
+      "holt_damped": 2,
+      "block_entropy_100": -3
+    },
+    "C0713": {
+      "ewma_10": 1,
+      "trend_24_96": 3,
+      "phase_2": 1,
+      "markov_120": -2,
+      "holt_damped": 4
+    },
+    "C0714": {
+      "ewma_10": 3,
+      "gap_age": 3,
+      "weibull_085": 2,
+      "phase_3": 2,
+      "markov_120": 2
+    },
+    "C0715": {
+      "trend_24_96": 1,
+      "gap_bayes": 2,
+      "phase_2": 3,
+      "markov_120": 2,
+      "holt_damped": 2
+    },
+    "C0716": {
+      "frequency_cumulative": 1,
+      "ewma_10": 3,
+      "gap_z": 4,
+      "context_kernel_256": 1,
+      "block_entropy_100": 1
+    },
+    "C0717": {
+      "gap_age": -1,
+      "weibull_085": 3,
+      "phase_2": 4,
+      "holt_damped": 3,
+      "block_entropy_100": 2
+    },
+    "C0718": {
+      "frequency_cumulative": 3,
+      "ewma_10": 4,
+      "ewma_120": 1,
+      "gap_age": 3,
+      "context_kernel_256": 1
+    },
+    "C0719": {
+      "ewma_120": -1,
+      "weibull_085": 4,
+      "context_kernel_256": 3,
+      "holt_damped": 1,
+      "block_entropy_100": 4
+    },
+    "C0720": {
+      "trend_24_96": 2,
+      "gap_z": 2,
+      "markov_120": 4,
+      "block_entropy_100": 1,
+      "logistic_online": 2
+    },
+    "C0721": {
+      "trend_24_96": 2,
+      "gap_bayes": 1,
+      "weibull_085": 4,
+      "markov_120": 3,
+      "logistic_online": 3
+    },
+    "C0722": {
+      "ewma_10": 2,
+      "gap_z": 2,
+      "gap_bayes": 1,
+      "block_entropy_100": 3,
+      "logistic_online": 4
+    },
+    "C0723": {
+      "trend_24_96": 2,
+      "gap_age": 2,
+      "phase_2": 4,
+      "phase_3": 3,
+      "block_entropy_100": 1
+    },
+    "C0724": {
+      "ewma_10": -4,
+      "ewma_120": 4,
+      "gap_z": 1,
+      "weibull_085": 2,
+      "block_entropy_100": 3
+    },
+    "C0725": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 1,
+      "phase_2": 4,
+      "markov_120": 2,
+      "holt_damped": 2
+    },
+    "C0726": {
+      "trend_24_96": 3,
+      "gap_age": 1,
+      "gap_z": 1,
+      "markov_120": 2,
+      "context_kernel_256": 1
+    },
+    "C0727": {
+      "frequency_cumulative": 3,
+      "gap_age": 2,
+      "weibull_085": 1,
+      "context_kernel_256": 3,
+      "block_entropy_100": 2
+    },
+    "C0728": {
+      "frequency_cumulative": 2,
+      "ewma_10": 4,
+      "markov_120": 4,
+      "context_kernel_256": 2,
+      "logistic_online": 3
+    },
+    "C0729": {
+      "gap_z": 2,
+      "weibull_085": 3,
+      "phase_2": 3,
+      "block_entropy_100": 3,
+      "logistic_online": 4
+    },
+    "C0730": {
+      "frequency_cumulative": 1,
+      "gap_z": 4,
+      "weibull_085": 2,
+      "phase_2": 3,
+      "holt_damped": 3
+    },
+    "C0731": {
+      "frequency_cumulative": 1,
+      "weibull_085": 3,
+      "phase_2": 3,
+      "markov_120": 2,
+      "cusum_6": 4
+    },
+    "C0732": {
+      "gap_bayes": -4,
+      "phase_3": 3,
+      "holt_damped": 2,
+      "block_entropy_100": 1,
+      "logistic_online": 1
+    },
+    "C0733": {
+      "frequency_cumulative": 2,
+      "ewma_10": 4,
+      "gap_age": 2,
+      "phase_2": 4,
+      "context_kernel_256": 1
+    },
+    "C0734": {
+      "trend_24_96": 4,
+      "gap_age": 3,
+      "gap_z": -2,
+      "gap_bayes": 3,
+      "block_entropy_100": 2
+    },
+    "C0735": {
+      "ewma_10": 2,
+      "phase_2": 2,
+      "phase_3": 2,
+      "context_kernel_256": 1,
+      "cusum_6": 1
+    },
+    "C0736": {
+      "frequency_cumulative": 4,
+      "trend_24_96": 4,
+      "cusum_6": 3,
+      "block_entropy_100": 2,
+      "logistic_online": -2
+    },
+    "C0737": {
+      "frequency_cumulative": 4,
+      "gap_age": 3,
+      "gap_z": 4,
+      "gap_bayes": -2,
+      "cusum_6": 2
+    },
+    "C0738": {
+      "ewma_10": 1,
+      "gap_bayes": 1,
+      "context_kernel_256": -3,
+      "holt_damped": 2,
+      "cusum_6": 2
+    },
+    "C0739": {
+      "frequency_cumulative": 1,
+      "ewma_10": 3,
+      "gap_bayes": 4,
+      "phase_2": 3,
+      "cusum_6": 2
+    },
+    "C0740": {
+      "frequency_cumulative": 2,
+      "ewma_120": 2,
+      "trend_24_96": 4,
+      "weibull_085": 3,
+      "holt_damped": 4
+    },
+    "C0741": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 4,
+      "phase_2": 1,
+      "context_kernel_256": 3,
+      "holt_damped": -2
+    },
+    "C0742": {
+      "ewma_10": 4,
+      "trend_24_96": -1,
+      "phase_2": 1,
+      "cusum_6": 3,
+      "block_entropy_100": 3
+    },
+    "C0743": {
+      "frequency_cumulative": 3,
+      "gap_bayes": -1,
+      "weibull_085": 4,
+      "phase_2": 2,
+      "holt_damped": 4
+    },
+    "C0744": {
+      "ewma_10": 1,
+      "gap_z": 4,
+      "markov_120": 3,
+      "context_kernel_256": -2,
+      "block_entropy_100": 1
+    },
+    "C0745": {
+      "gap_z": 3,
+      "gap_bayes": 4,
+      "phase_3": 3,
+      "holt_damped": 4,
+      "block_entropy_100": 2
+    },
+    "C0746": {
+      "ewma_10": 1,
+      "ewma_120": 2,
+      "trend_24_96": 1,
+      "gap_age": 1,
+      "logistic_online": 4
+    },
+    "C0747": {
+      "ewma_120": 4,
+      "trend_24_96": 1,
+      "gap_age": 3,
+      "holt_damped": 4,
+      "block_entropy_100": 3
+    },
+    "C0748": {
+      "trend_24_96": 3,
+      "gap_z": 1,
+      "phase_2": 4,
+      "context_kernel_256": 4,
+      "block_entropy_100": 1
+    },
+    "C0749": {
+      "trend_24_96": 2,
+      "gap_bayes": 1,
+      "phase_2": 3,
+      "phase_3": 1,
+      "markov_120": 3
+    },
+    "C0750": {
+      "ewma_10": 3,
+      "weibull_085": 4,
+      "phase_3": 3,
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0751": {
+      "trend_24_96": 3,
+      "phase_2": 1,
+      "markov_120": -4,
+      "context_kernel_256": 4,
+      "block_entropy_100": 3
+    },
+    "C0752": {
+      "trend_24_96": 4,
+      "phase_3": 1,
+      "markov_120": 4,
+      "context_kernel_256": 3,
+      "cusum_6": 1
+    },
+    "C0753": {
+      "frequency_cumulative": 1,
+      "ewma_10": 1,
+      "trend_24_96": 4,
+      "weibull_085": 1,
+      "cusum_6": 2
+    },
+    "C0754": {
+      "ewma_10": 1,
+      "ewma_120": -3,
+      "gap_z": 2,
+      "phase_2": 1,
+      "cusum_6": 1
+    },
+    "C0755": {
+      "ewma_10": 2,
+      "gap_age": 3,
+      "gap_z": 4,
+      "markov_120": 4,
+      "block_entropy_100": 1
+    },
+    "C0756": {
+      "trend_24_96": 3,
+      "gap_z": 1,
+      "weibull_085": 3,
+      "context_kernel_256": 3,
+      "holt_damped": 3
+    },
+    "C0757": {
+      "ewma_120": -3,
+      "trend_24_96": 4,
+      "gap_age": 2,
+      "gap_bayes": 2,
+      "phase_3": 4
+    },
+    "C0758": {
+      "ewma_120": 3,
+      "gap_bayes": -2,
+      "phase_2": 1,
+      "context_kernel_256": 1,
+      "block_entropy_100": 1
+    },
+    "C0759": {
+      "gap_z": 3,
+      "weibull_085": 3,
+      "phase_3": 2,
+      "markov_120": 1,
+      "holt_damped": -4
+    },
+    "C0760": {
+      "trend_24_96": 1,
+      "weibull_085": -2,
+      "phase_2": 2,
+      "phase_3": 2,
+      "logistic_online": 1
+    },
+    "C0761": {
+      "trend_24_96": -3,
+      "gap_bayes": 2,
+      "markov_120": 1,
+      "context_kernel_256": 3,
+      "logistic_online": 2
+    },
+    "C0762": {
+      "ewma_10": 1,
+      "trend_24_96": 1,
+      "gap_z": 4,
+      "weibull_085": 3,
+      "phase_3": 2
+    },
+    "C0763": {
+      "ewma_10": 2,
+      "gap_bayes": 1,
+      "weibull_085": 4,
+      "context_kernel_256": 4,
+      "cusum_6": 4
+    },
+    "C0764": {
+      "ewma_10": 1,
+      "ewma_120": 2,
+      "markov_120": 2,
+      "context_kernel_256": 1,
+      "logistic_online": -1
+    },
+    "C0765": {
+      "frequency_cumulative": 2,
+      "gap_bayes": -2,
+      "phase_2": 1,
+      "context_kernel_256": 4,
+      "cusum_6": 2
+    },
+    "C0766": {
+      "ewma_10": 1,
+      "gap_bayes": 3,
+      "phase_3": 3,
+      "context_kernel_256": 3,
+      "cusum_6": 2
+    },
+    "C0767": {
+      "frequency_cumulative": -3,
+      "ewma_10": 3,
+      "gap_age": 4,
+      "weibull_085": 1,
+      "cusum_6": 2
+    },
+    "C0768": {
+      "frequency_cumulative": 1,
+      "ewma_120": 3,
+      "gap_age": 1,
+      "gap_bayes": 2,
+      "weibull_085": 4
+    },
+    "C0769": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 3,
+      "phase_2": -3,
+      "block_entropy_100": 1,
+      "logistic_online": 2
+    },
+    "C0770": {
+      "frequency_cumulative": 2,
+      "gap_age": 3,
+      "phase_2": 1,
+      "phase_3": 1,
+      "logistic_online": 1
+    },
+    "C0771": {
+      "trend_24_96": 3,
+      "gap_age": 2,
+      "gap_z": 3,
+      "phase_3": 2,
+      "logistic_online": 1
+    },
+    "C0772": {
+      "gap_age": 4,
+      "gap_z": 1,
+      "gap_bayes": 4,
+      "weibull_085": 2,
+      "phase_3": 4
+    },
+    "C0773": {
+      "frequency_cumulative": 3,
+      "ewma_10": 3,
+      "gap_bayes": 1,
+      "block_entropy_100": 1,
+      "logistic_online": 3
+    },
+    "C0774": {
+      "ewma_120": 1,
+      "gap_age": 2,
+      "weibull_085": 4,
+      "phase_2": 2,
+      "context_kernel_256": -2
+    },
+    "C0775": {
+      "frequency_cumulative": 4,
+      "ewma_10": 3,
+      "ewma_120": 4,
+      "holt_damped": 4,
+      "logistic_online": 2
+    },
+    "C0776": {
+      "ewma_10": 2,
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "context_kernel_256": 4,
+      "cusum_6": 4
+    },
+    "C0777": {
+      "gap_z": 2,
+      "weibull_085": 3,
+      "context_kernel_256": 3,
+      "block_entropy_100": 4,
+      "logistic_online": 4
+    },
+    "C0778": {
+      "ewma_10": 2,
+      "trend_24_96": 1,
+      "gap_age": 4,
+      "phase_2": -2,
+      "phase_3": 4
+    },
+    "C0779": {
+      "ewma_120": 4,
+      "gap_z": -2,
+      "markov_120": 2,
+      "holt_damped": 3,
+      "cusum_6": 4
+    },
+    "C0780": {
+      "gap_age": 3,
+      "gap_z": 3,
+      "weibull_085": 4,
+      "markov_120": 2,
+      "cusum_6": 1
+    },
+    "C0781": {
+      "trend_24_96": 1,
+      "weibull_085": 2,
+      "phase_2": 1,
+      "markov_120": 1,
+      "holt_damped": 2
+    },
+    "C0782": {
+      "frequency_cumulative": 4,
+      "ewma_120": -3,
+      "gap_z": 3,
+      "phase_3": 3,
+      "holt_damped": 3
+    },
+    "C0783": {
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "weibull_085": 3,
+      "phase_2": 2,
+      "logistic_online": 4
+    },
+    "C0784": {
+      "trend_24_96": 4,
+      "gap_z": 2,
+      "phase_3": 1,
+      "context_kernel_256": 2,
+      "block_entropy_100": -2
+    },
+    "C0785": {
+      "ewma_10": 2,
+      "gap_age": 1,
+      "phase_3": 4,
+      "holt_damped": 1,
+      "cusum_6": 4
+    },
+    "C0786": {
+      "frequency_cumulative": 2,
+      "trend_24_96": 1,
+      "weibull_085": 4,
+      "cusum_6": 2,
+      "logistic_online": -3
+    },
+    "C0787": {
+      "trend_24_96": 3,
+      "phase_3": 4,
+      "context_kernel_256": 3,
+      "holt_damped": 4,
+      "cusum_6": 4
+    },
+    "C0788": {
+      "frequency_cumulative": 3,
+      "weibull_085": 3,
+      "phase_3": 2,
+      "markov_120": 3,
+      "holt_damped": 2
+    },
+    "C0789": {
+      "trend_24_96": 2,
+      "gap_age": 2,
+      "markov_120": 2,
+      "holt_damped": 4,
+      "block_entropy_100": 3
+    },
+    "C0790": {
+      "ewma_10": 1,
+      "weibull_085": 4,
+      "phase_3": 4,
+      "holt_damped": 1,
+      "cusum_6": -1
+    },
+    "C0791": {
+      "ewma_10": 1,
+      "phase_2": 2,
+      "phase_3": 3,
+      "block_entropy_100": 2,
+      "logistic_online": 1
+    },
+    "C0792": {
+      "ewma_120": 3,
+      "trend_24_96": 2,
+      "weibull_085": 1,
+      "markov_120": 2,
+      "logistic_online": -2
+    },
+    "C0793": {
+      "frequency_cumulative": 4,
+      "ewma_120": -1,
+      "gap_age": 1,
+      "phase_3": 2,
+      "context_kernel_256": 3
+    },
+    "C0794": {
+      "ewma_120": 2,
+      "gap_z": -3,
+      "phase_2": 3,
+      "markov_120": 3,
+      "holt_damped": 2
+    },
+    "C0795": {
+      "trend_24_96": -3,
+      "gap_age": 4,
+      "weibull_085": 1,
+      "markov_120": 1,
+      "block_entropy_100": 2
+    },
+    "C0796": {
+      "ewma_120": 2,
+      "trend_24_96": 2,
+      "phase_2": 3,
+      "phase_3": 1,
+      "context_kernel_256": 1
+    },
+    "C0797": {
+      "gap_z": 2,
+      "gap_bayes": 4,
+      "markov_120": 1,
+      "context_kernel_256": 2,
+      "logistic_online": 4
+    },
+    "C0798": {
+      "ewma_10": 3,
+      "trend_24_96": 1,
+      "gap_z": 4,
+      "gap_bayes": 3,
+      "phase_3": -4
+    },
+    "C0799": {
+      "frequency_cumulative": 3,
+      "gap_age": 3,
+      "weibull_085": 4,
+      "holt_damped": 4,
+      "logistic_online": -4
+    },
+    "C0800": {
+      "weibull_085": 4,
+      "phase_2": 4,
+      "phase_3": -1,
+      "markov_120": 3,
+      "holt_damped": 1
+    },
+    "C0801": {
+      "frequency_cumulative": 2,
+      "gap_age": 2,
+      "gap_bayes": 1,
+      "markov_120": 4,
+      "logistic_online": 1
+    },
+    "C0802": {
+      "gap_age": 2,
+      "gap_z": 2,
+      "markov_120": 2,
+      "cusum_6": 3,
+      "logistic_online": 4
+    },
+    "C0803": {
+      "trend_24_96": 3,
+      "gap_age": 4,
+      "phase_2": 3,
+      "markov_120": 4,
+      "holt_damped": 2
+    },
+    "C0804": {
+      "frequency_cumulative": 2,
+      "ewma_120": -2,
+      "weibull_085": 4,
+      "phase_2": 4,
+      "phase_3": 1
+    },
+    "C0805": {
+      "ewma_120": -4,
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "weibull_085": 1,
+      "phase_3": 1
+    },
+    "C0806": {
+      "ewma_120": 3,
+      "gap_z": 2,
+      "markov_120": 2,
+      "context_kernel_256": -2,
+      "holt_damped": 3
+    },
+    "C0807": {
+      "gap_age": 3,
+      "weibull_085": 4,
+      "phase_2": 1,
+      "cusum_6": 4,
+      "block_entropy_100": 4
+    },
+    "C0808": {
+      "ewma_10": 4,
+      "weibull_085": 4,
+      "markov_120": -2,
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0809": {
+      "ewma_120": 1,
+      "gap_z": 3,
+      "gap_bayes": -4,
+      "phase_3": 1,
+      "cusum_6": 1
+    },
+    "C0810": {
+      "ewma_10": 1,
+      "trend_24_96": 1,
+      "markov_120": 1,
+      "cusum_6": 1,
+      "block_entropy_100": 1
+    },
+    "C0811": {
+      "trend_24_96": 4,
+      "gap_z": 1,
+      "gap_bayes": 1,
+      "phase_2": -3,
+      "markov_120": 3
+    },
+    "C0812": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 4,
+      "weibull_085": 3,
+      "markov_120": 4,
+      "cusum_6": 1
+    },
+    "C0813": {
+      "trend_24_96": 1,
+      "gap_age": 3,
+      "markov_120": 4,
+      "context_kernel_256": 1,
+      "holt_damped": 1
+    },
+    "C0814": {
+      "ewma_10": 1,
+      "trend_24_96": 1,
+      "phase_2": 3,
+      "context_kernel_256": 4,
+      "holt_damped": 1
+    },
+    "C0815": {
+      "ewma_10": 1,
+      "gap_age": 4,
+      "gap_bayes": 2,
+      "phase_3": -3,
+      "block_entropy_100": 1
+    },
+    "C0816": {
+      "trend_24_96": 4,
+      "gap_age": 3,
+      "markov_120": 3,
+      "context_kernel_256": 3,
+      "block_entropy_100": 3
+    },
+    "C0817": {
+      "ewma_120": -3,
+      "phase_3": 3,
+      "markov_120": 1,
+      "context_kernel_256": 1,
+      "cusum_6": 1
+    },
+    "C0818": {
+      "weibull_085": 2,
+      "phase_2": -4,
+      "context_kernel_256": 2,
+      "holt_damped": 4,
+      "block_entropy_100": 3
+    },
+    "C0819": {
+      "trend_24_96": 4,
+      "gap_z": 1,
+      "weibull_085": -2,
+      "markov_120": 1,
+      "logistic_online": 3
+    },
+    "C0820": {
+      "frequency_cumulative": -4,
+      "ewma_120": 1,
+      "gap_age": 2,
+      "weibull_085": 1,
+      "holt_damped": 1
+    },
+    "C0821": {
+      "gap_age": 4,
+      "gap_bayes": 2,
+      "weibull_085": 4,
+      "markov_120": 1,
+      "logistic_online": 3
+    },
+    "C0822": {
+      "trend_24_96": 4,
+      "gap_age": -4,
+      "phase_3": 2,
+      "markov_120": 3,
+      "context_kernel_256": 1
+    },
+    "C0823": {
+      "ewma_10": 1,
+      "ewma_120": 4,
+      "gap_z": 3,
+      "phase_3": 1,
+      "holt_damped": 4
+    },
+    "C0824": {
+      "ewma_10": 1,
+      "gap_z": 1,
+      "markov_120": -4,
+      "cusum_6": 1,
+      "logistic_online": 2
+    },
+    "C0825": {
+      "weibull_085": 3,
+      "markov_120": 1,
+      "context_kernel_256": 1,
+      "block_entropy_100": 3,
+      "logistic_online": 3
+    },
+    "C0826": {
+      "frequency_cumulative": 3,
+      "ewma_10": 1,
+      "ewma_120": 1,
+      "phase_3": -4,
+      "block_entropy_100": 1
+    },
+    "C0827": {
+      "frequency_cumulative": -1,
+      "phase_2": 2,
+      "phase_3": 1,
+      "markov_120": 1,
+      "cusum_6": 1
+    },
+    "C0828": {
+      "ewma_10": 4,
+      "ewma_120": 3,
+      "gap_age": 1,
+      "phase_3": 4,
+      "context_kernel_256": 4
+    },
+    "C0829": {
+      "ewma_10": 3,
+      "trend_24_96": 1,
+      "gap_z": 3,
+      "weibull_085": -4,
+      "phase_3": 4
+    },
+    "C0830": {
+      "frequency_cumulative": 2,
+      "ewma_120": 1,
+      "trend_24_96": 1,
+      "phase_2": -2,
+      "logistic_online": 4
+    },
+    "C0831": {
+      "frequency_cumulative": 2,
+      "gap_age": 4,
+      "phase_3": 2,
+      "cusum_6": 3,
+      "block_entropy_100": 2
+    },
+    "C0832": {
+      "frequency_cumulative": 2,
+      "ewma_10": 2,
+      "phase_3": 1,
+      "markov_120": 2,
+      "cusum_6": 2
+    },
+    "C0833": {
+      "frequency_cumulative": 4,
+      "ewma_10": 2,
+      "trend_24_96": 1,
+      "markov_120": 1,
+      "cusum_6": 4
+    },
+    "C0834": {
+      "frequency_cumulative": 2,
+      "ewma_10": 2,
+      "gap_z": 3,
+      "phase_3": 1,
+      "holt_damped": 1
+    },
+    "C0835": {
+      "trend_24_96": 3,
+      "gap_z": 2,
+      "gap_bayes": -3,
+      "phase_3": 4,
+      "context_kernel_256": 2
+    },
+    "C0836": {
+      "gap_bayes": 1,
+      "phase_3": 3,
+      "holt_damped": 2,
+      "block_entropy_100": 4,
+      "logistic_online": 4
+    },
+    "C0837": {
+      "ewma_10": 2,
+      "gap_age": 3,
+      "gap_z": 3,
+      "phase_2": 2,
+      "phase_3": -3
+    },
+    "C0838": {
+      "ewma_120": -2,
+      "gap_z": 4,
+      "weibull_085": 2,
+      "markov_120": 1,
+      "block_entropy_100": 1
+    },
+    "C0839": {
+      "frequency_cumulative": 4,
+      "weibull_085": 4,
+      "phase_3": 4,
+      "markov_120": 3,
+      "holt_damped": 2
+    },
+    "C0840": {
+      "ewma_120": 4,
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "markov_120": 2,
+      "context_kernel_256": 3
+    },
+    "C0841": {
+      "gap_age": 1,
+      "phase_2": 2,
+      "phase_3": 2,
+      "markov_120": 2,
+      "holt_damped": 2
+    },
+    "C0842": {
+      "ewma_10": 4,
+      "gap_bayes": 4,
+      "holt_damped": 1,
+      "cusum_6": 2,
+      "logistic_online": 3
+    },
+    "C0843": {
+      "gap_age": 3,
+      "gap_z": 4,
+      "gap_bayes": 3,
+      "phase_2": 3,
+      "cusum_6": 1
+    },
+    "C0844": {
+      "trend_24_96": 1,
+      "weibull_085": 1,
+      "holt_damped": 1,
+      "block_entropy_100": 1,
+      "logistic_online": 1
+    },
+    "C0845": {
+      "trend_24_96": 4,
+      "gap_z": 4,
+      "gap_bayes": -3,
+      "holt_damped": 3,
+      "logistic_online": 4
+    },
+    "C0846": {
+      "gap_bayes": 2,
+      "weibull_085": 3,
+      "markov_120": 1,
+      "context_kernel_256": 2,
+      "cusum_6": -2
+    },
+    "C0847": {
+      "phase_2": 3,
+      "phase_3": 1,
+      "markov_120": 3,
+      "cusum_6": 2,
+      "block_entropy_100": 3
+    },
+    "C0848": {
+      "trend_24_96": 3,
+      "gap_z": 1,
+      "markov_120": 4,
+      "holt_damped": 1,
+      "block_entropy_100": -2
+    },
+    "C0849": {
+      "frequency_cumulative": 2,
+      "ewma_10": 3,
+      "gap_age": 3,
+      "phase_2": 2,
+      "logistic_online": 2
+    },
+    "C0850": {
+      "ewma_120": 1,
+      "gap_bayes": 4,
+      "weibull_085": 2,
+      "markov_120": 3,
+      "context_kernel_256": 1
+    },
+    "C0851": {
+      "frequency_cumulative": 4,
+      "weibull_085": 2,
+      "phase_2": 2,
+      "cusum_6": 2,
+      "block_entropy_100": 3
+    },
+    "C0852": {
+      "frequency_cumulative": 1,
+      "ewma_10": 4,
+      "weibull_085": 4,
+      "markov_120": -1,
+      "logistic_online": 2
+    },
+    "C0853": {
+      "ewma_10": 3,
+      "trend_24_96": -2,
+      "context_kernel_256": 1,
+      "holt_damped": 2,
+      "logistic_online": 4
+    },
+    "C0854": {
+      "frequency_cumulative": -2,
+      "weibull_085": 4,
+      "phase_2": 2,
+      "markov_120": 4,
+      "holt_damped": 1
+    },
+    "C0855": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 2,
+      "gap_age": 2,
+      "phase_2": 4,
+      "markov_120": 2
+    },
+    "C0856": {
+      "ewma_10": 1,
+      "ewma_120": 3,
+      "trend_24_96": 4,
+      "phase_2": 4,
+      "phase_3": 1
+    },
+    "C0857": {
+      "gap_age": 4,
+      "weibull_085": 4,
+      "phase_2": 4,
+      "phase_3": 3,
+      "holt_damped": 3
+    },
+    "C0858": {
+      "ewma_10": -4,
+      "trend_24_96": 3,
+      "gap_bayes": 2,
+      "weibull_085": 2,
+      "holt_damped": 2
+    },
+    "C0859": {
+      "frequency_cumulative": 4,
+      "gap_age": 4,
+      "gap_z": 3,
+      "holt_damped": 1,
+      "logistic_online": 4
+    },
+    "C0860": {
+      "ewma_10": -2,
+      "weibull_085": 4,
+      "phase_2": 4,
+      "holt_damped": 3,
+      "block_entropy_100": 3
+    },
+    "C0861": {
+      "ewma_10": -2,
+      "gap_bayes": 1,
+      "phase_2": 3,
+      "cusum_6": 2,
+      "logistic_online": 4
+    },
+    "C0862": {
+      "frequency_cumulative": 1,
+      "ewma_10": 3,
+      "ewma_120": -3,
+      "block_entropy_100": 2,
+      "logistic_online": 1
+    },
+    "C0863": {
+      "ewma_10": 1,
+      "trend_24_96": 4,
+      "weibull_085": 4,
+      "cusum_6": 2,
+      "block_entropy_100": 2
+    },
+    "C0864": {
+      "ewma_120": 3,
+      "trend_24_96": 2,
+      "gap_z": 2,
+      "phase_2": 2,
+      "holt_damped": 1
+    },
+    "C0865": {
+      "ewma_10": 1,
+      "weibull_085": 4,
+      "phase_2": 4,
+      "context_kernel_256": 4,
+      "logistic_online": -1
+    },
+    "C0866": {
+      "ewma_120": 1,
+      "gap_age": 4,
+      "phase_2": 1,
+      "phase_3": -2,
+      "logistic_online": 3
+    },
+    "C0867": {
+      "ewma_10": 4,
+      "ewma_120": 1,
+      "trend_24_96": 2,
+      "gap_age": 4,
+      "cusum_6": 2
+    },
+    "C0868": {
+      "frequency_cumulative": 3,
+      "trend_24_96": 4,
+      "weibull_085": 2,
+      "phase_2": 4,
+      "context_kernel_256": 2
+    },
+    "C0869": {
+      "ewma_10": -2,
+      "ewma_120": 2,
+      "phase_3": 3,
+      "markov_120": 1,
+      "context_kernel_256": 4
+    },
+    "C0870": {
+      "ewma_120": 1,
+      "gap_z": 1,
+      "phase_2": 1,
+      "markov_120": 2,
+      "logistic_online": -1
+    },
+    "C0871": {
+      "ewma_120": -2,
+      "trend_24_96": 2,
+      "weibull_085": 2,
+      "phase_2": 4,
+      "cusum_6": 3
+    },
+    "C0872": {
+      "ewma_10": 1,
+      "phase_2": 3,
+      "holt_damped": 2,
+      "cusum_6": 2,
+      "logistic_online": 2
+    },
+    "C0873": {
+      "frequency_cumulative": 4,
+      "ewma_120": 4,
+      "gap_bayes": -3,
+      "phase_2": 3,
+      "context_kernel_256": 1
+    },
+    "C0874": {
+      "gap_z": 2,
+      "phase_2": 2,
+      "phase_3": 3,
+      "markov_120": -2,
+      "block_entropy_100": 3
+    },
+    "C0875": {
+      "ewma_10": 1,
+      "ewma_120": -2,
+      "trend_24_96": 3,
+      "gap_z": 2,
+      "gap_bayes": 1
+    },
+    "C0876": {
+      "gap_z": 1,
+      "phase_2": 4,
+      "markov_120": 1,
+      "context_kernel_256": 1,
+      "cusum_6": 1
+    },
+    "C0877": {
+      "gap_age": 2,
+      "phase_2": 4,
+      "context_kernel_256": -3,
+      "holt_damped": 3,
+      "logistic_online": 2
+    },
+    "C0878": {
+      "trend_24_96": 1,
+      "gap_z": 3,
+      "phase_3": 3,
+      "holt_damped": 4,
+      "block_entropy_100": 4
+    },
+    "C0879": {
+      "gap_bayes": 1,
+      "phase_2": 2,
+      "phase_3": 3,
+      "context_kernel_256": 2,
+      "block_entropy_100": 3
+    },
+    "C0880": {
+      "ewma_10": 1,
+      "gap_age": 1,
+      "gap_bayes": 1,
+      "phase_2": -1,
+      "phase_3": 1
+    },
+    "C0881": {
+      "gap_age": 3,
+      "phase_3": 2,
+      "context_kernel_256": 4,
+      "holt_damped": 3,
+      "logistic_online": 4
+    },
+    "C0882": {
+      "ewma_10": 1,
+      "gap_z": 1,
+      "gap_bayes": -2,
+      "markov_120": 1,
+      "block_entropy_100": 3
+    },
+    "C0883": {
+      "ewma_10": 2,
+      "gap_z": 4,
+      "gap_bayes": 3,
+      "weibull_085": 3,
+      "phase_3": 3
+    },
+    "C0884": {
+      "trend_24_96": -1,
+      "gap_age": 2,
+      "gap_z": 4,
+      "context_kernel_256": 1,
+      "block_entropy_100": 4
+    },
+    "C0885": {
+      "ewma_120": 4,
+      "gap_z": 4,
+      "context_kernel_256": 1,
+      "cusum_6": 4,
+      "logistic_online": 3
+    },
+    "C0886": {
+      "ewma_10": -3,
+      "gap_age": 1,
+      "weibull_085": 3,
+      "phase_2": 3,
+      "holt_damped": 3
+    },
+    "C0887": {
+      "trend_24_96": 1,
+      "gap_z": 1,
+      "context_kernel_256": 4,
+      "holt_damped": -3,
+      "logistic_online": 1
+    },
+    "C0888": {
+      "gap_age": 2,
+      "gap_bayes": -3,
+      "phase_2": 3,
+      "phase_3": 1,
+      "cusum_6": 4
+    },
+    "C0889": {
+      "trend_24_96": 2,
+      "gap_bayes": 3,
+      "phase_3": 4,
+      "context_kernel_256": -2,
+      "holt_damped": 3
+    },
+    "C0890": {
+      "gap_age": 2,
+      "gap_bayes": 1,
+      "phase_3": 3,
+      "markov_120": 1,
+      "context_kernel_256": 1
+    },
+    "C0891": {
+      "frequency_cumulative": 2,
+      "weibull_085": 1,
+      "phase_2": 3,
+      "markov_120": 3,
+      "cusum_6": 3
+    },
+    "C0892": {
+      "frequency_cumulative": 1,
+      "ewma_120": 4,
+      "gap_z": 4,
+      "phase_2": 1,
+      "holt_damped": -3
+    },
+    "C0893": {
+      "trend_24_96": -2,
+      "gap_z": 3,
+      "weibull_085": 1,
+      "block_entropy_100": 2,
+      "logistic_online": 1
+    },
+    "C0894": {
+      "frequency_cumulative": 1,
+      "trend_24_96": -1,
+      "weibull_085": 3,
+      "phase_2": 3,
+      "phase_3": 2
+    },
+    "C0895": {
+      "trend_24_96": 2,
+      "weibull_085": 4,
+      "phase_2": 4,
+      "markov_120": 1,
+      "logistic_online": 4
+    },
+    "C0896": {
+      "ewma_120": 3,
+      "weibull_085": 3,
+      "phase_2": 1,
+      "phase_3": -3,
+      "logistic_online": 3
+    },
+    "C0897": {
+      "gap_z": 1,
+      "weibull_085": 1,
+      "phase_3": 3,
+      "markov_120": 1,
+      "logistic_online": 2
+    },
+    "C0898": {
+      "ewma_10": 4,
+      "gap_bayes": 4,
+      "phase_3": 4,
+      "markov_120": -3,
+      "logistic_online": 4
+    },
+    "C0899": {
+      "frequency_cumulative": 3,
+      "ewma_10": 3,
+      "trend_24_96": 1,
+      "phase_2": 2,
+      "cusum_6": -4
+    },
+    "C0900": {
+      "ewma_10": 1,
+      "ewma_120": 4,
+      "trend_24_96": 1,
+      "gap_z": 2,
+      "gap_bayes": 1
+    },
+    "C0901": {
+      "frequency_cumulative": 2,
+      "ewma_10": 1,
+      "ewma_120": -2,
+      "gap_z": 1,
+      "logistic_online": 1
+    },
+    "C0902": {
+      "ewma_120": 1,
+      "gap_age": -4,
+      "weibull_085": 1,
+      "phase_2": 1,
+      "cusum_6": 3
+    },
+    "C0903": {
+      "ewma_10": 2,
+      "gap_z": -3,
+      "markov_120": 3,
+      "cusum_6": 4,
+      "block_entropy_100": 4
+    },
+    "C0904": {
+      "frequency_cumulative": 4,
+      "gap_age": 4,
+      "gap_bayes": -2,
+      "weibull_085": 3,
+      "block_entropy_100": 2
+    },
+    "C0905": {
+      "frequency_cumulative": 1,
+      "ewma_10": 2,
+      "gap_z": 2,
+      "markov_120": -2,
+      "holt_damped": 1
+    },
+    "C0906": {
+      "gap_z": 4,
+      "gap_bayes": 3,
+      "weibull_085": 3,
+      "context_kernel_256": -1,
+      "block_entropy_100": 2
+    },
+    "C0907": {
+      "gap_age": -1,
+      "weibull_085": 2,
+      "phase_3": 4,
+      "block_entropy_100": 4,
+      "logistic_online": 4
+    },
+    "C0908": {
+      "trend_24_96": 1,
+      "gap_age": 2,
+      "phase_2": 2,
+      "phase_3": -3,
+      "markov_120": 2
+    },
+    "C0909": {
+      "trend_24_96": 2,
+      "gap_z": 4,
+      "gap_bayes": 2,
+      "phase_2": 1,
+      "logistic_online": 3
+    },
+    "C0910": {
+      "frequency_cumulative": 3,
+      "ewma_10": 3,
+      "trend_24_96": 1,
+      "weibull_085": 4,
+      "context_kernel_256": 3
+    },
+    "C0911": {
+      "ewma_10": 4,
+      "ewma_120": 4,
+      "trend_24_96": 1,
+      "context_kernel_256": 3,
+      "logistic_online": 2
+    },
+    "C0912": {
+      "ewma_10": 3,
+      "weibull_085": 3,
+      "phase_2": 2,
+      "phase_3": 4,
+      "context_kernel_256": -1
+    },
+    "C0913": {
+      "ewma_10": 3,
+      "gap_z": 1,
+      "phase_3": 3,
+      "markov_120": 1,
+      "logistic_online": 4
+    },
+    "C0914": {
+      "frequency_cumulative": 2,
+      "ewma_120": 3,
+      "trend_24_96": 2,
+      "markov_120": 3,
+      "block_entropy_100": 4
+    },
+    "C0915": {
+      "gap_z": 3,
+      "weibull_085": 4,
+      "holt_damped": 4,
+      "cusum_6": 2,
+      "block_entropy_100": 2
+    },
+    "C0916": {
+      "trend_24_96": 4,
+      "phase_3": 4,
+      "context_kernel_256": 2,
+      "cusum_6": 4,
+      "block_entropy_100": 3
+    },
+    "C0917": {
+      "frequency_cumulative": 3,
+      "ewma_120": 2,
+      "gap_z": 4,
+      "gap_bayes": 2,
+      "markov_120": 3
+    },
+    "C0918": {
+      "ewma_120": 3,
+      "weibull_085": 1,
+      "context_kernel_256": 1,
+      "cusum_6": 1,
+      "logistic_online": 2
+    },
+    "C0919": {
+      "gap_bayes": 3,
+      "markov_120": 3,
+      "holt_damped": 4,
+      "block_entropy_100": 1,
+      "logistic_online": 3
+    },
+    "C0920": {
+      "trend_24_96": 3,
+      "phase_3": 2,
+      "markov_120": 4,
+      "holt_damped": 3,
+      "block_entropy_100": 1
+    },
+    "C0921": {
+      "trend_24_96": 2,
+      "phase_3": 3,
+      "context_kernel_256": -2,
+      "holt_damped": 3,
+      "block_entropy_100": 2
+    },
+    "C0922": {
+      "gap_age": 3,
+      "gap_z": 2,
+      "weibull_085": 4,
+      "markov_120": 2,
+      "cusum_6": -2
+    },
+    "C0923": {
+      "ewma_120": 1,
+      "gap_bayes": -4,
+      "weibull_085": 2,
+      "block_entropy_100": 1,
+      "logistic_online": 2
+    },
+    "C0924": {
+      "gap_age": 3,
+      "gap_bayes": 3,
+      "weibull_085": 2,
+      "phase_3": 2,
+      "cusum_6": 2
+    },
+    "C0925": {
+      "trend_24_96": 1,
+      "gap_bayes": 2,
+      "markov_120": 1,
+      "context_kernel_256": 2,
+      "logistic_online": 1
+    },
+    "C0926": {
+      "ewma_120": -1,
+      "gap_z": 4,
+      "markov_120": 1,
+      "block_entropy_100": 3,
+      "logistic_online": 4
+    },
+    "C0927": {
+      "frequency_cumulative": 1,
+      "trend_24_96": -1,
+      "gap_bayes": 2,
+      "markov_120": 4,
+      "context_kernel_256": 3
+    },
+    "C0928": {
+      "frequency_cumulative": 1,
+      "ewma_120": 2,
+      "trend_24_96": 3,
+      "phase_2": 4,
+      "context_kernel_256": -3
+    },
+    "C0929": {
+      "ewma_10": 3,
+      "ewma_120": 1,
+      "weibull_085": 4,
+      "holt_damped": 3,
+      "logistic_online": 3
+    },
+    "C0930": {
+      "phase_3": 3,
+      "context_kernel_256": 1,
+      "holt_damped": 4,
+      "cusum_6": 3,
+      "logistic_online": 3
+    },
+    "C0931": {
+      "ewma_120": 4,
+      "gap_age": -2,
+      "gap_z": 2,
+      "context_kernel_256": 4,
+      "block_entropy_100": 3
+    },
+    "C0932": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 1,
+      "context_kernel_256": -1,
+      "holt_damped": 3,
+      "logistic_online": 2
+    },
+    "C0933": {
+      "ewma_120": -2,
+      "trend_24_96": 3,
+      "phase_3": 2,
+      "cusum_6": 4,
+      "logistic_online": 4
+    },
+    "C0934": {
+      "frequency_cumulative": 2,
+      "weibull_085": 3,
+      "markov_120": 2,
+      "cusum_6": 3,
+      "logistic_online": -2
+    },
+    "C0935": {
+      "gap_age": 1,
+      "gap_z": 2,
+      "weibull_085": 2,
+      "context_kernel_256": 1,
+      "cusum_6": 4
+    },
+    "C0936": {
+      "ewma_10": 2,
+      "gap_bayes": 2,
+      "phase_3": 1,
+      "context_kernel_256": 1,
+      "block_entropy_100": 1
+    },
+    "C0937": {
+      "ewma_120": 1,
+      "gap_age": 1,
+      "phase_3": 2,
+      "markov_120": 3,
+      "logistic_online": 1
+    },
+    "C0938": {
+      "ewma_120": -3,
+      "gap_z": 4,
+      "gap_bayes": 4,
+      "phase_3": 2,
+      "cusum_6": 3
+    },
+    "C0939": {
+      "ewma_120": 2,
+      "markov_120": 3,
+      "context_kernel_256": 2,
+      "cusum_6": 3,
+      "logistic_online": 2
+    },
+    "C0940": {
+      "frequency_cumulative": 2,
+      "ewma_120": 3,
+      "markov_120": 4,
+      "holt_damped": 3,
+      "block_entropy_100": 2
+    },
+    "C0941": {
+      "frequency_cumulative": 3,
+      "ewma_120": 3,
+      "gap_age": 1,
+      "gap_z": 3,
+      "gap_bayes": 2
+    },
+    "C0942": {
+      "frequency_cumulative": 2,
+      "gap_age": 1,
+      "markov_120": 4,
+      "block_entropy_100": 1,
+      "logistic_online": 1
+    },
+    "C0943": {
+      "ewma_10": 2,
+      "gap_z": 4,
+      "weibull_085": 3,
+      "holt_damped": 3,
+      "cusum_6": 4
+    },
+    "C0944": {
+      "gap_z": 2,
+      "markov_120": 3,
+      "holt_damped": 1,
+      "cusum_6": 3,
+      "logistic_online": 1
+    },
+    "C0945": {
+      "frequency_cumulative": 4,
+      "trend_24_96": 2,
+      "gap_z": 4,
+      "phase_3": 3,
+      "markov_120": 3
+    },
+    "C0946": {
+      "weibull_085": 2,
+      "phase_3": 1,
+      "markov_120": 2,
+      "context_kernel_256": 3,
+      "block_entropy_100": 4
+    },
+    "C0947": {
+      "frequency_cumulative": 3,
+      "ewma_10": 3,
+      "trend_24_96": 3,
+      "markov_120": -4,
+      "context_kernel_256": 1
+    },
+    "C0948": {
+      "gap_age": 3,
+      "markov_120": 1,
+      "cusum_6": 4,
+      "block_entropy_100": 3,
+      "logistic_online": 2
+    },
+    "C0949": {
+      "trend_24_96": 2,
+      "gap_age": 3,
+      "weibull_085": 2,
+      "phase_2": 4,
+      "holt_damped": 1
+    },
+    "C0950": {
+      "frequency_cumulative": 2,
+      "weibull_085": 4,
+      "phase_2": 3,
+      "context_kernel_256": 3,
+      "cusum_6": -4
+    },
+    "C0951": {
+      "frequency_cumulative": 3,
+      "ewma_10": 3,
+      "gap_bayes": 1,
+      "weibull_085": 2,
+      "cusum_6": 2
+    },
+    "C0952": {
+      "frequency_cumulative": 3,
+      "ewma_120": 3,
+      "gap_bayes": -2,
+      "phase_3": 3,
+      "cusum_6": 2
+    },
+    "C0953": {
+      "ewma_120": 3,
+      "gap_z": -2,
+      "gap_bayes": 3,
+      "cusum_6": 2,
+      "logistic_online": 4
+    },
+    "C0954": {
+      "frequency_cumulative": 1,
+      "ewma_120": 1,
+      "trend_24_96": -1,
+      "gap_z": 2,
+      "weibull_085": 2
+    },
+    "C0955": {
+      "gap_z": 2,
+      "gap_bayes": 3,
+      "phase_2": -1,
+      "phase_3": 1,
+      "markov_120": 4
+    },
+    "C0956": {
+      "frequency_cumulative": 4,
+      "ewma_10": 2,
+      "weibull_085": 1,
+      "block_entropy_100": 1,
+      "logistic_online": 4
+    },
+    "C0957": {
+      "frequency_cumulative": 3,
+      "ewma_120": 3,
+      "trend_24_96": 3,
+      "phase_2": 3,
+      "phase_3": 2
+    },
+    "C0958": {
+      "frequency_cumulative": 2,
+      "gap_z": 1,
+      "phase_2": -3,
+      "holt_damped": 4,
+      "cusum_6": 1
+    },
+    "C0959": {
+      "frequency_cumulative": 1,
+      "ewma_10": 1,
+      "gap_bayes": 4,
+      "markov_120": 2,
+      "holt_damped": -2
+    },
+    "C0960": {
+      "frequency_cumulative": 1,
+      "weibull_085": 4,
+      "phase_3": 1,
+      "block_entropy_100": 4,
+      "logistic_online": 1
+    },
+    "C0961": {
+      "gap_age": 3,
+      "gap_z": 2,
+      "gap_bayes": 1,
+      "cusum_6": 3,
+      "block_entropy_100": -2
+    },
+    "C0962": {
+      "ewma_10": 2,
+      "ewma_120": 2,
+      "markov_120": -3,
+      "holt_damped": 4,
+      "block_entropy_100": 1
+    },
+    "C0963": {
+      "ewma_120": 1,
+      "trend_24_96": 1,
+      "gap_z": 4,
+      "phase_2": 2,
+      "cusum_6": 3
+    },
+    "C0964": {
+      "trend_24_96": 2,
+      "gap_z": 4,
+      "weibull_085": 3,
+      "phase_2": -1,
+      "block_entropy_100": 1
+    },
+    "C0965": {
+      "gap_bayes": -1,
+      "phase_3": 3,
+      "holt_damped": 1,
+      "cusum_6": 1,
+      "logistic_online": 1
+    },
+    "C0966": {
+      "ewma_10": 2,
+      "gap_age": -2,
+      "weibull_085": 2,
+      "phase_3": 1,
+      "markov_120": 3
+    },
+    "C0967": {
+      "ewma_10": 2,
+      "gap_z": -3,
+      "context_kernel_256": 3,
+      "holt_damped": 2,
+      "block_entropy_100": 2
+    },
+    "C0968": {
+      "frequency_cumulative": 1,
+      "gap_age": 2,
+      "gap_z": 3,
+      "gap_bayes": 1,
+      "phase_3": 3
+    },
+    "C0969": {
+      "gap_age": 4,
+      "gap_bayes": 4,
+      "weibull_085": 4,
+      "context_kernel_256": 3,
+      "holt_damped": 2
+    },
+    "C0970": {
+      "ewma_120": 3,
+      "gap_bayes": 2,
+      "weibull_085": 1,
+      "markov_120": 4,
+      "logistic_online": 2
+    },
+    "C0971": {
+      "ewma_120": 1,
+      "weibull_085": 2,
+      "context_kernel_256": 4,
+      "cusum_6": 2,
+      "block_entropy_100": 3
+    },
+    "C0972": {
+      "frequency_cumulative": 2,
+      "ewma_10": 4,
+      "weibull_085": 4,
+      "markov_120": 2,
+      "cusum_6": 3
+    },
+    "C0973": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 4,
+      "weibull_085": 1,
+      "phase_2": 1,
+      "phase_3": 3
+    },
+    "C0974": {
+      "frequency_cumulative": 2,
+      "ewma_120": 4,
+      "gap_z": 4,
+      "context_kernel_256": 1,
+      "holt_damped": 1
+    },
+    "C0975": {
+      "ewma_120": -4,
+      "trend_24_96": 2,
+      "gap_bayes": 1,
+      "weibull_085": 3,
+      "logistic_online": 4
+    },
+    "C0976": {
+      "phase_2": 3,
+      "phase_3": 4,
+      "markov_120": 1,
+      "context_kernel_256": 2,
+      "cusum_6": 2
+    },
+    "C0977": {
+      "ewma_120": -2,
+      "gap_age": 2,
+      "gap_bayes": 2,
+      "phase_3": 3,
+      "holt_damped": 2
+    },
+    "C0978": {
+      "ewma_10": 2,
+      "ewma_120": -4,
+      "gap_age": 3,
+      "gap_bayes": 2,
+      "cusum_6": 2
+    },
+    "C0979": {
+      "ewma_10": 3,
+      "gap_age": 4,
+      "gap_z": 2,
+      "context_kernel_256": -3,
+      "logistic_online": 4
+    },
+    "C0980": {
+      "ewma_120": 2,
+      "gap_age": 1,
+      "gap_bayes": 4,
+      "phase_3": 2,
+      "holt_damped": 2
+    },
+    "C0981": {
+      "weibull_085": 1,
+      "context_kernel_256": 3,
+      "holt_damped": -3,
+      "cusum_6": 2,
+      "logistic_online": 4
+    },
+    "C0982": {
+      "frequency_cumulative": 1,
+      "ewma_10": 4,
+      "gap_age": 3,
+      "phase_3": 3,
+      "holt_damped": -4
+    },
+    "C0983": {
+      "frequency_cumulative": 1,
+      "gap_bayes": 4,
+      "weibull_085": -3,
+      "phase_2": 4,
+      "logistic_online": 4
+    },
+    "C0984": {
+      "frequency_cumulative": 3,
+      "ewma_10": 4,
+      "ewma_120": 4,
+      "context_kernel_256": 2,
+      "logistic_online": 3
+    },
+    "C0985": {
+      "ewma_120": 1,
+      "phase_3": 2,
+      "markov_120": 2,
+      "holt_damped": 1,
+      "block_entropy_100": 1
+    },
+    "C0986": {
+      "ewma_120": 1,
+      "trend_24_96": 4,
+      "weibull_085": -1,
+      "phase_2": 4,
+      "block_entropy_100": 4
+    },
+    "C0987": {
+      "ewma_10": 2,
+      "gap_bayes": 2,
+      "holt_damped": 2,
+      "cusum_6": 2,
+      "logistic_online": 1
+    },
+    "C0988": {
+      "frequency_cumulative": 2,
+      "gap_age": 3,
+      "markov_120": -4,
+      "holt_damped": 1,
+      "block_entropy_100": 1
+    },
+    "C0989": {
+      "frequency_cumulative": 1,
+      "trend_24_96": 4,
+      "gap_bayes": -3,
+      "holt_damped": 3,
+      "block_entropy_100": 1
+    },
+    "C0990": {
+      "frequency_cumulative": 1,
+      "ewma_120": 3,
+      "trend_24_96": 4,
+      "gap_age": 1,
+      "block_entropy_100": 4
+    },
+    "C0991": {
+      "frequency_cumulative": 2,
+      "ewma_10": 3,
+      "markov_120": 2,
+      "context_kernel_256": 3,
+      "holt_damped": -2
+    },
+    "C0992": {
+      "frequency_cumulative": 2,
+      "ewma_120": -3,
+      "weibull_085": 3,
+      "markov_120": 2,
+      "block_entropy_100": 1
+    },
+    "C0993": {
+      "ewma_120": 4,
+      "trend_24_96": 2,
+      "gap_bayes": 1,
+      "phase_3": 3,
+      "cusum_6": 3
+    },
+    "C0994": {
+      "gap_bayes": 2,
+      "phase_2": 2,
+      "phase_3": 2,
+      "context_kernel_256": -1,
+      "cusum_6": 1
+    },
+    "C0995": {
+      "ewma_10": -4,
+      "ewma_120": 2,
+      "gap_z": 2,
+      "weibull_085": 2,
+      "block_entropy_100": 3
+    },
+    "C0996": {
+      "frequency_cumulative": 4,
+      "phase_2": -1,
+      "holt_damped": 1,
+      "cusum_6": 1,
+      "block_entropy_100": 2
+    },
+    "C0997": {
+      "ewma_120": 1,
+      "trend_24_96": 2,
+      "gap_bayes": 3,
+      "markov_120": 2,
+      "context_kernel_256": 4
+    },
+    "C0998": {
+      "frequency_cumulative": 2,
+      "ewma_10": 3,
+      "ewma_120": 3,
+      "weibull_085": 1,
+      "phase_2": 1
+    },
+    "C0999": {
+      "ewma_10": 1,
+      "trend_24_96": 4,
+      "gap_age": 2,
+      "gap_bayes": 4,
+      "cusum_6": 3
+    },
+    "C1000": {
+      "gap_age": 4,
+      "gap_bayes": 1,
+      "weibull_085": 4,
+      "phase_3": 3,
+      "logistic_online": -1
+    }
+  },
+  "games": {
+    "loto_6_49": {
+      "history": {
+        "first_date": "1993-08-08",
+        "last_date": "2026-11-15",
+        "draws": 2602,
+        "days": 2533,
+        "sha256": "3c9ef63e716cb80f79bcdfcabb41ffd18f5dd21fa8fea5a0f181e6550415b1eb"
+      },
+      "pool_size": 9,
+      "lr_code": 48,
+      "lr_tickets": 12,
+      "lr_signature": "lr1-559778bf4c8bb9728a1de36d5b25dff6e8cc6638063222cdac76a40fb9c85504",
+      "pool_uniform_p": {
+        "4": 0.007394548097600827,
+        "5": 0.0003664235856650288,
+        "6": 6.006944027295553e-06
+      },
+      "ticket_uniform_p": {
+        "4": 0.007394548097600827,
+        "5": 0.00021195931067742883,
+        "6": 8.58134861042222e-07
+      },
+      "selection_blocks": [
+        {
+          "first_date": "1998-09-13",
+          "last_date": "2006-06-11",
+          "draws": 400,
+          "days": 400
+        },
+        {
+          "first_date": "2006-06-18",
+          "last_date": "2011-11-24",
+          "draws": 402,
+          "days": 400
+        },
+        {
+          "first_date": "2011-11-27",
+          "last_date": "2015-11-19",
+          "draws": 412,
+          "days": 399
+        },
+        {
+          "first_date": "2015-11-22",
+          "last_date": "2019-11-03",
+          "draws": 420,
+          "days": 399
+        }
+      ],
+      "selection_draws": 1634,
+      "unique_selection_pool_trajectories": 1000,
+      "selection_flat_fallbacks": 0,
+      "nested": [
+        {
+          "selection_blocks": 1,
+          "evaluated_block": 2,
+          "strategies": {
+            "balanced": {
+              "config": "C0695",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0695",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge4": {
+              "config": "C0695",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge5": {
+              "config": "C0751",
+              "counts": {
+                "ge4": 5,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 5,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge6": {
+              "config": "C0230",
+              "counts": {
+                "ge4": 3,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0695",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0364",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge6": {
+              "config": "C0695",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 2,
+          "evaluated_block": 3,
+          "strategies": {
+            "balanced": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge4": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge5": {
+              "config": "C0279",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge6": {
+              "config": "C0230",
+              "counts": {
+                "ge4": 2,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0731",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge6": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 3,
+          "evaluated_block": 4,
+          "strategies": {
+            "balanced": {
+              "config": "C0751",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0516",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge4": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge5": {
+              "config": "C0751",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ge6": {
+              "config": "C0230",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0535",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0516",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            },
+            "ticket_ge6": {
+              "config": "C0516",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0,
+                "ticket_ge6": 0
+              }
+            }
+          }
+        }
+      ],
+      "finalists": {
+        "balanced": "C0751",
+        "ticket_balanced": "C0315",
+        "ge4": "C0315",
+        "ge5": "C0751",
+        "ge6": "C0938",
+        "ticket_ge4": "C0315",
+        "ticket_ge5": "C0004",
+        "ticket_ge6": "C0315"
+      },
+      "holdout": {
+        "first_date": "2019-11-07",
+        "last_date": "2026-11-15",
+        "draws": 718,
+        "days": 685,
+        "strategies": {
+          "balanced": {
+            "pool": {
+              "4": 3,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ticket_balanced": {
+            "pool": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ge4": {
+            "pool": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ge5": {
+            "pool": {
+              "4": 3,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ge6": {
+            "pool": {
+              "4": 6,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 6,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ticket_ge4": {
+            "pool": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ticket_ge5": {
+            "pool": {
+              "4": 6,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 6,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "ticket_ge6": {
+            "pool": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 4,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "frequency": {
+            "pool": {
+              "4": 6,
+              "5": 1,
+              "6": 0
+            },
+            "ticket": {
+              "4": 6,
+              "5": 1,
+              "6": 0
+            }
+          },
+          "random": {
+            "pool": {
+              "4": 2,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 0,
+              "6": 0
+            }
+          },
+          "naive_bayes_last": {
+            "pool": {
+              "4": 12,
+              "5": 2,
+              "6": 0
+            },
+            "ticket": {
+              "4": 12,
+              "5": 1,
+              "6": 0
+            }
+          }
+        },
+        "flat_fallbacks_by_config": {
+          "C0004": 0,
+          "C0315": 0,
+          "C0751": 0,
+          "C0938": 0
+        }
+      }
+    },
+    "loto_5_40": {
+      "history": {
+        "first_date": "1995-01-12",
+        "last_date": "2026-11-15",
+        "draws": 1753,
+        "days": 1734,
+        "sha256": "43aa4f61210549d4bc7070941fada2700b0a808097bafeb465f44877c1263139"
+      },
+      "pool_size": 8,
+      "lr_code": 16,
+      "lr_tickets": 21,
+      "lr_signature": "lr1-d399cf75cb625aae4b4cbb012e693a772db2146e1eca9492dde9ab96c1e47716",
+      "pool_uniform_p": {
+        "4": 0.009519641098588468,
+        "5": 0.000474158368895211,
+        "6": 7.2947441368494e-06
+      },
+      "ticket_uniform_p": {
+        "4": 0.009519641098588468,
+        "5": 0.000182368603421235
+      },
+      "selection_blocks": [
+        {
+          "first_date": "1999-12-16",
+          "last_date": "2005-01-20",
+          "draws": 260,
+          "days": 260
+        },
+        {
+          "first_date": "2005-01-27",
+          "last_date": "2012-01-26",
+          "draws": 260,
+          "days": 260
+        },
+        {
+          "first_date": "2012-02-02",
+          "last_date": "2017-02-02",
+          "draws": 259,
+          "days": 259
+        },
+        {
+          "first_date": "2017-02-09",
+          "last_date": "2022-03-20",
+          "draws": 259,
+          "days": 259
+        }
+      ],
+      "selection_draws": 1038,
+      "unique_selection_pool_trajectories": 1000,
+      "selection_flat_fallbacks": 0,
+      "nested": [
+        {
+          "selection_blocks": 1,
+          "evaluated_block": 2,
+          "strategies": {
+            "balanced": {
+              "config": "C0593",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0593",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ge4": {
+              "config": "C0287",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ge5": {
+              "config": "C0635",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ge6": {
+              "config": "C0593",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0287",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0593",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 2,
+          "evaluated_block": 3,
+          "strategies": {
+            "balanced": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 2,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 1
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 2,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 1
+              }
+            },
+            "ge4": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 2,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 1
+              }
+            },
+            "ge5": {
+              "config": "C0813",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ge6": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 2,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 1
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 2,
+                "ge5": 1,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 1
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0689",
+              "counts": {
+                "ge4": 2,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 3,
+          "evaluated_block": 4,
+          "strategies": {
+            "balanced": {
+              "config": "C0801",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 5,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 5,
+                "ticket_ge5": 0
+              }
+            },
+            "ge4": {
+              "config": "C0962",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0
+              }
+            },
+            "ge5": {
+              "config": "C0801",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ge6": {
+              "config": "C0801",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 4,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0962",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0677",
+              "counts": {
+                "ge4": 5,
+                "ge5": 0,
+                "ge6": 0,
+                "ticket_ge4": 5,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        }
+      ],
+      "finalists": {
+        "balanced": "C0445",
+        "ticket_balanced": "C0677",
+        "ge4": "C0445",
+        "ge5": "C0445",
+        "ge6": "C0445",
+        "ticket_ge4": "C0677",
+        "ticket_ge5": "C0532"
+      },
+      "holdout": {
+        "first_date": "2022-03-27",
+        "last_date": "2026-11-15",
+        "draws": 465,
+        "days": 446,
+        "strategies": {
+          "balanced": {
+            "pool": {
+              "4": 9,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 9,
+              "5": 0
+            }
+          },
+          "ticket_balanced": {
+            "pool": {
+              "4": 2,
+              "5": 1,
+              "6": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 1
+            }
+          },
+          "ge4": {
+            "pool": {
+              "4": 9,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 9,
+              "5": 0
+            }
+          },
+          "ge5": {
+            "pool": {
+              "4": 9,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 9,
+              "5": 0
+            }
+          },
+          "ge6": {
+            "pool": {
+              "4": 9,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 9,
+              "5": 0
+            }
+          },
+          "ticket_ge4": {
+            "pool": {
+              "4": 2,
+              "5": 1,
+              "6": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 1
+            }
+          },
+          "ticket_ge5": {
+            "pool": {
+              "4": 6,
+              "5": 1,
+              "6": 0
+            },
+            "ticket": {
+              "4": 6,
+              "5": 0
+            }
+          },
+          "frequency": {
+            "pool": {
+              "4": 3,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0
+            }
+          },
+          "random": {
+            "pool": {
+              "4": 5,
+              "5": 0,
+              "6": 0
+            },
+            "ticket": {
+              "4": 5,
+              "5": 0
+            }
+          },
+          "croston_interval": {
+            "pool": {
+              "4": 4,
+              "5": 2,
+              "6": 0
+            },
+            "ticket": {
+              "4": 4,
+              "5": 1
+            }
+          }
+        },
+        "flat_fallbacks_by_config": {
+          "C0445": 0,
+          "C0532": 0,
+          "C0677": 0
+        }
+      }
+    },
+    "joker": {
+      "history": {
+        "first_date": "2000-09-14",
+        "last_date": "2026-11-15",
+        "draws": 2205,
+        "days": 2142,
+        "sha256": "b084566a5ccb23d8420d5f5871602f1df33d390ae847eb25874beac43f423cf4"
+      },
+      "pool_size": 10,
+      "lr_code": 24,
+      "lr_tickets": 14,
+      "lr_signature": "lr1-a7df7394508853ef68e03a23079b025f451e278d15986540a1b7a1b1ce4f3e4d",
+      "pool_uniform_p": {
+        "4": 0.006222176386668729,
+        "5": 0.00020625999071830043
+      },
+      "ticket_uniform_p": {
+        "4": 0.00221156545603511,
+        "5": 1.1458888373238912e-05
+      },
+      "selection_blocks": [
+        {
+          "first_date": "2005-08-11",
+          "last_date": "2011-02-17",
+          "draws": 331,
+          "days": 331
+        },
+        {
+          "first_date": "2011-02-20",
+          "last_date": "2014-05-29",
+          "draws": 339,
+          "days": 331
+        },
+        {
+          "first_date": "2014-06-01",
+          "last_date": "2017-09-24",
+          "draws": 346,
+          "days": 331
+        },
+        {
+          "first_date": "2017-09-28",
+          "last_date": "2021-04-01",
+          "draws": 347,
+          "days": 331
+        }
+      ],
+      "selection_draws": 1363,
+      "unique_selection_pool_trajectories": 1000,
+      "selection_flat_fallbacks": 0,
+      "nested": [
+        {
+          "selection_blocks": 1,
+          "evaluated_block": 2,
+          "strategies": {
+            "balanced": {
+              "config": "C0244",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ticket_ge4": 0,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ge4": {
+              "config": "C0244",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ticket_ge4": 0,
+                "ticket_ge5": 0
+              }
+            },
+            "ge5": {
+              "config": "C0528",
+              "counts": {
+                "ge4": 3,
+                "ge5": 1,
+                "ticket_ge4": 2,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 2,
+          "evaluated_block": 3,
+          "strategies": {
+            "balanced": {
+              "config": "C0669",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 5,
+                "ge5": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0
+              }
+            },
+            "ge4": {
+              "config": "C0088",
+              "counts": {
+                "ge4": 3,
+                "ge5": 1,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ge5": {
+              "config": "C0750",
+              "counts": {
+                "ge4": 4,
+                "ge5": 0,
+                "ticket_ge4": 2,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 5,
+                "ge5": 0,
+                "ticket_ge4": 3,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0149",
+              "counts": {
+                "ge4": 2,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        },
+        {
+          "selection_blocks": 3,
+          "evaluated_block": 4,
+          "strategies": {
+            "balanced": {
+              "config": "C0358",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_balanced": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 0,
+                "ge5": 0,
+                "ticket_ge4": 0,
+                "ticket_ge5": 0
+              }
+            },
+            "ge4": {
+              "config": "C0358",
+              "counts": {
+                "ge4": 3,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ge5": {
+              "config": "C0481",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge4": {
+              "config": "C0602",
+              "counts": {
+                "ge4": 0,
+                "ge5": 0,
+                "ticket_ge4": 0,
+                "ticket_ge5": 0
+              }
+            },
+            "ticket_ge5": {
+              "config": "C0481",
+              "counts": {
+                "ge4": 1,
+                "ge5": 0,
+                "ticket_ge4": 1,
+                "ticket_ge5": 0
+              }
+            }
+          }
+        }
+      ],
+      "finalists": {
+        "balanced": "C0358",
+        "ticket_balanced": "C0274",
+        "ge4": "C0358",
+        "ge5": "C0384",
+        "ticket_ge4": "C0274",
+        "ticket_ge5": "C0792"
+      },
+      "holdout": {
+        "first_date": "2021-04-04",
+        "last_date": "2026-11-15",
+        "draws": 592,
+        "days": 568,
+        "strategies": {
+          "balanced": {
+            "pool": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "ticket_balanced": {
+            "pool": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "ge4": {
+            "pool": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "ge5": {
+            "pool": {
+              "4": 2,
+              "5": 0
+            },
+            "ticket": {
+              "4": 1,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "ticket_ge4": {
+            "pool": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "ticket_ge5": {
+            "pool": {
+              "4": 5,
+              "5": 0
+            },
+            "ticket": {
+              "4": 2,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "frequency": {
+            "pool": {
+              "4": 6,
+              "5": 1
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          },
+          "random": {
+            "pool": {
+              "4": 4,
+              "5": 0
+            },
+            "ticket": {
+              "4": 3,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 1,
+              "5": 0
+            }
+          },
+          "runs_persistence": {
+            "pool": {
+              "4": 6,
+              "5": 1
+            },
+            "ticket": {
+              "4": 4,
+              "5": 0
+            },
+            "ticket_with_joker": {
+              "4": 0,
+              "5": 0
+            }
+          }
+        },
+        "correct_joker_draws": 17,
+        "flat_fallbacks_by_config": {
+          "C0274": 0,
+          "C0358": 0,
+          "C0384": 0,
+          "C0792": 0
+        }
+      }
+    }
+  },
+  "tests": [
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 3,
+          "losses": 6
+        },
+        "random": {
+          "gains": 3,
+          "losses": 2
+        },
+        "naive_bayes_last": {
+          "gains": 3,
+          "losses": 12
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "balanced",
+      "config": "C0751",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 718,
+      "events": 3,
+      "uniform_expected": 5.309285534077394,
+      "rate_95pct_marginal": [
+        0.0008624905830917621,
+        0.012161731951357458
+      ],
+      "p": 0.8999489867685202,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 2
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "balanced",
+      "config": "C0751",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.2630921345074907,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "balanced",
+      "config": "C0751",
+      "metric": "pool",
+      "threshold": 6,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.004312985811598207,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 4,
+          "losses": 6
+        },
+        "random": {
+          "gains": 4,
+          "losses": 2
+        },
+        "naive_bayes_last": {
+          "gains": 4,
+          "losses": 12
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_balanced",
+      "config": "C0315",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 718,
+      "events": 4,
+      "uniform_expected": 5.309285534077394,
+      "rate_95pct_marginal": [
+        0.0015199420967975479,
+        0.014202154577258585
+      ],
+      "p": 0.7767947105446232,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 1
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_balanced",
+      "config": "C0315",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.1521867850663939,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_balanced",
+      "config": "C0315",
+      "metric": "ticket",
+      "threshold": 6,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.0006161408302283154,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 4,
+          "losses": 6
+        },
+        "random": {
+          "gains": 4,
+          "losses": 2
+        },
+        "naive_bayes_last": {
+          "gains": 4,
+          "losses": 12
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ge4",
+      "config": "C0315",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 718,
+      "events": 4,
+      "uniform_expected": 5.309285534077394,
+      "rate_95pct_marginal": [
+        0.0015199420967975479,
+        0.014202154577258585
+      ],
+      "p": 0.7767947105446232,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 2
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ge5",
+      "config": "C0751",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.2630921345074907,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ge6",
+      "config": "C0938",
+      "metric": "pool",
+      "threshold": 6,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.004312985811598207,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 4,
+          "losses": 6
+        },
+        "random": {
+          "gains": 4,
+          "losses": 2
+        },
+        "naive_bayes_last": {
+          "gains": 4,
+          "losses": 12
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_ge4",
+      "config": "C0315",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 718,
+      "events": 4,
+      "uniform_expected": 5.309285534077394,
+      "rate_95pct_marginal": [
+        0.0015199420967975479,
+        0.014202154577258585
+      ],
+      "p": 0.7767947105446232,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 1
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_ge5",
+      "config": "C0004",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.1521867850663939,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "naive_bayes_last": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_6_49",
+      "strategy": "ticket_ge6",
+      "config": "C0315",
+      "metric": "ticket",
+      "threshold": 6,
+      "n": 718,
+      "events": 0,
+      "uniform_expected": 0.0006161408302283154,
+      "rate_95pct_marginal": [
+        0.0,
+        0.0051245396324574154
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 9,
+          "losses": 3
+        },
+        "random": {
+          "gains": 9,
+          "losses": 5
+        },
+        "croston_interval": {
+          "gains": 9,
+          "losses": 4
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "balanced",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 465,
+      "events": 9,
+      "uniform_expected": 4.426633110843637,
+      "rate_95pct_marginal": [
+        0.00888752463919251,
+        0.03642253338672833
+      ],
+      "p": 0.0362098644406916,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 0,
+          "losses": 2
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "balanced",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 465,
+      "events": 0,
+      "uniform_expected": 0.22048364153627312,
+      "rate_95pct_marginal": [
+        0.0,
+        0.007901690307376622
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "balanced",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 6,
+      "n": 465,
+      "events": 0,
+      "uniform_expected": 0.003392056023634971,
+      "rate_95pct_marginal": [
+        0.0,
+        0.007901690307376622
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 3
+        },
+        "random": {
+          "gains": 2,
+          "losses": 5
+        },
+        "croston_interval": {
+          "gains": 2,
+          "losses": 4
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ticket_balanced",
+      "config": "C0677",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 465,
+      "events": 2,
+      "uniform_expected": 4.426633110843637,
+      "rate_95pct_marginal": [
+        0.0005213052576643584,
+        0.015449921450282981
+      ],
+      "p": 0.9359895818504161,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 1,
+          "losses": 0
+        },
+        "random": {
+          "gains": 1,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 1,
+          "losses": 1
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ticket_balanced",
+      "config": "C0677",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 465,
+      "events": 1,
+      "uniform_expected": 0.08480140059087427,
+      "rate_95pct_marginal": [
+        5.444541668544717e-05,
+        0.011923293829623625
+      ],
+      "p": 0.08131238618167294,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 9,
+          "losses": 3
+        },
+        "random": {
+          "gains": 9,
+          "losses": 5
+        },
+        "croston_interval": {
+          "gains": 9,
+          "losses": 4
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ge4",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 465,
+      "events": 9,
+      "uniform_expected": 4.426633110843637,
+      "rate_95pct_marginal": [
+        0.00888752463919251,
+        0.03642253338672833
+      ],
+      "p": 0.0362098644406916,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 0,
+          "losses": 2
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ge5",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 465,
+      "events": 0,
+      "uniform_expected": 0.22048364153627312,
+      "rate_95pct_marginal": [
+        0.0,
+        0.007901690307376622
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ge6",
+      "config": "C0445",
+      "metric": "pool",
+      "threshold": 6,
+      "n": 465,
+      "events": 0,
+      "uniform_expected": 0.003392056023634971,
+      "rate_95pct_marginal": [
+        0.0,
+        0.007901690307376622
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 3
+        },
+        "random": {
+          "gains": 2,
+          "losses": 5
+        },
+        "croston_interval": {
+          "gains": 2,
+          "losses": 4
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ticket_ge4",
+      "config": "C0677",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 465,
+      "events": 2,
+      "uniform_expected": 4.426633110843637,
+      "rate_95pct_marginal": [
+        0.0005213052576643584,
+        0.015449921450282981
+      ],
+      "p": 0.9359895818504161,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "croston_interval": {
+          "gains": 0,
+          "losses": 1
+        }
+      },
+      "game": "loto_5_40",
+      "strategy": "ticket_ge5",
+      "config": "C0532",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 465,
+      "events": 0,
+      "uniform_expected": 0.08480140059087427,
+      "rate_95pct_marginal": [
+        0.0,
+        0.007901690307376622
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 5
+        },
+        "random": {
+          "gains": 3,
+          "losses": 4
+        },
+        "runs_persistence": {
+          "gains": 3,
+          "losses": 6
+        }
+      },
+      "game": "joker",
+      "strategy": "balanced",
+      "config": "C0358",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 592,
+      "events": 3,
+      "uniform_expected": 3.683528420907888,
+      "rate_95pct_marginal": [
+        0.0010462759677325152,
+        0.014737598440915519
+      ],
+      "p": 0.7126644904737416,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "runs_persistence": {
+          "gains": 0,
+          "losses": 1
+        }
+      },
+      "game": "joker",
+      "strategy": "balanced",
+      "config": "C0358",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 592,
+      "events": 0,
+      "uniform_expected": 0.12210591450523385,
+      "rate_95pct_marginal": [
+        0.0,
+        0.006211841533668402
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 3
+        },
+        "random": {
+          "gains": 2,
+          "losses": 3
+        },
+        "runs_persistence": {
+          "gains": 2,
+          "losses": 4
+        }
+      },
+      "game": "joker",
+      "strategy": "ticket_balanced",
+      "config": "C0274",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 592,
+      "events": 2,
+      "uniform_expected": 1.3092467499727851,
+      "rate_95pct_marginal": [
+        0.00040939947335087533,
+        0.012150130332348984
+      ],
+      "p": 0.3765703715741193,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "runs_persistence": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "joker",
+      "strategy": "ticket_balanced",
+      "config": "C0274",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 592,
+      "events": 0,
+      "uniform_expected": 0.006783661916957436,
+      "rate_95pct_marginal": [
+        0.0,
+        0.006211841533668402
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 5
+        },
+        "random": {
+          "gains": 3,
+          "losses": 4
+        },
+        "runs_persistence": {
+          "gains": 3,
+          "losses": 6
+        }
+      },
+      "game": "joker",
+      "strategy": "ge4",
+      "config": "C0358",
+      "metric": "pool",
+      "threshold": 4,
+      "n": 592,
+      "events": 3,
+      "uniform_expected": 3.683528420907888,
+      "rate_95pct_marginal": [
+        0.0010462759677325152,
+        0.014737598440915519
+      ],
+      "p": 0.7126644904737416,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 1
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "runs_persistence": {
+          "gains": 0,
+          "losses": 1
+        }
+      },
+      "game": "joker",
+      "strategy": "ge5",
+      "config": "C0384",
+      "metric": "pool",
+      "threshold": 5,
+      "n": 592,
+      "events": 0,
+      "uniform_expected": 0.12210591450523385,
+      "rate_95pct_marginal": [
+        0.0,
+        0.006211841533668402
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 2,
+          "losses": 3
+        },
+        "random": {
+          "gains": 2,
+          "losses": 3
+        },
+        "runs_persistence": {
+          "gains": 2,
+          "losses": 4
+        }
+      },
+      "game": "joker",
+      "strategy": "ticket_ge4",
+      "config": "C0274",
+      "metric": "ticket",
+      "threshold": 4,
+      "n": 592,
+      "events": 2,
+      "uniform_expected": 1.3092467499727851,
+      "rate_95pct_marginal": [
+        0.00040939947335087533,
+        0.012150130332348984
+      ],
+      "p": 0.3765703715741193,
+      "p_holm": 1.0
+    },
+    {
+      "paired_vs_references": {
+        "frequency": {
+          "gains": 0,
+          "losses": 0
+        },
+        "random": {
+          "gains": 0,
+          "losses": 0
+        },
+        "runs_persistence": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "game": "joker",
+      "strategy": "ticket_ge5",
+      "config": "C0792",
+      "metric": "ticket",
+      "threshold": 5,
+      "n": 592,
+      "events": 0,
+      "uniform_expected": 0.006783661916957436,
+      "rate_95pct_marginal": [
+        0.0,
+        0.006211841533668402
+      ],
+      "p": 1.0,
+      "p_holm": 1.0
+    }
+  ],
+  "folds_sha256": "c4846dab56f318bcd2d1bcafcaa0d98aa3d2d80656f4ca929a1032221ce6493b"
+}

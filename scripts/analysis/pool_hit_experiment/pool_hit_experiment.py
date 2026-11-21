@@ -136,24 +136,18 @@ def load(name: str, n_rows: int | None = None):
 
 
 def production_methods() -> list[str]:
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-    from loto_enterprise.benchmark.methods import METHODS
+    from scripts.analysis.legacy_methods_2026_11_20 import SEPTEMBER_METHODS
 
-    # Experimentul e preinregistrat (2026-10-02): protocolul lui nu crește
-    # tacit odată cu registry-ul. Valurile adăugate după înregistrare
-    # (methods_bayes, 2026-11-08; methods_evalue, 2026-11-14) nu fac parte
-    # din celulele înregistrate.
-    _after_registration = {
-        "bayes_dirichlet_forget",
-        "hedge_experts_mixture",
-        "evalue_kelly_w104",
-        "selfcalib_online_logit",
+    # Rebuild the 47 scorers from the October registration. Later changes to
+    # the live eligibility policy must not change the historical Borda ranks.
+    outside_protocol = {
+        "random",
+        "neighbor_adjacent",
+        "repeat_last_draw",
+        "rwr_last_draw",
+        "haar_multiscale",
     }
-    return sorted(
-        m
-        for m in METHODS
-        if m not in EXCLUDED_FROM_PRODUCTION and m not in _after_registration
-    )
+    return sorted(SEPTEMBER_METHODS.keys() - outside_protocol)
 
 
 def ranking(scores: dict, max_num: int) -> np.ndarray:
@@ -175,7 +169,7 @@ def ranking(scores: dict, max_num: int) -> np.ndarray:
 def _evaluate_dataset(name: str, n_rows: int) -> dict:
     """Pentru fiecare tinta eligibila: clasamentul complet al fiecarei metode."""
     warnings.filterwarnings("ignore")
-    from loto_enterprise.benchmark.methods import METHODS
+    from scripts.analysis.legacy_methods_2026_11_20 import METHODS
 
     dates, draws, max_num, _ = load(name, n_rows)
     methods = production_methods()
@@ -292,10 +286,13 @@ def checkpoint_identity(reg: dict) -> str:
     Historical checkpoints keyed only by a CSV prefix are deliberately ignored.
     LF normalization keeps an unchanged checkout identical on Windows/Linux.
     """
+    from scripts.analysis.legacy_methods_2026_11_20 import archived_scoring_sources
+
+    sources = [*(ROOT / "loto_enterprise").rglob("*.py"), *archived_scoring_sources(ROOT)]
     source_files = [("runner", Path(__file__))]
     source_files.extend(
         (path.relative_to(ROOT).as_posix(), path)
-        for path in sorted((ROOT / "loto_enterprise").rglob("*.py"))
+        for path in sorted(sources)
     )
     source_hashes = {
         name: hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()

@@ -37,7 +37,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.signal import lfilter
 
-from .methods_common import (
+from loto_enterprise.benchmark.methods_common import (
     ewma_weights,
     expected_rate,
     indicator,

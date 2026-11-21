@@ -26,10 +26,9 @@ import numpy as np
 from scipy.stats import binomtest
 
 from loto_enterprise.benchmark.decision import (
-    EXCLUDED_FROM_PRODUCTION,
     expected_random_rate,
 )
-from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS, SEPTEMBER_METHODS as METHODS, evaluate_scorer
 from loto_enterprise.benchmark.runner import discover_games, load_draws
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import (
@@ -83,7 +82,7 @@ def audit_game(game, window_size, windows):
             cutoff = game.history_cutoffs[target_index]
             assert 0 <= cutoff <= target_index
             try:
-                scores = scorer(draws[:cutoff], game.max_num)
+                scores, _ = evaluate_scorer(scorer, draws[:cutoff], game.max_num, game.history_cutoffs[:cutoff])
                 values = np.asarray(list(scores.values()), dtype=float)
                 if (
                     set(scores) != expected_keys
@@ -147,7 +146,7 @@ def audit_game(game, window_size, windows):
                                 if n
                                 else None
                             ),
-                            "production_allowed": name not in EXCLUDED_FROM_PRODUCTION,
+                            "production_allowed": name in OCTOBER_19_EXPERTS,
                             # Skipped observations must not produce a cherry-picked significance claim.
                             "p_raw": (
                                 float(

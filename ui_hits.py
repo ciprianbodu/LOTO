@@ -488,6 +488,19 @@ def _render_lr_replay(per: dict, game_label: str, pool_n: int, wf_variants: floa
         ).classes("text-caption text-grey")
 
 
+def _history_hit_note(spec):
+    if spec.geometry == "6/49":
+        return "La 6/49, pragul 4+ cuprinde 4, 5 sau 6 numere nimerite, atât în pool, cât și pe o variantă."
+    if spec.geometry == "joker":
+        return ("La Joker, 4+ cuprinde 4 sau 5 numere din Urna 1. "
+                "Bila Joker din Urna 2 se verifică separat.")
+    if spec.geometry == "5/40":
+        return ("La 5/40, 4+ cuprinde 4, 5 sau 6 numere în pool. "
+                "Pe o variantă se pot nimeri cel mult 5 numere.")
+    return ("Pragul 4+ cuprinde toate extragerile cu cel puțin 4 numere nimerite. "
+            f"Maximul este {spec.draw_n} în pool și {spec.pick_n} pe o variantă.")
+
+
 def _render_hits_4plus(
     flat,
     game: str,
@@ -518,15 +531,10 @@ def _render_hits_4plus(
     if not n:
         ui.label("Niciun istoric walk-forward.").classes("text-caption text-grey")
         return
-    pool4 = sum(1 for d in per.values() if d["pool"] >= 4)
-    pool5 = sum(1 for d in per.values() if d["pool"] >= 5)
-    ticket4 = sum(1 for d in per.values() if d["best_ticket"] >= 4)
-    ticket5 = sum(1 for d in per.values() if d["best_ticket"] >= 5)
-
     def _cell(k, denom):
         return f"{k} ({k / denom * 100:.2f}%)" if denom else "—"
 
-    ui.label(f"🎯 Istoric hits 4+ (din {_n_extrageri(n)} walk-forward):").classes(
+    ui.label(f"Rezultate pe praguri · {_n_extrageri(n)} walk-forward").classes(
         "text-bold text-caption mt-2"
     )
     # Ce se numără: pool-ul fiecărei extrageri, refăcut atunci; setările sunt ale
@@ -587,11 +595,10 @@ def _render_hits_4plus(
             "sau țintă schimbată): pașii nu provin dintr-un singur scorer. Rezultatul "
             "nu s-a salvat în cache; rulează din nou walk-forward-ul."
         ).classes("text-warning text-caption text-bold")
-    # (1) Sumar comparabil: +4 / +5 pe pool, baseline hipergeometric și volumul
+    # (1) Praguri cumulative pe pool și variantă, baseline hipergeometric și volumul
     # real de variante din WF. Premiile nu pot fi deduse din hiturile Urnei 1.
-    _foreign = _LOT.lottery_by_id(str(game))
-    if _foreign is not None and _foreign.is_romanian:
-        _foreign = None
+    spec = _game_spec_for(game)
+    _foreign = None if spec.is_romanian else spec
     # Străin: id-ul din registru (geometria și ținta lui); România: eticheta veche.
     gk = _foreign.game_id if _foreign is not None else _game_label_for(game)
     # Pragul afișării este 4 pentru orice joc, independent de ținta bench-ului.
@@ -610,16 +617,16 @@ def _render_hits_4plus(
         return _threshold_pct(t, _wf_random_rate(gk, sizes, t))
 
     # Un rând pe prag: pe telefon încap toate coloanele (înainte, 735 px).
-    pool_k = {4: pool4, 5: pool5}
-    tick_k = {4: ticket4, 5: ticket5}
+    pool_k = {t: sum(d["pool"] >= t for d in per.values()) for t in range(4, spec.draw_n + 1)}
+    tick_k = {t: sum(d["best_ticket"] >= t for d in per.values()) for t in range(4, spec.pick_n + 1)}
     rows = [
         {
             "prag": f"+{t}",
             "pool": _cell(pool_k[t], n),
-            "tick": _cell(tick_k[t], n),
+            "tick": _cell(tick_k[t], n) if t in tick_k else "—",
             "rnd": _rnd(t),
         }
-        for t in (4, 5)
+        for t in pool_k
     ]
     ui.table(
         columns=[
@@ -648,8 +655,8 @@ def _render_hits_4plus(
         rows=rows,
     ).classes("w-full").props("dense wrap-cells")
     _cap = (
-        "+4 / +5 = extrageri cu ≥4 / ≥5 numere nimerite. 🎟️ = extrageri cu "
-        "cel puțin o variantă jucată care atinge pragul. 🎲 = rata unui pool PUR "
+        _history_hit_note(spec) + " 🎟️ = extrageri cu "
+        "cel puțin o variantă evaluată care atinge pragul. 🎲 = rata unui pool PUR "
         "aleator de aceeași mărime (hipergeometric, din parametrii jocului); nu e un "
         "reper separat pentru variante. ROI-ul nu este estimat."
     )
@@ -706,7 +713,7 @@ def _render_hits_4plus(
     _losers, _winners = [], []
     baseline = _wf_random_rate(gk, sizes, _TT)
     if baseline is not None and n:
-        observed = pool4 / n
+        observed = pool_k[_TT] / n
         if observed <= baseline:
             _losers.append(f"Pool: {observed * 100:.2f}% ≤ random {baseline * 100:.2f}%")
         else:
@@ -714,7 +721,7 @@ def _render_hits_4plus(
             if len(sizes) == 1:
                 from scipy.stats import binom
 
-                p = float(binom.sf(pool4 - 1, n, baseline))
+                p = float(binom.sf(pool_k[_TT] - 1, n, baseline))
                 comparison += f" (p = {p:.2f}, test binomial unilateral)"
             _winners.append(comparison)
     if len(sizes) > 1:
@@ -985,7 +992,7 @@ def _render_hits_4plus(
             table.add_slot(f"body-cell-{name}", _WF_MARKED_CELL)
 
     # Tabelele detaliate pe file (tab-uri): sumarul de mai sus rămâne nepliat.
-    _sections = [("pool", "🗓️ Pool"), ("var", "🎟️ Variante 4+ și 5+")]
+    _sections = [("pool", "🗓️ Pool"), ("var", "🎟️ Variante pe praguri")]
     if _foreign is None:
         _sections.append(("lr", "📋 Schemă LR"))
     with ui.tabs().classes("w-full") as _hit_tabs:
@@ -1052,14 +1059,14 @@ def _render_hits_4plus(
             )
         with ui.tab_panel("var"):
             with ui.expansion(
-                "🎟️ Variante WF cu 4+ și 5+ — date și intervale",
+                "🎟️ Variante WF pe praguri · date și intervale",
                 value=False,
                 on_value_change=_open_prizes,
             ).classes("w-full") as prize_expansion:
                 prize_panel["element"] = prize_expansion
                 ui.label(
                     "Fiecare rând este o extragere cu cel puțin o variantă la pragul indicat. "
-                    "Intervalele sunt calculate separat pentru 4+ și 5+, nu sunt predicții. "
+                    "Intervalele se calculează între extragerile care ating același prag. "
                     "„Varianta” = cea jucată atunci cu cele mai multe numere prinse; "
                     "numerele ieșite sunt îngroșate."
                 ).classes("text-caption text-grey")
@@ -1072,7 +1079,7 @@ def _render_hits_4plus(
                     ui.button(
                         "Reîncearcă premiile indisponibile", on_click=_retry_prizes
                     ).props("flat dense no-caps").classes("text-caption")
-                for threshold in (4, 5):
+                for threshold in tick_k:
                     _dates_table(
                         f"🎟️ VARIANTĂ {threshold}+",
                         lambda d, t=threshold: d["best_ticket"] >= t,
@@ -1160,13 +1167,16 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
             "măsurat altă metodă decât cea care a produs pool-ul afișat; "
             "generează din nou."
         )
+    history_title = ("📜 Istoricul variantelor LR (walk-forward)"
+                     if _result_lr_scheme_code(data) is not None or _skip.get("lr_scheme_code") is not None
+                     else "📜 Istoricul variantelor (walk-forward)")
     if flat:
         # Deschis implicit (apare după ce termină walk-forward), dar pliabil
         # → îl poți ascunde dacă vrei. Apare DOAR după WF (vine din STATE["retro"]).
         for _n in _wf_notes:
             ui.label(_n).classes("text-warning text-caption text-bold")
         with ui.expansion(
-            "📜 Istoric hits 4+ (walk-forward)",
+            history_title,
             value=True,
         ).classes("w-full"):
             depth = _skip.get("backtest_depth_percent")
@@ -1194,7 +1204,7 @@ def _render_game_analysis(fname, game, raw_data, res_prefix: str = "") -> None:
         # „📜 Istoric hits” apare ORICUM, deschisă, cu motivul înăuntru —
         # nu dispare din „Analiză & Clasament” când nu s-au calculat hituri.
         with ui.expansion(
-            "📜 Istoric hits 4+ (walk-forward)",
+            history_title,
             value=True,
         ).classes("w-full"):
             for _n in _wf_notes:

@@ -451,7 +451,9 @@ def _pipeline_cache_key(input_hash: str, config: dict | None = None) -> str:
     if not cache_key:
         return ""
     method = os.environ.get("LOTO_WHEEL_METHOD", "").strip().lower() or "auto"
-    cache_key += f":wheel={method}"
+    from loto_enterprise.benchmark.methods import CATALOG_VERSION
+
+    cache_key += f":wheel={method}:catalog={CATALOG_VERSION}"
     if config is not None:
         # The caller hash alone cannot describe a changed decision or design.
         digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode())

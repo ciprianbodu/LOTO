@@ -37,6 +37,8 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
+from scripts.analysis.legacy_methods_2026_11_20 import archived_scoring_sources
+
 from pool_adaptive_candidates_2026_10_19 import candidate_specs, generate
 from pool_adaptive_cache_2026_10_19 import EXPERTS, load_scores
 from pool_combination_eval_2026_10_19 import evaluate_bank
@@ -90,6 +92,7 @@ def specs():
 
 def source_hashes():
     paths = list((ROOT / "loto_enterprise").rglob("*.py"))
+    paths.extend(archived_scoring_sources(ROOT))
     paths += [
         HERE / name
         for name in (

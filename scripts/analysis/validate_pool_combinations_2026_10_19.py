@@ -738,7 +738,7 @@ def verify_report(report_path, cache_dir=None, *, workspace_root=None) -> dict:
     )
 
     sys.path.insert(0, str(root))
-    from loto_enterprise.benchmark.methods import call_method
+    from scripts.analysis.legacy_methods_2026_11_20 import call_method
     from loto_enterprise.core.ranking import limit_consecutive_run, rank_by_score
     from loto_enterprise.core.score_validation import has_usable_score_variance
 

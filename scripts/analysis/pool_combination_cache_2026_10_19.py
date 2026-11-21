@@ -28,7 +28,7 @@ from scripts.analysis import pool_score_cache_2026_10_19 as _base
 
 import numpy as np
 
-from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_methods_2026_11_20 import METHODS
 
 LEGACY_CACHE_ROOT = ROOT / "bench_results" / "pool649_research_20261019"
 COMBINATION_CACHE_ROOT = ROOT / "bench_results" / "pool649_combinations_20261019"

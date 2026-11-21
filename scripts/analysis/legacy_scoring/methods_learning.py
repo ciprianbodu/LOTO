@@ -19,7 +19,7 @@ import numpy as np
 from scipy.signal import lfilter
 from scipy.stats import rankdata
 
-from .methods_common import expected_rate, indicator, make_registry, vector_to_scores
+from loto_enterprise.benchmark.methods_common import expected_rate, indicator, make_registry, vector_to_scores
 
 _EPS = 1e-9
 _TRAIN_WINDOW = 400

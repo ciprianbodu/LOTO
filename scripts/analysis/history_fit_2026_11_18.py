@@ -17,7 +17,7 @@ import pandas as pd
 
 from covering.lr_schemes import scheme_odds
 from covering.lr_selection import resolve_lr_scheme
-from loto_enterprise.benchmark.methods import call_method
+from scripts.analysis.legacy_methods_2026_11_20 import call_method
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import chronological_history, history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import GAMES

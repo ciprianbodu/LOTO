@@ -9,6 +9,10 @@ from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
 from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
+from loto_enterprise.benchmark.hit_target import (
+    BENCH_TARGET_REVISION, DEFAULT_BENCH_HIT_TARGET, clamp_bench_hit_target,
+    saved_bench_hit_target,
+)
 from loto_enterprise.core import lotteries as _LOT
 
 logger = logging.getLogger("app_nicegui")
@@ -386,17 +390,8 @@ def _active_max_consecutive_run() -> int:
 
 
 def _clamped_bench_target(value=None) -> int:
-    raw = SETTINGS.get("bench_hit_target", 5) if value is None else value
-    try:
-        from loto_enterprise.benchmark.hit_target import clamp_bench_hit_target
-
-        return clamp_bench_hit_target(raw, default=5)
-    except Exception:  # noqa: BLE001
-        try:
-            n = int(raw)
-        except (TypeError, ValueError):
-            n = 5
-        return n if n in (3, 4, 5, 6) else 5
+    raw = SETTINGS.get("bench_hit_target", DEFAULT_BENCH_HIT_TARGET) if value is None else value
+    return clamp_bench_hit_target(raw)
 
 
 UI_PERSIST_KEYS = [
@@ -489,8 +484,8 @@ DEFAULTS = {
     # 90 min e larg; la rulări zilnice poți coborî la 15–30 dacă vrei.
     "wf_budget_min": 90,
     "wf_depth_pct": DEFAULT_REPLAY_PERCENT,
-    "bench_hit_target": 5,
-    "bench_target_revision": 1,
+    "bench_hit_target": DEFAULT_BENCH_HIT_TARGET,
+    "bench_target_revision": BENCH_TARGET_REVISION,
     "dynamic_method_enabled_val": True,
 }
 
@@ -583,12 +578,10 @@ def _load_settings() -> None:
     depth = SETTINGS.get("wf_depth_pct")
     if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
         SETTINGS["wf_depth_pct"] = DEFAULT_REPLAY_PERCENT
-    # La prima pornire a noii politici, vechiul selector 3/4 trece pe 5+.
-    # Revizia se salveaza: o alegere explicita ulterioara 3/4/6 ramane persistenta.
-    if isinstance(data, dict) and data and data.get("bench_target_revision") != 1:
-        SETTINGS["bench_hit_target"] = 5
-        SETTINGS["bench_target_revision"] = 1
-        migrated_target = "bench_hit_target" in data
+    if isinstance(data, dict):
+        SETTINGS["bench_hit_target"], migrated_target = saved_bench_hit_target(data)
+        if migrated_target:
+            SETTINGS["bench_target_revision"] = BENCH_TARGET_REVISION
     # Câmpul comun rămâne 6..16 pentru jocurile altor țări.
     try:
         SETTINGS["pool_size_val"] = max(
@@ -618,7 +611,7 @@ def _load_settings() -> None:
         # Migrarea modifica numai tinta; nu rescrie poolurile ori alte valori
         # salvate folosind normalizarile temporare ale sesiunii.
         updated = dict(data)
-        updated.update(bench_hit_target=5, bench_target_revision=1)
+        updated.update(bench_hit_target=SETTINGS["bench_hit_target"], bench_target_revision=BENCH_TARGET_REVISION)
         try:
             atomic_write_json(UI_STATE_FILE, updated)
         except Exception as exc:  # noqa: BLE001

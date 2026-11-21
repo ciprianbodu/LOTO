@@ -115,7 +115,7 @@ def prefix_inputs(dates, draws, targets, expert_scores, expert_names, row):
 def audit_predictions(bank, dates, draws, meta, descriptors, check):
     from pool_extension_candidates_2026_10_19 import generate
 
-    from loto_enterprise.benchmark.methods import call_method
+    from scripts.analysis.legacy_methods_2026_11_20 import call_method
     from loto_enterprise.core.pool_selection import apply_consecutive_limit
     from loto_enterprise.core.ranking import rank_by_score
     from loto_enterprise.core.score_validation import has_usable_score_variance

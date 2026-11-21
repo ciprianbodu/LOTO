@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .methods_common import indicator, make_registry, vector_to_scores
+from loto_enterprise.benchmark.methods_common import indicator, make_registry, vector_to_scores
 
 # Constante fixate a priori (NU calibrate pe rezultatele evaluate de bench).
 _SC_LAMBDA = 0.995   # uitarea stratului de bază (half-life ≈ 139 extrageri)

@@ -27,7 +27,7 @@ import numpy as np
 
 from loto_enterprise.core.ranking import rank_by_score
 
-from .methods_common import make_registry, vector_to_scores
+from loto_enterprise.benchmark.methods_common import make_registry, vector_to_scores
 
 _POOL = 16
 _WARMUP = 200

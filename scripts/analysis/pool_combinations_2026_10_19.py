@@ -113,10 +113,9 @@ GROUPS = {
 
 def _names(names: Sequence[str] | None) -> tuple[str, ...]:
     if names is None:
-        from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-        from loto_enterprise.benchmark.methods import METHODS
+        from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS
 
-        names = sorted(set(METHODS) - EXCLUDED_FROM_PRODUCTION)
+        names = list(OCTOBER_19_EXPERTS)
     out = tuple(names)
     if (
         not out
