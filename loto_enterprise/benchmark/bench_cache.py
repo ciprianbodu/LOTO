@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path
+from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path
 from loto_enterprise.core.wf_sig import method_cache_semantics
 from runtime_paths import RUNTIME_ROOT
 

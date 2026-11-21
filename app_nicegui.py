@@ -32,6 +32,10 @@ from copy import deepcopy
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 
+from runtime_version import require_python_version
+
+require_python_version()
+
 import pandas as pd
 from nicegui import app, ui
 

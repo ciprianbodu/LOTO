@@ -5,26 +5,59 @@ lanseaza sau nu (verificare globala 2026-09-07)."""
 from __future__ import annotations
 
 import sys
+from collections import namedtuple
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+
+import runtime_version
 import verify_imports as vi
 
 
-def test_main_reports_clean_error_when_ui_shared_import_fails(monkeypatch, capsys):
-    """ui_shared.py importa psutil neconditionat la nivel de modul — psutil e
-    chiar unul dintre pachetele REQUIRED verificate mai jos. Daca `from ui_shared
-    import check_python_version` explodeaza (ex. psutil lipsa), scriptul nu are
-    voie sa moara cu un traceback brut si exit code nedocumentat — trebuie sa
-    raporteze curat, cu exit code 20 (acelasi cod ca "pachet REQUIRED lipsa")."""
-    monkeypatch.setitem(sys.modules, "ui_shared", None)  # forteaza ImportError
+def test_main_reports_missing_dependency_after_checking_python(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "psutil", None)
     rc = vi.main()
     assert rc == 20
     out = capsys.readouterr().out
     assert "[EROARE]" in out
+    assert "psutil" in out
     assert "ACTUALIZARI.bat" in out
 
 
-def test_main_succeeds_normally_when_ui_shared_importable(capsys):
+@pytest.mark.parametrize(
+    ("version", "releaselevel", "accepted"),
+    [
+        ((3, 14, 9), "final", False),
+        ((3, 15, 0), "candidate", False),
+        ((3, 15, 0), "final", True),
+        ((3, 15, 12), "final", True),
+        ((3, 16, 0), "final", False),
+    ],
+)
+def test_application_accepts_only_stable_python315(
+    monkeypatch, version, releaselevel, accepted
+):
+    version_info = namedtuple("VersionInfo", "major minor micro releaselevel")
+    detected = ".".join(map(str, version))
+    monkeypatch.setattr(
+        runtime_version,
+        "sys",
+        SimpleNamespace(
+            version=detected, version_info=version_info(*version, releaselevel)
+        ),
+    )
+    ok, message = runtime_version.check_python_version()
+    assert ok is accepted
+    assert detected in message
+    if accepted:
+        runtime_version.require_python_version()
+    else:
+        with pytest.raises(RuntimeError, match=r"3\.15\.x stabil"):
+            runtime_version.require_python_version()
+
+
+def test_main_succeeds_with_cpu_dependencies(capsys):
     """Calea fericita ramane neschimbata — nu doar calea de eroare."""
     rc = vi.main()
     out = capsys.readouterr().out

@@ -1,4 +1,4 @@
-"""I/O helpers folosind stdlib Python 3.14 (PEP 784: compression.zstd).
+"""Serializare și scriere atomică pentru cache-urile LOTO.
 
 Cache-urile pickle pe disc sunt comprimate cu Zstandard la scriere; la citire
 acceptăm și fișiere legacy necomprimate (pickle brut).

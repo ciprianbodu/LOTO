@@ -10,7 +10,7 @@ import pytest
 
 from loto_enterprise.core import backtesting as bt
 from loto_enterprise.core import walk_forward_adapter as wf
-from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path_atomic
 
 CSV = {
     "6/49": "_ISTORIC/loto_6_49.csv",

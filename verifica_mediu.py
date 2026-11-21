@@ -23,6 +23,8 @@ import sys
 from importlib.metadata import PackageNotFoundError, version as dist_version
 from pathlib import Path
 
+from runtime_version import check_python_version
+
 REQUIREMENTS_FILE = Path(__file__).resolve().with_name("requirements_base.txt")
 
 # Consola Windows e cp1252 by default -> diacriticele (ă, ț) arunca UnicodeEncodeError.
@@ -199,9 +201,7 @@ def _is_in_venv() -> bool:
 
 
 def main():
-    from ui_shared import check_python_version
-
-    py_ok, py_msg = check_python_version(strict=True)
+    py_ok, py_msg = check_python_version()
     print(f"Python: {sys.version.split()[0]} — {py_msg}")
     if not py_ok:
         print(f"\n[EROARE] {py_msg}")

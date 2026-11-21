@@ -264,7 +264,7 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
 - `pandas>=3,<4` inlocuieste limita 2.x, fara wheels cp315. Instalarea CPU a
   fost verificata cu pandas 3.1.1, NumPy 2.5.4, SciPy 1.18.1 si NiceGUI 4.0.0.
   Updaterul dezactiveaza extensia optionala LibYAML, evitand compilatorul C.
-  Arhiva requirements_snapshot si numele modulului compatibil py314_io raman.
+  Arhiva requirements_snapshot a fost pastrata.
 - Cele 13 istorice / 47438 randuri pastreaza validarea, cronologia, hashurile
   si roundtrip-ul JSON fata de pandas 2.3.3. Pickle/Zstd vechi este citibil.
   Nu se modifica scorerii, schemele, tintele 5/6 sau formatele cache.
@@ -3359,6 +3359,12 @@ care include telemetria bench si parametrii pastrati de generare.
 Cache-urile walk-forward pastreaza optiunile jobului salvat.
 
 ## 10. Mediu si rulare
+
+Interfata, workerul si Re-Bench accepta exclusiv Python 3.15.x stabil,
+inclusiv la pornire directa. `runtime_version.py` verifica seria inainte de
+importurile de dependinte, iar verificatoarele de mediu folosesc aceeasi regula.
+`loto_enterprise/core/cache_io.py` pastreaza formatul cache-urilor Zstandard si
+citirea fisierelor pickle necomprimate.
 
 Instalarea canonica este:
 

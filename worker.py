@@ -17,12 +17,14 @@ import time
 import traceback
 import uuid
 
+from runtime_version import require_python_version
+
+require_python_version()
+
 import psutil
 
 from runtime_paths import ENGINE_LOG_FILE, PROJECT_ROOT
-from ui_shared import pack_queue_result, require_python_version
-
-require_python_version()
+from ui_shared import pack_queue_result
 
 # Rezultatul de pipeline e serializat complet în SQLite pentru apelanții care
 # activează `use_cache`. Schimbările de semantică ale engine-ului nu pot reutiliza
