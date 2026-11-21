@@ -1,9 +1,9 @@
-"""Teste pentru py314_io.py — pickle_store_path() scria neatomic; acum
+"""Teste pentru cache_io.py — pickle_store_path() scria neatomic; acum
 delega la pickle_store_path_atomic (tmp unic + fsync + os.replace)."""
 
 from __future__ import annotations
 
-from loto_enterprise.core.py314_io import (
+from loto_enterprise.core.cache_io import (
     pickle_load_path,
     pickle_store_path,
     pickle_store_path_atomic,
@@ -27,7 +27,7 @@ def test_pickle_store_path_is_now_the_atomic_implementation(tmp_path, monkeypatc
     """pickle_store_path trebuie sa delege la varianta atomica -- nu doar sa
     produca acelasi rezultat, ci sa foloseasca EFECTIV tmp+fsync+os.replace."""
     calls = []
-    import loto_enterprise.core.py314_io as io_mod
+    import loto_enterprise.core.cache_io as io_mod
 
     def _spy(path, obj):
         calls.append((path, obj))
@@ -38,7 +38,7 @@ def test_pickle_store_path_is_now_the_atomic_implementation(tmp_path, monkeypatc
 
 
 def test_pickle_store_path_atomic_cleans_up_tmp_on_failure(tmp_path, monkeypatch):
-    import loto_enterprise.core.py314_io as io_mod
+    import loto_enterprise.core.cache_io as io_mod
 
     def _boom(obj):
         raise RuntimeError("dump failed")

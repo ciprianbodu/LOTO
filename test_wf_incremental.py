@@ -268,7 +268,7 @@ def test_cache_only_never_computes_or_writes(wf, computed, tmp_path):
 def test_cache_only_on_a_partial_cache_does_not_announce_a_rerun(wf, computed, tmp_path, caplog):
     """Audit 2026-10-16: citirea la pornire a unui cache parțial scria în jurnal
     „→ re-rulez pentru a extinde acoperirea”, deși nu calcula nimic."""
-    from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+    from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path_atomic
 
     df = history(60)
     wf.run_honest_walk_forward(df, **ARGS)

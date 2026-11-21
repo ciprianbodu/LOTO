@@ -108,7 +108,7 @@ def app_designs(game: str, n: int, budget: int) -> list[dict]:
 
 
 def wf_replay(path: Path) -> dict:
-    from loto_enterprise.core.py314_io import pickle_load_path
+    from loto_enterprise.core.cache_io import pickle_load_path
     from loto_enterprise.core.walk_forward_adapter import per_draw_hit_summary
 
     payload = pickle_load_path(path)

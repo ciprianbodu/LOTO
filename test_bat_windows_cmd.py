@@ -232,36 +232,36 @@ def test_no_external_git_helper_bat():
         assert "git reset --hard" not in text, name
 
 
-def test_updates_installs_latest_python314_without_hardcoded_patch():
+def test_updates_installs_latest_python315_without_hardcoded_patch():
     """Fallback-ul fără winget detectează online patch-ul; nu îmbătrânește în cod."""
     text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
     compact = text.replace(" ", "").lower()
 
-    assert "call :ensure_latest_python314" in text
-    assert text.index("call :ensure_latest_python314") < text.index(
+    assert "call :ensure_latest_python315" in text
+    assert text.index("call :ensure_latest_python315") < text.index(
         'if not exist "%VENV_PY%"'
     ), "Python trebuie instalat înainte de prima creare a venv-ului"
-    assert "winget upgrade -e --id Python.Python.3.14 --source winget" in text
-    assert "winget install -e --id Python.Python.3.14 --source winget" in text
+    assert "winget upgrade -e --id Python.Python.3.15 --source winget" in text
+    assert "winget install -e --id Python.Python.3.15 --source winget" in text
     assert "https://www.python.org/ftp/python/" in text
-    assert r"3\.14\.\d+/" in text
+    assert r"(3\.15\.\d+)/" in text
     assert "python-!py_latest!-amd64.exe" in compact
-    assert "python-3.14.6" not in text
+    assert not re.search(r"python-3\.15\.\d+-amd64\.exe", text, re.IGNORECASE)
     assert "choice /C YN" not in text, "migrarea venv-ului trebuie să fie automată"
 
 
-def test_python314_detection_validates_the_real_interpreter():
+def test_python315_detection_validates_the_real_interpreter():
     """Textul de eroare al launcherului nu poate deveni o versiune fictivă."""
     updater = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
-    detector = (ROOT / "scripts" / "find_python314.ps1").read_text(encoding="utf-8")
+    detector = (ROOT / "scripts" / "find_python315.ps1").read_text(encoding="utf-8")
 
-    assert "call :detect_python314" in updater
-    assert "py -3.14 --version 2^>^&1" not in updater
-    assert "py -3.14 -m venv" not in updater
-    assert '"%PY314_EXE%" -m venv' in updater
-    assert "sys.version_info[:2] == (3, 14)" in detector
-    assert "sys.executable + '|' + sys.version.split()[0]" in detector
-    assert "Python314\\python.exe" in detector
+    assert "call :detect_python315" in updater
+    assert "py -3.15 --version 2^>^&1" not in updater
+    assert "py -3.15 -m venv" not in updater
+    assert '"%PY315_EXE%" -m venv' in updater
+    assert "v[:2] == (3, 15) and v.releaselevel == 'final'" in detector
+    assert "sys.executable + '|' + '.'.join(map(str, v[:3]))" in detector
+    assert "Python315\\python.exe" in detector
 
 
 def test_updates_preserves_archival_requirements_snapshot_and_checks_installer():
@@ -276,8 +276,9 @@ def test_updates_preserves_archival_requirements_snapshot_and_checks_installer()
 def test_updates_cannot_treat_two_missing_versions_as_success():
     text = (ROOT / "ACTUALIZARI.bat").read_text(encoding="utf-8")
     start = text.index('if "!PY_LATEST!"=="" (', text.index("winget install"))
-    end = text.index('if "!SYS_VER!"=="!PY_LATEST!"', start)
+    end = text.index("call :python315_current_enough", start)
     no_online = text[start:end]
+    assert 'if not "!SYS_VER!"=="" (' in no_online
     assert "goto :ep_download_latest" in no_online
 
 
@@ -373,9 +374,9 @@ def test_updates_migrates_wf_cache_out_of_onedrive():
 
 
 def test_python_version_check_has_no_stale_patch_constant():
-    text = (ROOT / "ui_shared.py").read_text(encoding="utf-8")
-    assert "PYTHON_TARGET_PATCH" not in text
-    assert "ultimul patch stabil 3.14.x" in text
+    from runtime_version import PYTHON_SERIES
+
+    assert PYTHON_SERIES == (3, 15)
 
 
 def test_launchers_sync_only_from_immutable_copy():

@@ -11,7 +11,7 @@ iar acesta e in intregime OBLIGATORIU: dupa inlocuirea setului de metode
 Exit codes:
   0   = toate REQUIRED OK
   20  = cel putin un pachet REQUIRED lipsa (toate din SCHEMA sunt REQUIRED)
-  21  = Python < 3.15 sau versiune pre-release
+  21  = versiune diferită de Python 3.15.x stabil
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from __future__ import annotations
 import importlib
 import sys
 import time
+
+from runtime_version import check_python_version
 
 # Consola Windows e cp1252 by default -> diacriticele (ă, ț) arunca UnicodeEncodeError.
 # Reconfiguram stdout/stderr pe UTF-8 cu fallback 'replace' ca sa nu mai crape.
@@ -42,23 +44,7 @@ def try_import(name: str) -> tuple[bool, float, str]:
 
 
 def main() -> int:
-    try:
-        from ui_shared import check_python_version
-    except Exception as e:
-        # ui_shared.py importa psutil neconditionat la nivel de modul — exact
-        # unul dintre pachetele REQUIRED verificate in bucla de mai jos. Fara
-        # aceasta garda, un psutil lipsa omora scriptul cu un traceback brut
-        # SI un exit code nedocumentat (1, implicit Python), inainte ca bucla
-        # sa apuce sa raporteze curat "[EROARE] Pachete REQUIRED lipsa: psutil"
-        # cu exit code 20 — exact diagnosticul pentru care exista scriptul.
-        print(
-            f"[EROARE] Nu pot importa ui_shared (verificare versiune Python): "
-            f"{type(e).__name__}: {str(e)[:120]}"
-        )
-        print("Solutie: ruleaza ACTUALIZARI.bat apoi reincearca START_8000.bat.")
-        return 20
-
-    py_ok, py_msg = check_python_version(strict=True)
+    py_ok, py_msg = check_python_version()
     print(f"Python: {sys.version.split()[0]} — {py_msg}")
     if not py_ok:
         print(f"[EROARE] {py_msg}")

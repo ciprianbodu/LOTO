@@ -49,7 +49,7 @@ from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.hit_target import current_bench_hit_target, fixed_replay_target
 from loto_enterprise.core.backtesting import scored_variant_numbers
 from loto_enterprise.core.history import canonical_history_columns, simulation_indices
-from loto_enterprise.core.py314_io import pickle_load_path, pickle_store_path_atomic
+from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path_atomic
 from loto_enterprise.core.wf_sig import (
     ensemble_sig as _ensemble_sig,
     lookback_pct,

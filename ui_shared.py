@@ -46,40 +46,6 @@ if not logger.handlers:
     except OSError:
         pass  # ex. directorul de runtime nu există încă la primul import
 
-# Versiune Python țintă. ACTUALIZARI.bat / START_8000.bat folosesc py -3.15.
-PYTHON_MIN = (3, 15)
-
-
-def check_python_version(*, strict: bool = False) -> tuple[bool, str]:
-    """Verifică Python 3.15+; patch-ul curent este gestionat de ACTUALIZARI.bat.
-
-    Nu hardcodăm patch-ul aici: updater-ul interoghează python.org și instalează
-    ultimul 3.15.x stabil. `strict=True` respinge build-urile pre-release.
-    """
-    vi = sys.version_info
-    if vi < PYTHON_MIN:
-        return False, (
-            f"Python {vi.major}.{vi.minor}.{vi.micro} detectat — necesar "
-            f">= {PYTHON_MIN[0]}.{PYTHON_MIN[1]}. "
-            "Ruleaza ACTUALIZARI.bat pentru ultimul Python 3.15.x stabil."
-        )
-    if strict and vi.releaselevel != "final":
-        return False, (
-            f"Python {vi.major}.{vi.minor}.{vi.micro} {vi.releaselevel} — "
-            "este necesar un release stabil. Ruleaza ACTUALIZARI.bat."
-        )
-    return True, (
-        f"Python {vi.major}.{vi.minor}.{vi.micro} OK "
-        "(ACTUALIZARI.bat menține ultimul patch stabil 3.15.x)"
-    )
-
-
-def require_python_version(*, strict: bool = True) -> None:
-    ok, msg = check_python_version(strict=strict)
-    if not ok:
-        raise RuntimeError(msg)
-
-
 import html as _html_module
 from string.templatelib import Interpolation, Template
 
