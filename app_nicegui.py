@@ -76,7 +76,6 @@ from ui_runtime import *  # noqa: F403
 from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
-from ui_gate import *  # noqa: F403
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from ui_lr_budget import lr_budget_panel, lr_budget_slider
@@ -4448,7 +4447,6 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
-        gate_panel()
         history_windows_panel()
         nested_wfv_panel(_cc)
         if budget_slider is not None:
@@ -4461,23 +4459,6 @@ def main_page() -> None:
         ):
             logs_panel()
         results_panel()
-
-    # Poarta preînregistrată: la fiecare deschidere a paginii evaluează
-    # idempotent extragerile noi (lansatorul actualizează CSV-urile înainte de
-    # UI, deci extragerea de joi/duminică intră singură). În thread — fără
-    # blocarea event-loop-ului; la extrageri noi panoul se reîmprospătează.
-    async def _gate_startup_eval() -> None:
-        from nicegui import run as _nrun
-
-        try:
-            changed = await _nrun.io_bound(evaluate_new_draws)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[GATE] evaluarea de la deschidere a eșuat: %s", exc)
-            return
-        if changed:
-            gate_panel.refresh()
-
-    ui.timer(3.0, _gate_startup_eval, once=True)
 
     # ---- Polling fără reload. Munca BLOCANTĂ (citiri loguri OneDrive, psutil, pid-uri)
     # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără

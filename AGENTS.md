@@ -146,31 +146,10 @@ python -c "from loto_enterprise.benchmark.curated import load_curated,load_per_g
   `_TESTE/test_base_threshold.py` (tabelele de bază pornesc de la minimul LR);
   330 de teste țintă verzi pe cele două fișiere + regresia UI/worker/setări.
 
-### Panoul porții în aplicație — 2026-11-09
-
-- La cererea utilizatorului, poarta preînregistrată este integrată în UI:
-  `ui_gate.py` (expansion în zona principală, după `status_panel`): verdict,
-  progres n/104 și pragul de 5 evenimente 5+, hituri 4+/5+/6 vs așteptările
-  la hazard, medie vs μ0, variante 6/5/4/3, cost cumulat, p binomial exact,
-  tabel cu ultimele 20 de extrageri evaluate și buton manual „↻ Re-evaluează".
-- La fiecare deschidere a paginii se evaluează idempotent extragerile noi
-  (lansatorul actualizează CSV-urile înainte de UI), în thread prin
-  `run.io_bound`, cu lacăt neblocant — fără să țină event-loop-ul. Protocolul
-  comis nu se modifică; `ui_gate` doar citește starea din `RUNTIME_ROOT` și
-  apelează update-ul protocolului.
-- Citirea stării e robustă la fișier lipsă/corupt (None + avertisment, nu
-  excepție în pagină). p-ul binomial cumulat e calculat exact prin recurență
-  (aceeași formulă ca în runnerul widgetului Kimi), verificat contra scipy.
-- Verificare: 6 teste locale `_TESTE/test_gate_ui.py` (binom vs scipy,
-  stare lipsă/coruptă/validă, idempotență fără extrageri noi, verdict) +
-  proba UI izolată pe portul 8017 (LOTO_JOBS_DB izolată): HTTP 200, fără
-  excepții; aplicația activă NU a fost repornită.
-- Suprafața Kimi (dashboard nou „Daily Finance" + widget + sarcina
-  programată joi/duminică 21:45, creată dezactivată) rămâne disponibilă în
-  paralel; ambele suprafe citesc aceeași stare a porții.
-
 ### Poarta preînregistrată weibull_k0.85 (garanție 6) — 2026-11-09
 
+- La 21.11.2026, panoul și evaluarea automată la deschiderea aplicației au
+  fost retrase din NiceGUI. Protocolul se poate evalua separat prin script.
 - La cererea utilizatorului, candidatul direcțional din ecranul valului 4
   (`weibull_k0.85`, 19 vs 8,0 așteptate la 6/49 pool 16 ținta 5+, dar fără
   Holm) primește o POARTĂ PREÎNREGISTRATĂ pe extrageri viitoare:
