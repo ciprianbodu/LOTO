@@ -4,7 +4,8 @@ import logging
 
 from nicegui import run, ui
 
-from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, MIN_BUDGET_LEI, recommend_games
+from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, MIN_BUDGET_LEI
+from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.ro_text import count
 from ui_lr_portfolio import _codes, _percent, _price
@@ -22,10 +23,18 @@ def _columns(fields):
     ]
 
 
-def _ticket_details(plan):
+def _bench_method(selection):
+    method = selection["method"]
+    if selection.get("fallback"):
+        reason = "lipsește decizia Re-Bench" if selection.get("no_decision") else "metodă de rezervă"
+        return f"{method} ({reason})"
+    return f"{method} (Re-Bench)"
+
+
+def _ticket_details(plan, *, expanded=False):
     fields = [
         ("ticket", "Bilet"), ("zone", "Zonă"), ("code", "Cod LR"),
-        ("pool", "Numere în pool"), ("numbers", "Numere de completat (exemplu)"),
+        ("pool", "Pool"), ("numbers", "Numere de jucat"),
     ]
     if plan["game"] == "joker":
         fields.append(("joker", "Bila Joker"))
@@ -36,22 +45,44 @@ def _ticket_details(plan):
             "zone": chr(ord("A") + zone),
             "code": area["code"],
             "pool": area["pool_size"],
-            "numbers": ", ".join(map(str, area["numbers"])),
-            "joker": area.get("joker"),
+            "numbers": ", ".join(map(str, area["numbers"])) or "—",
+            "joker": area.get("joker") or "—",
         }
         for ticket_number, ticket in enumerate(plan["tickets"], start=1)
         for zone, area in enumerate(ticket)
     ]
-    with ui.expansion(f"Bilete · {plan['game_name']}").classes("w-full"):
-        ui.label(
-            "Numerele ilustrează completarea pentru care este calculată probabilitatea."
-        ).classes("text-caption")
+    with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full"):
+        if error := plan.get("forecast_error"):
+            ui.label(f"Numere indisponibile · {error}").classes("text-warning")
+        if forecast := plan.get("forecast"):
+            date = f" · ultima extragere {forecast['date']}" if forecast["date"] else ""
+            ui.label(
+                f"{forecast['filename']}{date} · "
+                f"{count(forecast['rows'], 'extrageri folosite', 'extragere folosită')}"
+            ).classes("text-caption")
         table = ui.table(
             columns=_columns(fields), rows=rows, row_key="id",
             pagination={"rowsPerPage": 12},
         ).props("dense flat wrap-cells").classes("w-full")
         if len(rows) <= 12:
             table.props("hide-bottom")
+        if forecast:
+            for size, selection in sorted(forecast["selections"].items()):
+                if not forecast["dynamic"]:
+                    evidence = _bench_method(selection)
+                elif selection["reason"] == "insufficient_history":
+                    evidence = f"{selection['method']} · istoric prea scurt pentru selecția walk-forward"
+                else:
+                    hits, random = selection["hits"]["4"], selection["random_hits"]["4"]
+                    evidence = (
+                        f"{selection['method']} · walk-forward 4+ în pool: "
+                        f"{hits} față de {random} pentru martorul aleator, din {selection['validation_draws']} extrageri"
+                    )
+                    if selection["reason"] != "winner":
+                        evidence += " · metodă de rezervă"
+                ui.label(f"Pool {size} · {evidence}").classes("text-caption")
+            if bonus := forecast["joker_selection"]:
+                ui.label(f"Urna 2 Joker · {_bench_method(bonus)}").classes("text-caption")
 
 
 def _render_recommendations(records, budget_lei, objective):
@@ -74,6 +105,7 @@ def _render_recommendations(records, budget_lei, objective):
             f"{count(len(first['tickets']), 'bilete', 'bilet')} · "
             f"{count(first['variants'], 'variante', 'variantă')}"
         ).classes("text-body2")
+    _ticket_details(first, expanded=True)
 
     games = {plan["game"] for plan in records}
     if objective == FOUR_PLUS:
@@ -91,7 +123,7 @@ def _render_recommendations(records, budget_lei, objective):
 
     fields = [
         ("game", "Joc"), ("tickets", "Bilete"), ("variants", "Variante"),
-        ("price", "Total cu taxă"), ("chance", "Șansă pe extragere"),
+        ("price", "Total cu taxă"), ("chance", "Șansă teoretică"),
         ("bound", "Limită superioară"),
     ]
     rows = []
@@ -108,7 +140,7 @@ def _render_recommendations(records, budget_lei, objective):
     ui.table(
         columns=_columns(fields), rows=rows, row_key="game", pagination={"rowsPerPage": 0},
     ).props("dense flat hide-bottom wrap-cells").classes("w-full")
-    for plan in records:
+    for plan in records[1:]:
         _ticket_details(plan)
 
 
@@ -127,11 +159,11 @@ def lr_budget_slider():
     return slider
 
 
-def lr_budget_panel(slider):
+def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
     with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
         ui.label(
-            "Compară schemele oficiale pentru o singură extragere uniformă. "
-            "Totalul include taxa pentru fiecare bilet. La Joker, fiecare zonă folosește o singură bilă Joker."
+            "Șansa teoretică se calculează pentru o extragere uniformă. "
+            "Totalul include taxa de bilet. La Joker, zonele au bile diferite din Urna 2."
         ).classes("text-body2")
         game_options = {"all": "Toate jocurile"}
         game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})
@@ -148,11 +180,13 @@ def lr_budget_panel(slider):
         async def refresh():
             nonlocal revision, running
             revision += 1
+            if output.is_deleted:
+                return
             output.clear()
             if not panel.value:
                 return
             with output:
-                ui.label("Se compară biletele…").classes("text-caption")
+                ui.label("Se compară schemele și se aleg numerele…").classes("text-caption")
             if running:
                 return
             running = True
@@ -162,7 +196,9 @@ def lr_budget_panel(slider):
                     amount, goal = int(slider.value), objective.value
                     game_id = None if game.value == "all" else game.value
                     try:
-                        plans = await run.io_bound(recommend_games, amount, goal, game_id)
+                        plans = await run.io_bound(
+                            recommend_playable_games, amount, goal, game_id, **forecast_inputs(game_id),
+                        )
                     except Exception:
                         logging.getLogger(__name__).exception(
                             "Calcul LR la %d lei pentru %s (%s)", amount, goal, game_id or "all"
@@ -192,3 +228,6 @@ def lr_budget_panel(slider):
         game.on_value_change(refresh)
         slider.on_value_change(on_budget_change)
         objective.on_value_change(refresh)
+        for control in scoring_controls:
+            control.on_value_change(refresh)
+        return refresh
