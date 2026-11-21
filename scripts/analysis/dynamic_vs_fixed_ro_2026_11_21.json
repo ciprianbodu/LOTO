@@ -1,0 +1,7921 @@
+[
+  {
+    "game": "loto_6_49",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      54,
+      5,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      47,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      47,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      57,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      47,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 5,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 432,
+      "markov_lag2": 43,
+      "compact_transition_prior": 32,
+      "compact_multiscale_shrink": 96,
+      "compact_renewal_hazard": 116
+    },
+    "p_two_sided": 0.7265625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 9,
+    "code": 48,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      54,
+      5,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      47,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      47,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      57,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      47,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 5,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 432,
+      "markov_lag2": 43,
+      "compact_transition_prior": 32,
+      "compact_multiscale_shrink": 96,
+      "compact_renewal_hazard": 116
+    },
+    "p_two_sided": 0.7265625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      44,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "vlmm_self_k3",
+    "fixed_method_same_metric": "vlmm_self_k3",
+    "frequency": [
+      57,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      47,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 6,
+    "dynamic_method_draws": {
+      "anti_cooc_last": 22,
+      "interval_extrema_k16": 104,
+      "gap_hazard": 1,
+      "naive_bayes_last": 113,
+      "vlmm_self_k3": 14,
+      "frequency": 33,
+      "hedge_experts_mixture": 10,
+      "autocorr_lag": 10,
+      "compact_renewal_hazard": 79,
+      "dmd_forecast": 20,
+      "knn_feature_pooled": 4,
+      "gap_current": 125,
+      "markov_self_state": 5,
+      "freq_window_200": 5,
+      "logit_pooled_feats": 75,
+      "hurst_persistence": 25,
+      "online_logit_sgd": 20,
+      "compact_multiscale_shrink": 23,
+      "markov_lag2": 16,
+      "ridge_pooled_feats": 15
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 9,
+    "code": 48,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      44,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "vlmm_self_k3",
+    "fixed_method_same_metric": "vlmm_self_k3",
+    "frequency": [
+      57,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      47,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 6,
+    "dynamic_method_draws": {
+      "anti_cooc_last": 22,
+      "interval_extrema_k16": 104,
+      "gap_hazard": 1,
+      "naive_bayes_last": 113,
+      "vlmm_self_k3": 14,
+      "frequency": 33,
+      "hedge_experts_mixture": 10,
+      "autocorr_lag": 10,
+      "compact_renewal_hazard": 79,
+      "dmd_forecast": 20,
+      "knn_feature_pooled": 4,
+      "gap_current": 125,
+      "markov_self_state": 5,
+      "freq_window_200": 5,
+      "logit_pooled_feats": 75,
+      "hurst_persistence": 25,
+      "online_logit_sgd": 20,
+      "compact_multiscale_shrink": 23,
+      "markov_lag2": 16,
+      "ridge_pooled_feats": 15
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      66,
+      9,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      77,
+      10,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      77,
+      10,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      77,
+      10,
+      1,
+      0
+    ],
+    "random": [
+      65,
+      7,
+      0,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "frequency": 367,
+      "markov_lag2": 138,
+      "compact_renewal_hazard": 51,
+      "compact_multiscale_shrink": 84,
+      "compact_transition_prior": 79
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": 49,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      66,
+      9,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "random": [
+      65,
+      6,
+      0,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "frequency": 367,
+      "markov_lag2": 138,
+      "compact_renewal_hazard": 51,
+      "compact_multiscale_shrink": 84,
+      "compact_transition_prior": 79
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": 50,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      66,
+      9,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "random": [
+      65,
+      7,
+      0,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "frequency": 367,
+      "markov_lag2": 138,
+      "compact_renewal_hazard": 51,
+      "compact_multiscale_shrink": 84,
+      "compact_transition_prior": 79
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      57,
+      7,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      59,
+      7,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      59,
+      7,
+      0,
+      0
+    ],
+    "fixed_method": "repeat_last_draw",
+    "fixed_method_same_metric": "repeat_last_draw",
+    "frequency": [
+      77,
+      10,
+      1,
+      0
+    ],
+    "random": [
+      65,
+      7,
+      0,
+      0
+    ],
+    "only_dynamic": 7,
+    "only_fixed": 7,
+    "dynamic_method_draws": {
+      "anti_cooc_last": 9,
+      "markov_lag2": 38,
+      "interval_extrema_k16": 94,
+      "gap_hazard": 13,
+      "naive_bayes_last": 164,
+      "online_logit_sgd": 58,
+      "hedge_experts_mixture": 11,
+      "compact_renewal_hazard": 41,
+      "dmd_forecast": 35,
+      "season_period2": 2,
+      "holt_forecast": 14,
+      "gap_current": 45,
+      "logit_pooled_feats": 27,
+      "drift_linear": 10,
+      "ar_ls_pooled": 46,
+      "ssa_forecast": 20,
+      "compact_transition_prior": 13,
+      "compact_multiscale_shrink": 26,
+      "frequency": 16,
+      "ses_opt_alpha": 15,
+      "markov_self_state": 15,
+      "ridge_pooled_feats": 7
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": 49,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      57,
+      7,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      59,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      59,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "repeat_last_draw",
+    "fixed_method_same_metric": "repeat_last_draw",
+    "frequency": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "random": [
+      65,
+      6,
+      0,
+      0
+    ],
+    "only_dynamic": 7,
+    "only_fixed": 6,
+    "dynamic_method_draws": {
+      "anti_cooc_last": 9,
+      "markov_lag2": 38,
+      "interval_extrema_k16": 94,
+      "gap_hazard": 13,
+      "naive_bayes_last": 164,
+      "online_logit_sgd": 58,
+      "hedge_experts_mixture": 11,
+      "compact_renewal_hazard": 41,
+      "dmd_forecast": 35,
+      "season_period2": 2,
+      "holt_forecast": 14,
+      "gap_current": 45,
+      "logit_pooled_feats": 27,
+      "drift_linear": 10,
+      "ar_ls_pooled": 46,
+      "ssa_forecast": 20,
+      "compact_transition_prior": 13,
+      "compact_multiscale_shrink": 26,
+      "frequency": 16,
+      "ses_opt_alpha": 15,
+      "markov_self_state": 15,
+      "ridge_pooled_feats": 7
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 10,
+    "code": 50,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      57,
+      7,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      59,
+      7,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      59,
+      7,
+      0,
+      0
+    ],
+    "fixed_method": "repeat_last_draw",
+    "fixed_method_same_metric": "repeat_last_draw",
+    "frequency": [
+      77,
+      10,
+      0,
+      0
+    ],
+    "random": [
+      65,
+      7,
+      0,
+      0
+    ],
+    "only_dynamic": 7,
+    "only_fixed": 7,
+    "dynamic_method_draws": {
+      "anti_cooc_last": 9,
+      "markov_lag2": 38,
+      "interval_extrema_k16": 94,
+      "gap_hazard": 13,
+      "naive_bayes_last": 164,
+      "online_logit_sgd": 58,
+      "hedge_experts_mixture": 11,
+      "compact_renewal_hazard": 41,
+      "dmd_forecast": 35,
+      "season_period2": 2,
+      "holt_forecast": 14,
+      "gap_current": 45,
+      "logit_pooled_feats": 27,
+      "drift_linear": 10,
+      "ar_ls_pooled": 46,
+      "ssa_forecast": 20,
+      "compact_transition_prior": 13,
+      "compact_multiscale_shrink": 26,
+      "frequency": 16,
+      "ses_opt_alpha": 15,
+      "markov_self_state": 15,
+      "ridge_pooled_feats": 7
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      87,
+      16,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      76,
+      11,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      76,
+      11,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      90,
+      17,
+      1,
+      0
+    ],
+    "random": [
+      88,
+      14,
+      1,
+      0
+    ],
+    "only_dynamic": 13,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "frequency": 478,
+      "markov_lag2": 19,
+      "compact_renewal_hazard": 56,
+      "compact_multiscale_shrink": 103,
+      "compact_transition_prior": 63
+    },
+    "p_two_sided": 0.38331031799316406,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 11,
+    "code": 56,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      87,
+      16,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      76,
+      11,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      76,
+      11,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      90,
+      17,
+      1,
+      0
+    ],
+    "random": [
+      88,
+      14,
+      1,
+      0
+    ],
+    "only_dynamic": 13,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "frequency": 478,
+      "markov_lag2": 19,
+      "compact_renewal_hazard": 56,
+      "compact_multiscale_shrink": 103,
+      "compact_transition_prior": 63
+    },
+    "p_two_sided": 0.38331031799316406,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      77,
+      14,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      82,
+      9,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      82,
+      9,
+      1,
+      0
+    ],
+    "fixed_method": "rwr_last_draw",
+    "fixed_method_same_metric": "rwr_last_draw",
+    "frequency": [
+      90,
+      17,
+      1,
+      0
+    ],
+    "random": [
+      88,
+      14,
+      1,
+      0
+    ],
+    "only_dynamic": 14,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "hot_consistency": 4,
+      "anti_cooc_last": 1,
+      "gap_hazard": 53,
+      "ewma_cold_hl30": 4,
+      "naive_bayes_last": 59,
+      "cusum_burst": 12,
+      "online_logit_sgd": 87,
+      "frequency": 60,
+      "hedge_experts_mixture": 49,
+      "compact_renewal_hazard": 50,
+      "compact_multiscale_shrink": 53,
+      "dmd_forecast": 52,
+      "gbm_stumps_pooled": 17,
+      "interval_extrema_k16": 3,
+      "freq_window_200": 93,
+      "drift_linear": 14,
+      "compact_transition_prior": 34,
+      "theta_drift": 5,
+      "ar_ls_pooled": 69
+    },
+    "p_two_sided": 0.4048728942871094,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 11,
+    "code": 56,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      77,
+      14,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      82,
+      9,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      82,
+      9,
+      1,
+      0
+    ],
+    "fixed_method": "rwr_last_draw",
+    "fixed_method_same_metric": "rwr_last_draw",
+    "frequency": [
+      90,
+      17,
+      1,
+      0
+    ],
+    "random": [
+      88,
+      14,
+      1,
+      0
+    ],
+    "only_dynamic": 14,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "hot_consistency": 4,
+      "anti_cooc_last": 1,
+      "gap_hazard": 53,
+      "ewma_cold_hl30": 4,
+      "naive_bayes_last": 59,
+      "cusum_burst": 12,
+      "online_logit_sgd": 87,
+      "frequency": 60,
+      "hedge_experts_mixture": 49,
+      "compact_renewal_hazard": 50,
+      "compact_multiscale_shrink": 53,
+      "dmd_forecast": 52,
+      "gbm_stumps_pooled": 17,
+      "interval_extrema_k16": 3,
+      "freq_window_200": 93,
+      "drift_linear": 14,
+      "compact_transition_prior": 34,
+      "theta_drift": 5,
+      "ar_ls_pooled": 69
+    },
+    "p_two_sided": 0.4048728942871094,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      114,
+      16,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      114,
+      16,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      110,
+      23,
+      1,
+      0
+    ],
+    "random": [
+      108,
+      22,
+      1,
+      0
+    ],
+    "only_dynamic": 20,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "frequency": 473,
+      "compact_multiscale_shrink": 89,
+      "compact_renewal_hazard": 32,
+      "markov_lag2": 43,
+      "compact_transition_prior": 82
+    },
+    "p_two_sided": 0.39152830513194203,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": 57,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      110,
+      11,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      114,
+      14,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      114,
+      14,
+      0,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      110,
+      15,
+      0,
+      0
+    ],
+    "random": [
+      108,
+      15,
+      0,
+      0
+    ],
+    "only_dynamic": 9,
+    "only_fixed": 12,
+    "dynamic_method_draws": {
+      "frequency": 473,
+      "compact_multiscale_shrink": 89,
+      "compact_renewal_hazard": 32,
+      "markov_lag2": 43,
+      "compact_transition_prior": 82
+    },
+    "p_two_sided": 0.6636238098144531,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": 58,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      114,
+      16,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      114,
+      16,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      110,
+      23,
+      1,
+      0
+    ],
+    "random": [
+      108,
+      22,
+      1,
+      0
+    ],
+    "only_dynamic": 20,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "frequency": 473,
+      "compact_multiscale_shrink": 89,
+      "compact_renewal_hazard": 32,
+      "markov_lag2": 43,
+      "compact_transition_prior": 82
+    },
+    "p_two_sided": 0.39152830513194203,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      105,
+      15,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      107,
+      13,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      107,
+      13,
+      2,
+      0
+    ],
+    "fixed_method": "rwr_last_draw",
+    "fixed_method_same_metric": "rwr_last_draw",
+    "frequency": [
+      110,
+      23,
+      1,
+      0
+    ],
+    "random": [
+      108,
+      22,
+      1,
+      0
+    ],
+    "only_dynamic": 15,
+    "only_fixed": 13,
+    "dynamic_method_draws": {
+      "cusum_burst": 22,
+      "hot_consistency": 2,
+      "anti_cooc_last": 1,
+      "gap_hazard": 23,
+      "frequency": 109,
+      "vlmm_self_k3": 63,
+      "naive_bayes_last": 6,
+      "online_logit_sgd": 44,
+      "compact_multiscale_shrink": 1,
+      "autocorr_lag": 32,
+      "markov_lag2": 35,
+      "compact_renewal_hazard": 22,
+      "bayes_dirichlet_forget": 13,
+      "hedge_experts_mixture": 41,
+      "logit_pooled_feats": 8,
+      "ses_opt_alpha": 29,
+      "dmd_forecast": 27,
+      "cooc_last3": 22,
+      "spectral_phase": 18,
+      "interval_extrema_k16": 1,
+      "freq_window_200": 43,
+      "drift_linear": 47,
+      "knn_pattern_self": 39,
+      "theta_drift": 1,
+      "nb_lags_pooled": 70
+    },
+    "p_two_sided": 0.8505540192127228,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": 57,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      105,
+      8,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      107,
+      9,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      105,
+      18,
+      1,
+      0
+    ],
+    "fixed_method": "rwr_last_draw",
+    "fixed_method_same_metric": "rhythm_phase",
+    "frequency": [
+      110,
+      15,
+      0,
+      0
+    ],
+    "random": [
+      108,
+      15,
+      0,
+      0
+    ],
+    "only_dynamic": 8,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "cusum_burst": 22,
+      "hot_consistency": 2,
+      "anti_cooc_last": 1,
+      "gap_hazard": 23,
+      "frequency": 109,
+      "vlmm_self_k3": 63,
+      "naive_bayes_last": 6,
+      "online_logit_sgd": 44,
+      "compact_multiscale_shrink": 1,
+      "autocorr_lag": 32,
+      "markov_lag2": 35,
+      "compact_renewal_hazard": 22,
+      "bayes_dirichlet_forget": 13,
+      "hedge_experts_mixture": 41,
+      "logit_pooled_feats": 8,
+      "ses_opt_alpha": 29,
+      "dmd_forecast": 27,
+      "cooc_last3": 22,
+      "spectral_phase": 18,
+      "interval_extrema_k16": 1,
+      "freq_window_200": 43,
+      "drift_linear": 47,
+      "knn_pattern_self": 39,
+      "theta_drift": 1,
+      "nb_lags_pooled": 70
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 12,
+    "code": 58,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      105,
+      15,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      107,
+      13,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      107,
+      13,
+      2,
+      0
+    ],
+    "fixed_method": "rwr_last_draw",
+    "fixed_method_same_metric": "rwr_last_draw",
+    "frequency": [
+      110,
+      23,
+      1,
+      0
+    ],
+    "random": [
+      108,
+      22,
+      1,
+      0
+    ],
+    "only_dynamic": 15,
+    "only_fixed": 13,
+    "dynamic_method_draws": {
+      "cusum_burst": 22,
+      "hot_consistency": 2,
+      "anti_cooc_last": 1,
+      "gap_hazard": 23,
+      "frequency": 109,
+      "vlmm_self_k3": 63,
+      "naive_bayes_last": 6,
+      "online_logit_sgd": 44,
+      "compact_multiscale_shrink": 1,
+      "autocorr_lag": 32,
+      "markov_lag2": 35,
+      "compact_renewal_hazard": 22,
+      "bayes_dirichlet_forget": 13,
+      "hedge_experts_mixture": 41,
+      "logit_pooled_feats": 8,
+      "ses_opt_alpha": 29,
+      "dmd_forecast": 27,
+      "cooc_last3": 22,
+      "spectral_phase": 18,
+      "interval_extrema_k16": 1,
+      "freq_window_200": 43,
+      "drift_linear": 47,
+      "knn_pattern_self": 39,
+      "theta_drift": 1,
+      "nb_lags_pooled": 70
+    },
+    "p_two_sided": 0.8505540192127228,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 16,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      218,
+      62,
+      10,
+      2
+    ],
+    "fixed_pool_choice": [
+      216,
+      62,
+      6,
+      0
+    ],
+    "fixed_same_metric": [
+      216,
+      62,
+      6,
+      0
+    ],
+    "fixed_method": "markov_lag2",
+    "fixed_method_same_metric": "markov_lag2",
+    "frequency": [
+      223,
+      59,
+      10,
+      1
+    ],
+    "random": [
+      218,
+      57,
+      6,
+      1
+    ],
+    "only_dynamic": 43,
+    "only_fixed": 43,
+    "dynamic_method_draws": {
+      "compact_transition_prior": 78,
+      "frequency": 338,
+      "compact_multiscale_shrink": 165,
+      "markov_lag2": 114,
+      "compact_renewal_hazard": 24
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 16,
+    "code": 59,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 719,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      218,
+      58,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      216,
+      57,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      216,
+      57,
+      0,
+      0
+    ],
+    "fixed_method": "markov_lag2",
+    "fixed_method_same_metric": "markov_lag2",
+    "frequency": [
+      223,
+      55,
+      2,
+      0
+    ],
+    "random": [
+      218,
+      56,
+      1,
+      0
+    ],
+    "only_dynamic": 41,
+    "only_fixed": 40,
+    "dynamic_method_draws": {
+      "compact_transition_prior": 78,
+      "frequency": 338,
+      "compact_multiscale_shrink": 165,
+      "markov_lag2": 114,
+      "compact_renewal_hazard": 24
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 16,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      199,
+      45,
+      9,
+      0
+    ],
+    "fixed_pool_choice": [
+      202,
+      58,
+      10,
+      0
+    ],
+    "fixed_same_metric": [
+      202,
+      58,
+      10,
+      0
+    ],
+    "fixed_method": "runs_persistence",
+    "fixed_method_same_metric": "runs_persistence",
+    "frequency": [
+      223,
+      59,
+      10,
+      1
+    ],
+    "random": [
+      218,
+      57,
+      6,
+      1
+    ],
+    "only_dynamic": 40,
+    "only_fixed": 53,
+    "dynamic_method_draws": {
+      "momentum_30_300": 10,
+      "evalue_kelly_w104": 6,
+      "interval_extrema_k16": 10,
+      "knn_draw_similarity": 77,
+      "ewma_cold_hl30": 12,
+      "cusum_burst": 1,
+      "hawkes_cross": 50,
+      "online_logit_sgd": 65,
+      "gap_hazard": 7,
+      "autocorr_lag": 14,
+      "drift_linear": 70,
+      "markov_lag2": 35,
+      "imapa_agg": 1,
+      "knn_feature_pooled": 26,
+      "dmd_forecast": 13,
+      "gap_ratio": 50,
+      "ses_opt_alpha": 14,
+      "ridge_pooled_feats": 1,
+      "croston_interval": 11,
+      "hedge_experts_mixture": 29,
+      "frequency": 28,
+      "ssa_forecast": 70,
+      "compact_multiscale_shrink": 8,
+      "knn_pattern_self": 41,
+      "logit_pooled_feats": 1,
+      "theta_drift": 2,
+      "hurst_persistence": 2,
+      "compact_transition_prior": 3,
+      "pair_lift_last": 27,
+      "nb_lags_pooled": 1,
+      "gbm_stumps_pooled": 20,
+      "ar_ls_pooled": 7,
+      "vlmm_self_k3": 7
+    },
+    "p_two_sided": 0.21315300096890785,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_6_49",
+    "k": 16,
+    "code": 59,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 719,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      199,
+      44,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      202,
+      54,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      202,
+      54,
+      2,
+      0
+    ],
+    "fixed_method": "runs_persistence",
+    "fixed_method_same_metric": "runs_persistence",
+    "frequency": [
+      223,
+      55,
+      2,
+      0
+    ],
+    "random": [
+      218,
+      56,
+      1,
+      0
+    ],
+    "only_dynamic": 40,
+    "only_fixed": 50,
+    "dynamic_method_draws": {
+      "momentum_30_300": 10,
+      "evalue_kelly_w104": 6,
+      "interval_extrema_k16": 10,
+      "knn_draw_similarity": 77,
+      "ewma_cold_hl30": 12,
+      "cusum_burst": 1,
+      "hawkes_cross": 50,
+      "online_logit_sgd": 65,
+      "gap_hazard": 7,
+      "autocorr_lag": 14,
+      "drift_linear": 70,
+      "markov_lag2": 35,
+      "imapa_agg": 1,
+      "knn_feature_pooled": 26,
+      "dmd_forecast": 13,
+      "gap_ratio": 50,
+      "ses_opt_alpha": 14,
+      "ridge_pooled_feats": 1,
+      "croston_interval": 11,
+      "hedge_experts_mixture": 29,
+      "frequency": 28,
+      "ssa_forecast": 70,
+      "compact_multiscale_shrink": 8,
+      "knn_pattern_self": 41,
+      "logit_pooled_feats": 1,
+      "theta_drift": 2,
+      "hurst_persistence": 2,
+      "compact_transition_prior": 3,
+      "pair_lift_last": 27,
+      "nb_lags_pooled": 1,
+      "gbm_stumps_pooled": 20,
+      "ar_ls_pooled": 7,
+      "vlmm_self_k3": 7
+    },
+    "p_two_sided": 0.34283311942078787,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 7,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      24,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "random": [
+      24,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 247,
+      "compact_transition_prior": 73,
+      "compact_multiscale_shrink": 49,
+      "markov_lag2": 96
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 7,
+    "code": 15,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      24,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "random": [
+      24,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 247,
+      "compact_transition_prior": 73,
+      "compact_multiscale_shrink": 49,
+      "markov_lag2": 96
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 7,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      33,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      35,
+      4,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      35,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "random": [
+      24,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "frequency": 74,
+      "dmd_forecast": 47,
+      "compact_transition_prior": 28,
+      "online_logit_sgd": 22,
+      "croston_interval": 36,
+      "cooc_last3": 43,
+      "anti_cooc_last": 5,
+      "gap_ratio": 38,
+      "compact_multiscale_shrink": 17,
+      "ssa_forecast": 49,
+      "autocorr_lag": 4,
+      "hot_consistency": 16,
+      "ridge_pooled_feats": 6,
+      "markov_lag2": 61,
+      "knn_draw_similarity": 18,
+      "ewma_hl30": 1
+    },
+    "p_two_sided": 0.125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 7,
+    "code": 15,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      33,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      35,
+      4,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      35,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      23,
+      0,
+      0,
+      0
+    ],
+    "random": [
+      24,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "frequency": 74,
+      "dmd_forecast": 47,
+      "compact_transition_prior": 28,
+      "online_logit_sgd": 22,
+      "croston_interval": 36,
+      "cooc_last3": 43,
+      "anti_cooc_last": 5,
+      "gap_ratio": 38,
+      "compact_multiscale_shrink": 17,
+      "ssa_forecast": 49,
+      "autocorr_lag": 4,
+      "hot_consistency": 16,
+      "ridge_pooled_feats": 6,
+      "markov_lag2": 61,
+      "knn_draw_similarity": 18,
+      "ewma_hl30": 1
+    },
+    "p_two_sided": 0.125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 8,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      37,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      40,
+      5,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "markov_lag2": 182,
+      "compact_transition_prior": 20,
+      "frequency": 171,
+      "compact_multiscale_shrink": 12,
+      "compact_renewal_hazard": 80
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 8,
+    "code": 16,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      37,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      40,
+      5,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "markov_lag2": 182,
+      "compact_transition_prior": 20,
+      "frequency": 171,
+      "compact_multiscale_shrink": 12,
+      "compact_renewal_hazard": 80
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 8,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      29,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      48,
+      9,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      48,
+      9,
+      0,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      40,
+      5,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "knn_pattern_self": 6,
+      "rank_ensemble_core": 43,
+      "markov_lag2": 59,
+      "compact_transition_prior": 20,
+      "croston_interval": 18,
+      "pair_lift_last": 55,
+      "online_logit_sgd": 1,
+      "neighbor_adjacent": 15,
+      "anti_cooc_last": 25,
+      "cooc_last3": 39,
+      "bayes_dirichlet_forget": 38,
+      "frequency": 52,
+      "autocorr_lag": 12,
+      "ewma_hl30": 17,
+      "ar_ls_pooled": 20,
+      "interval_extrema_k16": 45
+    },
+    "p_two_sided": 0.3876953125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 8,
+    "code": 16,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      29,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      48,
+      9,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      48,
+      9,
+      0,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      34,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      40,
+      5,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "knn_pattern_self": 6,
+      "rank_ensemble_core": 43,
+      "markov_lag2": 59,
+      "compact_transition_prior": 20,
+      "croston_interval": 18,
+      "pair_lift_last": 55,
+      "online_logit_sgd": 1,
+      "neighbor_adjacent": 15,
+      "anti_cooc_last": 25,
+      "cooc_last3": 39,
+      "bayes_dirichlet_forget": 38,
+      "frequency": 52,
+      "autocorr_lag": 12,
+      "ewma_hl30": 17,
+      "ar_ls_pooled": 20,
+      "interval_extrema_k16": 45
+    },
+    "p_two_sided": 0.3876953125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      61,
+      4,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      61,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      53,
+      11,
+      0,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "markov_lag2": 103,
+      "frequency": 354,
+      "compact_transition_prior": 8
+    },
+    "p_two_sided": 0.75390625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 9,
+    "code": 17,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      46,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      61,
+      4,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      61,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      53,
+      11,
+      0,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "markov_lag2": 103,
+      "frequency": 354,
+      "compact_transition_prior": 8
+    },
+    "p_two_sided": 0.75390625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      44,
+      6,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      46,
+      10,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      46,
+      10,
+      0,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      53,
+      11,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "knn_pattern_self": 6,
+      "markov_self_state": 7,
+      "momentum_30_300": 54,
+      "pair_lift_last": 56,
+      "rank_ensemble_core": 11,
+      "frequency": 58,
+      "logit_pooled_feats": 17,
+      "ridge_pooled_feats": 7,
+      "ewma_cold_hl30": 28,
+      "drift_linear": 31,
+      "gap_ratio": 37,
+      "dmd_forecast": 2,
+      "cooc_last3": 9,
+      "pair_transition": 27,
+      "freq_window_200": 21,
+      "bayes_dirichlet_forget": 54,
+      "knn_draw_similarity": 3,
+      "markov_lag2": 21,
+      "interval_extrema_k16": 4,
+      "hurst_persistence": 12
+    },
+    "p_two_sided": 0.3876953125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 9,
+    "code": 17,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      44,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      46,
+      10,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      46,
+      10,
+      0,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      53,
+      11,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 8,
+    "dynamic_method_draws": {
+      "knn_pattern_self": 6,
+      "markov_self_state": 7,
+      "momentum_30_300": 54,
+      "pair_lift_last": 56,
+      "rank_ensemble_core": 11,
+      "frequency": 58,
+      "logit_pooled_feats": 17,
+      "ridge_pooled_feats": 7,
+      "ewma_cold_hl30": 28,
+      "drift_linear": 31,
+      "gap_ratio": 37,
+      "dmd_forecast": 2,
+      "cooc_last3": 9,
+      "pair_transition": 27,
+      "freq_window_200": 21,
+      "bayes_dirichlet_forget": 54,
+      "knn_draw_similarity": 3,
+      "markov_lag2": 21,
+      "interval_extrema_k16": 4,
+      "hurst_persistence": 12
+    },
+    "p_two_sided": 0.3876953125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      66,
+      11,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      69,
+      10,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      69,
+      10,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      67,
+      13,
+      0,
+      0
+    ],
+    "only_dynamic": 10,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "markov_lag2": 88,
+      "frequency": 222,
+      "compact_multiscale_shrink": 39,
+      "compact_transition_prior": 116
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 10,
+    "code": 18,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      66,
+      11,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      69,
+      10,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      69,
+      10,
+      0,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      67,
+      13,
+      0,
+      0
+    ],
+    "only_dynamic": 10,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "markov_lag2": 88,
+      "frequency": 222,
+      "compact_multiscale_shrink": 39,
+      "compact_transition_prior": 116
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      51,
+      5,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      71,
+      12,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      71,
+      12,
+      0,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      67,
+      13,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 11,
+    "dynamic_method_draws": {
+      "markov_lag2": 15,
+      "knn_pattern_self": 27,
+      "imapa_agg": 1,
+      "holt_forecast": 7,
+      "dmd_forecast": 10,
+      "pair_lift_last": 20,
+      "cusum_burst": 63,
+      "freq_window_200": 35,
+      "compact_multiscale_shrink": 2,
+      "cooc_last3": 40,
+      "markov_self_state": 1,
+      "logit_pooled_feats": 25,
+      "ewma_cold_hl30": 25,
+      "drift_linear": 11,
+      "anti_cooc_last": 30,
+      "neighbor_adjacent": 9,
+      "compact_transition_prior": 9,
+      "gap_ratio": 28,
+      "evalue_kelly_w104": 15,
+      "runs_persistence": 13,
+      "frequency": 2,
+      "spectral_phase": 17,
+      "hawkes_cross": 8,
+      "knn_draw_similarity": 14,
+      "haar_multiscale": 30,
+      "knn_feature_pooled": 8
+    },
+    "p_two_sided": 0.11846923828124999,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 10,
+    "code": 18,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      51,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      71,
+      12,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      71,
+      12,
+      0,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      67,
+      13,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 11,
+    "dynamic_method_draws": {
+      "markov_lag2": 15,
+      "knn_pattern_self": 27,
+      "imapa_agg": 1,
+      "holt_forecast": 7,
+      "dmd_forecast": 10,
+      "pair_lift_last": 20,
+      "cusum_burst": 63,
+      "freq_window_200": 35,
+      "compact_multiscale_shrink": 2,
+      "cooc_last3": 40,
+      "markov_self_state": 1,
+      "logit_pooled_feats": 25,
+      "ewma_cold_hl30": 25,
+      "drift_linear": 11,
+      "anti_cooc_last": 30,
+      "neighbor_adjacent": 9,
+      "compact_transition_prior": 9,
+      "gap_ratio": 28,
+      "evalue_kelly_w104": 15,
+      "runs_persistence": 13,
+      "frequency": 2,
+      "spectral_phase": 17,
+      "hawkes_cross": 8,
+      "knn_draw_similarity": 14,
+      "haar_multiscale": 30,
+      "knn_feature_pooled": 8
+    },
+    "p_two_sided": 0.11846923828124999,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      90,
+      20,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      95,
+      24,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      95,
+      24,
+      1,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      94,
+      18,
+      0,
+      0
+    ],
+    "random": [
+      81,
+      17,
+      2,
+      0
+    ],
+    "only_dynamic": 10,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "markov_lag2": 85,
+      "frequency": 167,
+      "compact_multiscale_shrink": 74,
+      "compact_transition_prior": 139
+    },
+    "p_two_sided": 0.5412561893463135,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 11,
+    "code": 25,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      90,
+      20,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      95,
+      24,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      95,
+      24,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      94,
+      18,
+      0,
+      0
+    ],
+    "random": [
+      81,
+      17,
+      0,
+      0
+    ],
+    "only_dynamic": 10,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "markov_lag2": 85,
+      "frequency": 167,
+      "compact_multiscale_shrink": 74,
+      "compact_transition_prior": 139
+    },
+    "p_two_sided": 0.5412561893463135,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      82,
+      20,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      84,
+      19,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      84,
+      19,
+      1,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      94,
+      18,
+      0,
+      0
+    ],
+    "random": [
+      81,
+      17,
+      2,
+      0
+    ],
+    "only_dynamic": 14,
+    "only_fixed": 13,
+    "dynamic_method_draws": {
+      "markov_lag2": 36,
+      "imapa_agg": 9,
+      "holt_forecast": 4,
+      "frequency": 4,
+      "selfcalib_online_logit": 21,
+      "compact_multiscale_shrink": 50,
+      "gbm_stumps_pooled": 6,
+      "runs_persistence": 23,
+      "compact_transition_prior": 56,
+      "gap_ratio": 96,
+      "logit_pooled_feats": 2,
+      "freq_window_200": 62,
+      "spectral_phase": 15,
+      "hot_consistency": 1,
+      "knn_draw_similarity": 15,
+      "hawkes_cross": 5,
+      "haar_multiscale": 31,
+      "autocorr_lag": 1,
+      "evalue_kelly_w104": 8,
+      "knn_feature_pooled": 20
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 11,
+    "code": 25,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      82,
+      20,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      84,
+      19,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      84,
+      19,
+      0,
+      0
+    ],
+    "fixed_method": "hot_consistency",
+    "fixed_method_same_metric": "hot_consistency",
+    "frequency": [
+      94,
+      18,
+      0,
+      0
+    ],
+    "random": [
+      81,
+      17,
+      0,
+      0
+    ],
+    "only_dynamic": 14,
+    "only_fixed": 13,
+    "dynamic_method_draws": {
+      "markov_lag2": 36,
+      "imapa_agg": 9,
+      "holt_forecast": 4,
+      "frequency": 4,
+      "selfcalib_online_logit": 21,
+      "compact_multiscale_shrink": 50,
+      "gbm_stumps_pooled": 6,
+      "runs_persistence": 23,
+      "compact_transition_prior": 56,
+      "gap_ratio": 96,
+      "logit_pooled_feats": 2,
+      "freq_window_200": 62,
+      "spectral_phase": 15,
+      "hot_consistency": 1,
+      "knn_draw_similarity": 15,
+      "hawkes_cross": 5,
+      "haar_multiscale": 31,
+      "autocorr_lag": 1,
+      "evalue_kelly_w104": 8,
+      "knn_feature_pooled": 20
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      99,
+      27,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      120,
+      27,
+      2,
+      0
+    ],
+    "random": [
+      106,
+      21,
+      2,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "markov_lag2": 133,
+      "frequency": 117,
+      "compact_multiscale_shrink": 51,
+      "compact_transition_prior": 94,
+      "compact_renewal_hazard": 70
+    },
+    "p_two_sided": 0.48685024166479707,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 12,
+    "code": 26,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      99,
+      27,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      110,
+      22,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      120,
+      27,
+      1,
+      0
+    ],
+    "random": [
+      106,
+      21,
+      0,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 14,
+    "dynamic_method_draws": {
+      "markov_lag2": 133,
+      "frequency": 117,
+      "compact_multiscale_shrink": 51,
+      "compact_transition_prior": 94,
+      "compact_renewal_hazard": 70
+    },
+    "p_two_sided": 0.48685024166479707,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      105,
+      23,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      119,
+      38,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      119,
+      38,
+      2,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      120,
+      27,
+      2,
+      0
+    ],
+    "random": [
+      106,
+      21,
+      2,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 34,
+    "dynamic_method_draws": {
+      "markov_lag2": 45,
+      "imapa_agg": 23,
+      "knn_draw_similarity": 45,
+      "pair_lift_last": 45,
+      "dmd_forecast": 11,
+      "compact_multiscale_shrink": 15,
+      "logit_pooled_feats": 5,
+      "gbm_stumps_pooled": 8,
+      "runs_persistence": 34,
+      "neighbor_adjacent": 3,
+      "online_logit_sgd": 8,
+      "compact_transition_prior": 9,
+      "drift_linear": 5,
+      "gap_ratio": 60,
+      "gap_current": 45,
+      "cooc_last3": 13,
+      "hot_consistency": 7,
+      "spectral_phase": 15,
+      "freq_window_200": 18,
+      "hawkes_cross": 5,
+      "haar_multiscale": 24,
+      "autocorr_lag": 1,
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 7
+    },
+    "p_two_sided": 0.053438810537711046,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 12,
+    "code": 26,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      105,
+      23,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      119,
+      38,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      119,
+      38,
+      0,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      120,
+      27,
+      1,
+      0
+    ],
+    "random": [
+      106,
+      21,
+      0,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 34,
+    "dynamic_method_draws": {
+      "markov_lag2": 45,
+      "imapa_agg": 23,
+      "knn_draw_similarity": 45,
+      "pair_lift_last": 45,
+      "dmd_forecast": 11,
+      "compact_multiscale_shrink": 15,
+      "logit_pooled_feats": 5,
+      "gbm_stumps_pooled": 8,
+      "runs_persistence": 34,
+      "neighbor_adjacent": 3,
+      "online_logit_sgd": 8,
+      "compact_transition_prior": 9,
+      "drift_linear": 5,
+      "gap_ratio": 60,
+      "gap_current": 45,
+      "cooc_last3": 13,
+      "hot_consistency": 7,
+      "spectral_phase": 15,
+      "freq_window_200": 18,
+      "hawkes_cross": 5,
+      "haar_multiscale": 24,
+      "autocorr_lag": 1,
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 7
+    },
+    "p_two_sided": 0.053438810537711046,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 13,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      118,
+      33,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      132,
+      31,
+      3,
+      0
+    ],
+    "fixed_same_metric": [
+      132,
+      31,
+      3,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      149,
+      33,
+      3,
+      0
+    ],
+    "random": [
+      120,
+      30,
+      4,
+      0
+    ],
+    "only_dynamic": 23,
+    "only_fixed": 21,
+    "dynamic_method_draws": {
+      "markov_lag2": 134,
+      "frequency": 115,
+      "compact_multiscale_shrink": 93,
+      "compact_transition_prior": 51,
+      "compact_renewal_hazard": 72
+    },
+    "p_two_sided": 0.880395821280672,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 13,
+    "code": 27,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      118,
+      33,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      132,
+      31,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      132,
+      31,
+      1,
+      0
+    ],
+    "fixed_method": "compact_renewal_hazard",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      149,
+      33,
+      1,
+      0
+    ],
+    "random": [
+      120,
+      30,
+      1,
+      0
+    ],
+    "only_dynamic": 23,
+    "only_fixed": 21,
+    "dynamic_method_draws": {
+      "markov_lag2": 134,
+      "frequency": 115,
+      "compact_multiscale_shrink": 93,
+      "compact_transition_prior": 51,
+      "compact_renewal_hazard": 72
+    },
+    "p_two_sided": 0.880395821280672,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 13,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      137,
+      22,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      143,
+      43,
+      7,
+      0
+    ],
+    "fixed_same_metric": [
+      143,
+      43,
+      7,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      149,
+      33,
+      3,
+      0
+    ],
+    "random": [
+      120,
+      30,
+      4,
+      0
+    ],
+    "only_dynamic": 18,
+    "only_fixed": 39,
+    "dynamic_method_draws": {
+      "markov_lag2": 28,
+      "drift_linear": 11,
+      "knn_draw_similarity": 54,
+      "interval_extrema_k16": 2,
+      "pair_lift_last": 17,
+      "freq_window_200": 7,
+      "compact_multiscale_shrink": 4,
+      "hurst_persistence": 86,
+      "season_period2": 10,
+      "neighbor_adjacent": 23,
+      "momentum_30_300": 3,
+      "compact_transition_prior": 5,
+      "gap_ratio": 35,
+      "croston_interval": 14,
+      "gap_current": 27,
+      "cooc_last3": 14,
+      "pair_transition": 2,
+      "logit_pooled_feats": 9,
+      "dmd_forecast": 10,
+      "autocorr_lag": 18,
+      "repeat_last_draw": 1,
+      "online_logit_sgd": 26,
+      "selfcalib_online_logit": 7,
+      "hot_consistency": 6,
+      "cusum_burst": 2,
+      "spectral_phase": 1,
+      "haar_multiscale": 17,
+      "ewma_cold_hl30": 17,
+      "knn_feature_pooled": 8,
+      "evalue_kelly_w104": 1
+    },
+    "p_two_sided": 0.0075081755341502,
+    "p_holm": 0.450490532049012
+  },
+  {
+    "game": "loto_5_40",
+    "k": 13,
+    "code": 27,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      137,
+      22,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      143,
+      43,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      143,
+      43,
+      1,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      149,
+      33,
+      1,
+      0
+    ],
+    "random": [
+      120,
+      30,
+      1,
+      0
+    ],
+    "only_dynamic": 18,
+    "only_fixed": 39,
+    "dynamic_method_draws": {
+      "markov_lag2": 28,
+      "drift_linear": 11,
+      "knn_draw_similarity": 54,
+      "interval_extrema_k16": 2,
+      "pair_lift_last": 17,
+      "freq_window_200": 7,
+      "compact_multiscale_shrink": 4,
+      "hurst_persistence": 86,
+      "season_period2": 10,
+      "neighbor_adjacent": 23,
+      "momentum_30_300": 3,
+      "compact_transition_prior": 5,
+      "gap_ratio": 35,
+      "croston_interval": 14,
+      "gap_current": 27,
+      "cooc_last3": 14,
+      "pair_transition": 2,
+      "logit_pooled_feats": 9,
+      "dmd_forecast": 10,
+      "autocorr_lag": 18,
+      "repeat_last_draw": 1,
+      "online_logit_sgd": 26,
+      "selfcalib_online_logit": 7,
+      "hot_consistency": 6,
+      "cusum_burst": 2,
+      "spectral_phase": 1,
+      "haar_multiscale": 17,
+      "ewma_cold_hl30": 17,
+      "knn_feature_pooled": 8,
+      "evalue_kelly_w104": 1
+    },
+    "p_two_sided": 0.0075081755341502,
+    "p_holm": 0.450490532049012
+  },
+  {
+    "game": "loto_5_40",
+    "k": 14,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      156,
+      44,
+      6,
+      0
+    ],
+    "fixed_pool_choice": [
+      169,
+      47,
+      4,
+      0
+    ],
+    "fixed_same_metric": [
+      169,
+      47,
+      4,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      168,
+      43,
+      4,
+      0
+    ],
+    "random": [
+      146,
+      45,
+      4,
+      0
+    ],
+    "only_dynamic": 26,
+    "only_fixed": 29,
+    "dynamic_method_draws": {
+      "markov_lag2": 136,
+      "frequency": 93,
+      "compact_multiscale_shrink": 16,
+      "compact_transition_prior": 135,
+      "compact_renewal_hazard": 85
+    },
+    "p_two_sided": 0.7877061896700431,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 14,
+    "code": 28,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      156,
+      44,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      169,
+      47,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      169,
+      47,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      168,
+      43,
+      0,
+      0
+    ],
+    "random": [
+      146,
+      45,
+      0,
+      0
+    ],
+    "only_dynamic": 26,
+    "only_fixed": 29,
+    "dynamic_method_draws": {
+      "markov_lag2": 136,
+      "frequency": 93,
+      "compact_multiscale_shrink": 16,
+      "compact_transition_prior": 135,
+      "compact_renewal_hazard": 85
+    },
+    "p_two_sided": 0.7877061896700431,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 14,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      149,
+      34,
+      6,
+      0
+    ],
+    "fixed_pool_choice": [
+      165,
+      51,
+      9,
+      0
+    ],
+    "fixed_same_metric": [
+      165,
+      51,
+      9,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      168,
+      43,
+      4,
+      0
+    ],
+    "random": [
+      146,
+      45,
+      4,
+      0
+    ],
+    "only_dynamic": 29,
+    "only_fixed": 46,
+    "dynamic_method_draws": {
+      "knn_draw_similarity": 70,
+      "drift_linear": 43,
+      "ridge_pooled_feats": 28,
+      "markov_lag2": 4,
+      "ar_ls_pooled": 17,
+      "season_period2": 2,
+      "logit_pooled_feats": 46,
+      "hurst_persistence": 23,
+      "online_logit_sgd": 8,
+      "compact_transition_prior": 5,
+      "croston_interval": 26,
+      "neighbor_adjacent": 72,
+      "cooc_last3": 10,
+      "gap_current": 22,
+      "gap_ratio": 7,
+      "compact_renewal_hazard": 4,
+      "dmd_forecast": 4,
+      "autocorr_lag": 3,
+      "selfcalib_online_logit": 9,
+      "spectral_phase": 16,
+      "pagerank_cooc": 6,
+      "anti_cooc_last": 9,
+      "momentum_30_300": 3,
+      "ewma_cold_hl30": 28
+    },
+    "p_two_sided": 0.06394991646706692,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 14,
+    "code": 28,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      149,
+      34,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      165,
+      51,
+      5,
+      0
+    ],
+    "fixed_same_metric": [
+      165,
+      51,
+      5,
+      0
+    ],
+    "fixed_method": "pair_lift_last",
+    "fixed_method_same_metric": "pair_lift_last",
+    "frequency": [
+      168,
+      43,
+      0,
+      0
+    ],
+    "random": [
+      146,
+      45,
+      0,
+      0
+    ],
+    "only_dynamic": 29,
+    "only_fixed": 46,
+    "dynamic_method_draws": {
+      "knn_draw_similarity": 70,
+      "drift_linear": 43,
+      "ridge_pooled_feats": 28,
+      "markov_lag2": 4,
+      "ar_ls_pooled": 17,
+      "season_period2": 2,
+      "logit_pooled_feats": 46,
+      "hurst_persistence": 23,
+      "online_logit_sgd": 8,
+      "compact_transition_prior": 5,
+      "croston_interval": 26,
+      "neighbor_adjacent": 72,
+      "cooc_last3": 10,
+      "gap_current": 22,
+      "gap_ratio": 7,
+      "compact_renewal_hazard": 4,
+      "dmd_forecast": 4,
+      "autocorr_lag": 3,
+      "selfcalib_online_logit": 9,
+      "spectral_phase": 16,
+      "pagerank_cooc": 6,
+      "anti_cooc_last": 9,
+      "momentum_30_300": 3,
+      "ewma_cold_hl30": 28
+    },
+    "p_two_sided": 0.06394991646706692,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      188,
+      51,
+      8,
+      0
+    ],
+    "fixed_pool_choice": [
+      195,
+      63,
+      8,
+      0
+    ],
+    "fixed_same_metric": [
+      195,
+      63,
+      8,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      183,
+      52,
+      7,
+      0
+    ],
+    "random": [
+      178,
+      54,
+      7,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 31,
+    "dynamic_method_draws": {
+      "markov_lag2": 68,
+      "frequency": 75,
+      "compact_transition_prior": 197,
+      "compact_multiscale_shrink": 27,
+      "compact_renewal_hazard": 98
+    },
+    "p_two_sided": 0.11892045255943628,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": 35,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      188,
+      39,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      195,
+      52,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      183,
+      42,
+      1,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      183,
+      42,
+      1,
+      0
+    ],
+    "random": [
+      178,
+      49,
+      0,
+      0
+    ],
+    "only_dynamic": 15,
+    "only_fixed": 28,
+    "dynamic_method_draws": {
+      "markov_lag2": 68,
+      "frequency": 75,
+      "compact_transition_prior": 197,
+      "compact_multiscale_shrink": 27,
+      "compact_renewal_hazard": 98
+    },
+    "p_two_sided": 0.0659940344557981,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": 36,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      188,
+      51,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      195,
+      63,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      195,
+      63,
+      0,
+      0
+    ],
+    "fixed_method": "compact_transition_prior",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      183,
+      52,
+      1,
+      0
+    ],
+    "random": [
+      178,
+      54,
+      2,
+      0
+    ],
+    "only_dynamic": 19,
+    "only_fixed": 31,
+    "dynamic_method_draws": {
+      "markov_lag2": 68,
+      "frequency": 75,
+      "compact_transition_prior": 197,
+      "compact_multiscale_shrink": 27,
+      "compact_renewal_hazard": 98
+    },
+    "p_two_sided": 0.11892045255943628,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      180,
+      55,
+      8,
+      0
+    ],
+    "fixed_pool_choice": [
+      200,
+      56,
+      6,
+      1
+    ],
+    "fixed_same_metric": [
+      200,
+      56,
+      6,
+      1
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      183,
+      52,
+      7,
+      0
+    ],
+    "random": [
+      178,
+      54,
+      7,
+      0
+    ],
+    "only_dynamic": 47,
+    "only_fixed": 48,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "drift_linear": 36,
+      "knn_draw_similarity": 57,
+      "ridge_pooled_feats": 22,
+      "ewma_cold_hl30": 29,
+      "nb_lags_pooled": 15,
+      "knn_feature_pooled": 9,
+      "compact_transition_prior": 12,
+      "online_logit_sgd": 42,
+      "anti_cooc_last": 71,
+      "logit_pooled_feats": 3,
+      "cooc_last3": 37,
+      "croston_interval": 64,
+      "compact_renewal_hazard": 4,
+      "pair_lift_last": 1,
+      "rank_ensemble_core": 5,
+      "selfcalib_online_logit": 10,
+      "hot_consistency": 44,
+      "spectral_phase": 1,
+      "neighbor_adjacent": 1
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": 35,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      180,
+      46,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      200,
+      48,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      193,
+      54,
+      1,
+      0
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "evalue_kelly_w104",
+    "frequency": [
+      183,
+      42,
+      1,
+      0
+    ],
+    "random": [
+      178,
+      49,
+      0,
+      0
+    ],
+    "only_dynamic": 38,
+    "only_fixed": 40,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "drift_linear": 36,
+      "knn_draw_similarity": 57,
+      "ridge_pooled_feats": 22,
+      "ewma_cold_hl30": 29,
+      "nb_lags_pooled": 15,
+      "knn_feature_pooled": 9,
+      "compact_transition_prior": 12,
+      "online_logit_sgd": 42,
+      "anti_cooc_last": 71,
+      "logit_pooled_feats": 3,
+      "cooc_last3": 37,
+      "croston_interval": 64,
+      "compact_renewal_hazard": 4,
+      "pair_lift_last": 1,
+      "rank_ensemble_core": 5,
+      "selfcalib_online_logit": 10,
+      "hot_consistency": 44,
+      "spectral_phase": 1,
+      "neighbor_adjacent": 1
+    },
+    "p_two_sided": 0.9099464518745242,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 15,
+    "code": 36,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      180,
+      55,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      200,
+      56,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      200,
+      56,
+      2,
+      0
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      183,
+      52,
+      1,
+      0
+    ],
+    "random": [
+      178,
+      54,
+      2,
+      0
+    ],
+    "only_dynamic": 47,
+    "only_fixed": 48,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "drift_linear": 36,
+      "knn_draw_similarity": 57,
+      "ridge_pooled_feats": 22,
+      "ewma_cold_hl30": 29,
+      "nb_lags_pooled": 15,
+      "knn_feature_pooled": 9,
+      "compact_transition_prior": 12,
+      "online_logit_sgd": 42,
+      "anti_cooc_last": 71,
+      "logit_pooled_feats": 3,
+      "cooc_last3": 37,
+      "croston_interval": 64,
+      "compact_renewal_hazard": 4,
+      "pair_lift_last": 1,
+      "rank_ensemble_core": 5,
+      "selfcalib_online_logit": 10,
+      "hot_consistency": 44,
+      "spectral_phase": 1,
+      "neighbor_adjacent": 1
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      205,
+      78,
+      16,
+      0
+    ],
+    "fixed_pool_choice": [
+      204,
+      73,
+      12,
+      3
+    ],
+    "fixed_same_metric": [
+      204,
+      73,
+      12,
+      3
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      213,
+      67,
+      10,
+      1
+    ],
+    "random": [
+      198,
+      70,
+      13,
+      0
+    ],
+    "only_dynamic": 54,
+    "only_fixed": 49,
+    "dynamic_method_draws": {
+      "frequency": 74,
+      "compact_multiscale_shrink": 66,
+      "compact_transition_prior": 240,
+      "compact_renewal_hazard": 33,
+      "markov_lag2": 52
+    },
+    "p_two_sided": 0.6936859650244834,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": 37,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      205,
+      70,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      204,
+      66,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      204,
+      66,
+      1,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      213,
+      62,
+      1,
+      0
+    ],
+    "random": [
+      198,
+      65,
+      0,
+      0
+    ],
+    "only_dynamic": 51,
+    "only_fixed": 47,
+    "dynamic_method_draws": {
+      "frequency": 74,
+      "compact_multiscale_shrink": 66,
+      "compact_transition_prior": 240,
+      "compact_renewal_hazard": 33,
+      "markov_lag2": 52
+    },
+    "p_two_sided": 0.7620362195292442,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": 38,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      205,
+      78,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      204,
+      73,
+      3,
+      0
+    ],
+    "fixed_same_metric": [
+      204,
+      73,
+      3,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      213,
+      67,
+      1,
+      0
+    ],
+    "random": [
+      198,
+      70,
+      1,
+      0
+    ],
+    "only_dynamic": 54,
+    "only_fixed": 49,
+    "dynamic_method_draws": {
+      "frequency": 74,
+      "compact_multiscale_shrink": 66,
+      "compact_transition_prior": 240,
+      "compact_renewal_hazard": 33,
+      "markov_lag2": 52
+    },
+    "p_two_sided": 0.6936859650244834,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      210,
+      73,
+      13,
+      0
+    ],
+    "fixed_pool_choice": [
+      217,
+      86,
+      13,
+      3
+    ],
+    "fixed_same_metric": [
+      217,
+      86,
+      13,
+      3
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      213,
+      67,
+      10,
+      1
+    ],
+    "random": [
+      198,
+      70,
+      13,
+      0
+    ],
+    "only_dynamic": 39,
+    "only_fixed": 52,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "rank_ensemble_core": 40,
+      "markov_pairs": 5,
+      "knn_draw_similarity": 10,
+      "compact_transition_prior": 100,
+      "theta_drift": 54,
+      "anti_cooc_last": 24,
+      "drift_linear": 52,
+      "croston_interval": 47,
+      "dmd_forecast": 28,
+      "cooc_last3": 1,
+      "season_period2": 3,
+      "hedge_experts_mixture": 3,
+      "neighbor_adjacent": 49,
+      "interval_extrema_k16": 2,
+      "hot_consistency": 5,
+      "ewma_hl30": 6,
+      "markov_lag2": 9,
+      "ewma_cold_hl30": 25
+    },
+    "p_two_sided": 0.20817442238117598,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": 37,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      210,
+      67,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      217,
+      82,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      217,
+      82,
+      2,
+      0
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      213,
+      62,
+      1,
+      0
+    ],
+    "random": [
+      198,
+      65,
+      0,
+      0
+    ],
+    "only_dynamic": 36,
+    "only_fixed": 51,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "rank_ensemble_core": 40,
+      "markov_pairs": 5,
+      "knn_draw_similarity": 10,
+      "compact_transition_prior": 100,
+      "theta_drift": 54,
+      "anti_cooc_last": 24,
+      "drift_linear": 52,
+      "croston_interval": 47,
+      "dmd_forecast": 28,
+      "cooc_last3": 1,
+      "season_period2": 3,
+      "hedge_experts_mixture": 3,
+      "neighbor_adjacent": 49,
+      "interval_extrema_k16": 2,
+      "hot_consistency": 5,
+      "ewma_hl30": 6,
+      "markov_lag2": 9,
+      "ewma_cold_hl30": 25
+    },
+    "p_two_sided": 0.1329018851954619,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 16,
+    "code": 38,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      210,
+      73,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      217,
+      86,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      217,
+      86,
+      1,
+      0
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      213,
+      67,
+      1,
+      0
+    ],
+    "random": [
+      198,
+      70,
+      1,
+      0
+    ],
+    "only_dynamic": 39,
+    "only_fixed": 52,
+    "dynamic_method_draws": {
+      "gap_hazard": 2,
+      "rank_ensemble_core": 40,
+      "markov_pairs": 5,
+      "knn_draw_similarity": 10,
+      "compact_transition_prior": 100,
+      "theta_drift": 54,
+      "anti_cooc_last": 24,
+      "drift_linear": 52,
+      "croston_interval": 47,
+      "dmd_forecast": 28,
+      "cooc_last3": 1,
+      "season_period2": 3,
+      "hedge_experts_mixture": 3,
+      "neighbor_adjacent": 49,
+      "interval_extrema_k16": 2,
+      "hot_consistency": 5,
+      "ewma_hl30": 6,
+      "markov_lag2": 9,
+      "ewma_cold_hl30": 25
+    },
+    "p_two_sided": 0.20817442238117598,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      238,
+      95,
+      22,
+      1
+    ],
+    "fixed_pool_choice": [
+      230,
+      92,
+      17,
+      1
+    ],
+    "fixed_same_metric": [
+      230,
+      92,
+      17,
+      1
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      230,
+      92,
+      17,
+      1
+    ],
+    "random": [
+      233,
+      90,
+      21,
+      0
+    ],
+    "only_dynamic": 29,
+    "only_fixed": 26,
+    "dynamic_method_draws": {
+      "markov_lag2": 31,
+      "frequency": 189,
+      "compact_transition_prior": 213,
+      "compact_multiscale_shrink": 26,
+      "compact_renewal_hazard": 6
+    },
+    "p_two_sided": 0.7877061896700431,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": 45,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      238,
+      92,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      230,
+      89,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      239,
+      93,
+      2,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "compact_transition_prior",
+    "frequency": [
+      230,
+      89,
+      2,
+      0
+    ],
+    "random": [
+      233,
+      87,
+      3,
+      0
+    ],
+    "only_dynamic": 30,
+    "only_fixed": 27,
+    "dynamic_method_draws": {
+      "markov_lag2": 31,
+      "frequency": 189,
+      "compact_transition_prior": 213,
+      "compact_multiscale_shrink": 26,
+      "compact_renewal_hazard": 6
+    },
+    "p_two_sided": 0.7913664277791806,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": 46,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      238,
+      95,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      230,
+      92,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      230,
+      92,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      230,
+      92,
+      1,
+      0
+    ],
+    "random": [
+      233,
+      90,
+      2,
+      0
+    ],
+    "only_dynamic": 29,
+    "only_fixed": 26,
+    "dynamic_method_draws": {
+      "markov_lag2": 31,
+      "frequency": 189,
+      "compact_transition_prior": 213,
+      "compact_multiscale_shrink": 26,
+      "compact_renewal_hazard": 6
+    },
+    "p_two_sided": 0.7877061896700431,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      239,
+      80,
+      13,
+      1
+    ],
+    "fixed_pool_choice": [
+      242,
+      99,
+      20,
+      3
+    ],
+    "fixed_same_metric": [
+      242,
+      99,
+      20,
+      3
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      230,
+      92,
+      17,
+      1
+    ],
+    "random": [
+      233,
+      90,
+      21,
+      0
+    ],
+    "only_dynamic": 45,
+    "only_fixed": 64,
+    "dynamic_method_draws": {
+      "drift_linear": 37,
+      "rank_ensemble_core": 25,
+      "pair_transition": 1,
+      "hedge_experts_mixture": 1,
+      "knn_draw_similarity": 15,
+      "season_period2": 3,
+      "naive_bayes_last": 13,
+      "compact_transition_prior": 36,
+      "ridge_pooled_feats": 6,
+      "runs_persistence": 2,
+      "gbm_stumps_pooled": 21,
+      "online_logit_sgd": 87,
+      "dmd_forecast": 32,
+      "logit_pooled_feats": 3,
+      "theta_drift": 26,
+      "neighbor_adjacent": 31,
+      "anti_cooc_last": 1,
+      "freq_window_200": 57,
+      "croston_interval": 24,
+      "interval_extrema_k16": 1,
+      "ewma_hl30": 7,
+      "hot_consistency": 16,
+      "ewma_cold_hl30": 11,
+      "frequency": 6,
+      "ssa_forecast": 3
+    },
+    "p_two_sided": 0.08422157489669987,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": 45,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      239,
+      74,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      242,
+      94,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      242,
+      94,
+      1,
+      0
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      230,
+      89,
+      2,
+      0
+    ],
+    "random": [
+      233,
+      87,
+      3,
+      0
+    ],
+    "only_dynamic": 40,
+    "only_fixed": 60,
+    "dynamic_method_draws": {
+      "drift_linear": 37,
+      "rank_ensemble_core": 25,
+      "pair_transition": 1,
+      "hedge_experts_mixture": 1,
+      "knn_draw_similarity": 15,
+      "season_period2": 3,
+      "naive_bayes_last": 13,
+      "compact_transition_prior": 36,
+      "ridge_pooled_feats": 6,
+      "runs_persistence": 2,
+      "gbm_stumps_pooled": 21,
+      "online_logit_sgd": 87,
+      "dmd_forecast": 32,
+      "logit_pooled_feats": 3,
+      "theta_drift": 26,
+      "neighbor_adjacent": 31,
+      "anti_cooc_last": 1,
+      "freq_window_200": 57,
+      "croston_interval": 24,
+      "interval_extrema_k16": 1,
+      "ewma_hl30": 7,
+      "hot_consistency": 16,
+      "ewma_cold_hl30": 11,
+      "frequency": 6,
+      "ssa_forecast": 3
+    },
+    "p_two_sided": 0.05688793364098089,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 17,
+    "code": 46,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      239,
+      80,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      242,
+      99,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      242,
+      99,
+      2,
+      0
+    ],
+    "fixed_method": "drift_linear",
+    "fixed_method_same_metric": "drift_linear",
+    "frequency": [
+      230,
+      92,
+      1,
+      0
+    ],
+    "random": [
+      233,
+      90,
+      2,
+      0
+    ],
+    "only_dynamic": 45,
+    "only_fixed": 64,
+    "dynamic_method_draws": {
+      "drift_linear": 37,
+      "rank_ensemble_core": 25,
+      "pair_transition": 1,
+      "hedge_experts_mixture": 1,
+      "knn_draw_similarity": 15,
+      "season_period2": 3,
+      "naive_bayes_last": 13,
+      "compact_transition_prior": 36,
+      "ridge_pooled_feats": 6,
+      "runs_persistence": 2,
+      "gbm_stumps_pooled": 21,
+      "online_logit_sgd": 87,
+      "dmd_forecast": 32,
+      "logit_pooled_feats": 3,
+      "theta_drift": 26,
+      "neighbor_adjacent": 31,
+      "anti_cooc_last": 1,
+      "freq_window_200": 57,
+      "croston_interval": 24,
+      "interval_extrema_k16": 1,
+      "ewma_hl30": 7,
+      "hot_consistency": 16,
+      "ewma_cold_hl30": 11,
+      "frequency": 6,
+      "ssa_forecast": 3
+    },
+    "p_two_sided": 0.08422157489669987,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 18,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      269,
+      119,
+      26,
+      1
+    ],
+    "fixed_pool_choice": [
+      261,
+      116,
+      26,
+      1
+    ],
+    "fixed_same_metric": [
+      261,
+      116,
+      26,
+      1
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      261,
+      116,
+      26,
+      1
+    ],
+    "random": [
+      260,
+      113,
+      24,
+      3
+    ],
+    "only_dynamic": 25,
+    "only_fixed": 22,
+    "dynamic_method_draws": {
+      "markov_lag2": 11,
+      "frequency": 272,
+      "compact_transition_prior": 162,
+      "compact_multiscale_shrink": 20
+    },
+    "p_two_sided": 0.7708669945730263,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 18,
+    "code": 47,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      269,
+      119,
+      4,
+      0
+    ],
+    "fixed_pool_choice": [
+      261,
+      116,
+      3,
+      0
+    ],
+    "fixed_same_metric": [
+      261,
+      116,
+      3,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      261,
+      116,
+      3,
+      0
+    ],
+    "random": [
+      260,
+      113,
+      1,
+      0
+    ],
+    "only_dynamic": 25,
+    "only_fixed": 22,
+    "dynamic_method_draws": {
+      "markov_lag2": 11,
+      "frequency": 272,
+      "compact_transition_prior": 162,
+      "compact_multiscale_shrink": 20
+    },
+    "p_two_sided": 0.7708669945730263,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 18,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      282,
+      110,
+      20,
+      1
+    ],
+    "fixed_pool_choice": [
+      254,
+      106,
+      29,
+      2
+    ],
+    "fixed_same_metric": [
+      254,
+      106,
+      29,
+      2
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      261,
+      116,
+      26,
+      1
+    ],
+    "random": [
+      260,
+      113,
+      24,
+      3
+    ],
+    "only_dynamic": 73,
+    "only_fixed": 69,
+    "dynamic_method_draws": {
+      "drift_linear": 44,
+      "rank_ensemble_core": 6,
+      "pair_transition": 10,
+      "hedge_experts_mixture": 1,
+      "knn_draw_similarity": 9,
+      "online_logit_sgd": 110,
+      "compact_transition_prior": 16,
+      "frequency": 29,
+      "ewma_cold_hl30": 1,
+      "ridge_pooled_feats": 13,
+      "dmd_forecast": 45,
+      "logit_pooled_feats": 4,
+      "neighbor_adjacent": 31,
+      "theta_drift": 16,
+      "freq_window_200": 61,
+      "croston_interval": 10,
+      "gap_ratio": 2,
+      "naive_bayes_last": 5,
+      "hot_consistency": 36,
+      "ewma_hl30": 1,
+      "season_period2": 8,
+      "ssa_forecast": 1,
+      "knn_feature_pooled": 6
+    },
+    "p_two_sided": 0.8013390218104018,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 18,
+    "code": 47,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      282,
+      110,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      254,
+      106,
+      2,
+      0
+    ],
+    "fixed_same_metric": [
+      254,
+      106,
+      2,
+      0
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      261,
+      116,
+      3,
+      0
+    ],
+    "random": [
+      260,
+      113,
+      1,
+      0
+    ],
+    "only_dynamic": 73,
+    "only_fixed": 69,
+    "dynamic_method_draws": {
+      "drift_linear": 44,
+      "rank_ensemble_core": 6,
+      "pair_transition": 10,
+      "hedge_experts_mixture": 1,
+      "knn_draw_similarity": 9,
+      "online_logit_sgd": 110,
+      "compact_transition_prior": 16,
+      "frequency": 29,
+      "ewma_cold_hl30": 1,
+      "ridge_pooled_feats": 13,
+      "dmd_forecast": 45,
+      "logit_pooled_feats": 4,
+      "neighbor_adjacent": 31,
+      "theta_drift": 16,
+      "freq_window_200": 61,
+      "croston_interval": 10,
+      "gap_ratio": 2,
+      "naive_bayes_last": 5,
+      "hot_consistency": 36,
+      "ewma_hl30": 1,
+      "season_period2": 8,
+      "ssa_forecast": 1,
+      "knn_feature_pooled": 6
+    },
+    "p_two_sided": 0.8013390218104018,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 19,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      286,
+      141,
+      35,
+      4
+    ],
+    "fixed_pool_choice": [
+      291,
+      140,
+      37,
+      2
+    ],
+    "fixed_same_metric": [
+      291,
+      140,
+      37,
+      2
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      291,
+      140,
+      37,
+      2
+    ],
+    "random": [
+      295,
+      125,
+      34,
+      4
+    ],
+    "only_dynamic": 30,
+    "only_fixed": 29,
+    "dynamic_method_draws": {
+      "markov_lag2": 21,
+      "frequency": 259,
+      "compact_transition_prior": 165,
+      "compact_multiscale_shrink": 20
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 19,
+    "code": 48,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 465,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      286,
+      141,
+      6,
+      0
+    ],
+    "fixed_pool_choice": [
+      291,
+      140,
+      7,
+      0
+    ],
+    "fixed_same_metric": [
+      291,
+      140,
+      7,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      291,
+      140,
+      7,
+      0
+    ],
+    "random": [
+      295,
+      125,
+      6,
+      0
+    ],
+    "only_dynamic": 30,
+    "only_fixed": 29,
+    "dynamic_method_draws": {
+      "markov_lag2": 21,
+      "frequency": 259,
+      "compact_transition_prior": 165,
+      "compact_multiscale_shrink": 20
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 19,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      282,
+      130,
+      26,
+      2
+    ],
+    "fixed_pool_choice": [
+      282,
+      128,
+      37,
+      2
+    ],
+    "fixed_same_metric": [
+      282,
+      128,
+      37,
+      2
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      291,
+      140,
+      37,
+      2
+    ],
+    "random": [
+      295,
+      125,
+      34,
+      4
+    ],
+    "only_dynamic": 85,
+    "only_fixed": 83,
+    "dynamic_method_draws": {
+      "drift_linear": 86,
+      "online_logit_sgd": 69,
+      "compact_transition_prior": 3,
+      "hawkes_cross": 17,
+      "ewma_cold_hl30": 22,
+      "dmd_forecast": 31,
+      "ridge_pooled_feats": 2,
+      "logit_pooled_feats": 10,
+      "neighbor_adjacent": 44,
+      "frequency": 16,
+      "croston_interval": 10,
+      "freq_window_200": 71,
+      "rank_ensemble_core": 1,
+      "season_period2": 47,
+      "interval_extrema_k16": 24,
+      "anti_cooc_last": 4,
+      "ewma_hl30": 8
+    },
+    "p_two_sided": 0.9385334053887999,
+    "p_holm": 1.0
+  },
+  {
+    "game": "loto_5_40",
+    "k": 19,
+    "code": 48,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 465,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      282,
+      130,
+      3,
+      0
+    ],
+    "fixed_pool_choice": [
+      282,
+      128,
+      4,
+      0
+    ],
+    "fixed_same_metric": [
+      282,
+      128,
+      4,
+      0
+    ],
+    "fixed_method": "cusum_burst",
+    "fixed_method_same_metric": "cusum_burst",
+    "frequency": [
+      291,
+      140,
+      7,
+      0
+    ],
+    "random": [
+      295,
+      125,
+      6,
+      0
+    ],
+    "only_dynamic": 85,
+    "only_fixed": 83,
+    "dynamic_method_draws": {
+      "drift_linear": 86,
+      "online_logit_sgd": 69,
+      "compact_transition_prior": 3,
+      "hawkes_cross": 17,
+      "ewma_cold_hl30": 22,
+      "dmd_forecast": 31,
+      "ridge_pooled_feats": 2,
+      "logit_pooled_feats": 10,
+      "neighbor_adjacent": 44,
+      "frequency": 16,
+      "croston_interval": 10,
+      "freq_window_200": 71,
+      "rank_ensemble_core": 1,
+      "season_period2": 47,
+      "interval_extrema_k16": 24,
+      "anti_cooc_last": 4,
+      "ewma_hl30": 8
+    },
+    "p_two_sided": 0.9385334053887999,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 7,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      13,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      11,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      11,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      18,
+      2,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 445,
+      "compact_renewal_hazard": 75,
+      "compact_multiscale_shrink": 59,
+      "markov_lag2": 13
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 7,
+    "code": 45,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      13,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      11,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      11,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      18,
+      1,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 445,
+      "compact_renewal_hazard": 75,
+      "compact_multiscale_shrink": 59,
+      "markov_lag2": 13
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 7,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      12,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      11,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      11,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      18,
+      2,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "drift_linear": 50,
+      "hawkes_cross": 1,
+      "pair_transition": 20,
+      "compact_renewal_hazard": 55,
+      "freq_window_50": 102,
+      "frequency": 110,
+      "rwr_last_draw": 41,
+      "haar_multiscale": 68,
+      "knn_feature_pooled": 17,
+      "compact_multiscale_shrink": 59,
+      "markov_lag2": 13,
+      "evalue_kelly_w104": 56
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 7,
+    "code": 45,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      12,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      11,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      11,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      18,
+      1,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "drift_linear": 50,
+      "hawkes_cross": 1,
+      "pair_transition": 20,
+      "compact_renewal_hazard": 55,
+      "freq_window_50": 102,
+      "frequency": 110,
+      "rwr_last_draw": 41,
+      "haar_multiscale": 68,
+      "knn_feature_pooled": 17,
+      "compact_multiscale_shrink": 59,
+      "markov_lag2": 13,
+      "evalue_kelly_w104": 56
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 8,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      23,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      21,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      21,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      27,
+      2,
+      0,
+      0
+    ],
+    "random": [
+      19,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 503,
+      "markov_lag2": 13,
+      "compact_multiscale_shrink": 59,
+      "compact_transition_prior": 17
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 8,
+    "code": 35,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      19,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      17,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      22,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      22,
+      1,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 503,
+      "markov_lag2": 13,
+      "compact_multiscale_shrink": 59,
+      "compact_transition_prior": 17
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 8,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      13,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      20,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      20,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "gap_current",
+    "fixed_method_same_metric": "gap_current",
+    "frequency": [
+      27,
+      2,
+      0,
+      0
+    ],
+    "random": [
+      19,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 85,
+      "pair_transition": 20,
+      "rwr_last_draw": 69,
+      "ewma_hl30": 62,
+      "knn_pattern_self": 23,
+      "runs_persistence": 62,
+      "anti_cooc_last": 42,
+      "repeat_last_draw": 1,
+      "compact_multiscale_shrink": 59,
+      "hedge_experts_mixture": 98,
+      "neighbor_adjacent": 58,
+      "evalue_kelly_w104": 13
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 8,
+    "code": 35,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      10,
+      0,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      15,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      15,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "gap_current",
+    "fixed_method_same_metric": "pair_transition",
+    "frequency": [
+      22,
+      1,
+      0,
+      0
+    ],
+    "random": [
+      16,
+      0,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 85,
+      "pair_transition": 20,
+      "rwr_last_draw": 69,
+      "ewma_hl30": 62,
+      "knn_pattern_self": 23,
+      "runs_persistence": 62,
+      "anti_cooc_last": 42,
+      "repeat_last_draw": 1,
+      "compact_multiscale_shrink": 59,
+      "hedge_experts_mixture": 98,
+      "neighbor_adjacent": 58,
+      "evalue_kelly_w104": 13
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      34,
+      3,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      33,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      33,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      34,
+      4,
+      1,
+      0
+    ],
+    "random": [
+      27,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 453,
+      "compact_transition_prior": 100,
+      "compact_renewal_hazard": 39
+    },
+    "p_two_sided": 0.625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": 25,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      34,
+      3,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      33,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      33,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      34,
+      4,
+      1,
+      0
+    ],
+    "random": [
+      27,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 453,
+      "compact_transition_prior": 100,
+      "compact_renewal_hazard": 39
+    },
+    "p_two_sided": 0.625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": 34,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      25,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      27,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      22,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "compact_multiscale_shrink",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      26,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      21,
+      1,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 453,
+      "compact_transition_prior": 100,
+      "compact_renewal_hazard": 39
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      24,
+      2,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      28,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      28,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "gap_current",
+    "fixed_method_same_metric": "gap_current",
+    "frequency": [
+      34,
+      4,
+      1,
+      0
+    ],
+    "random": [
+      27,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "drift_linear": 50,
+      "frequency": 120,
+      "pair_transition": 10,
+      "croston_interval": 49,
+      "rwr_last_draw": 56,
+      "compact_transition_prior": 11,
+      "runs_persistence": 98,
+      "markov_self_state": 11,
+      "haar_multiscale": 15,
+      "hawkes_cross": 40,
+      "bayes_dirichlet_forget": 53,
+      "markov_pairs": 10,
+      "naive_bayes_last": 20,
+      "evalue_kelly_w104": 13,
+      "neighbor_adjacent": 28,
+      "ridge_pooled_feats": 8
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": 25,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      24,
+      2,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      28,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      28,
+      0,
+      0,
+      0
+    ],
+    "fixed_method": "gap_current",
+    "fixed_method_same_metric": "gap_current",
+    "frequency": [
+      34,
+      4,
+      1,
+      0
+    ],
+    "random": [
+      27,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "drift_linear": 50,
+      "frequency": 120,
+      "pair_transition": 10,
+      "croston_interval": 49,
+      "rwr_last_draw": 56,
+      "compact_transition_prior": 11,
+      "runs_persistence": 98,
+      "markov_self_state": 11,
+      "haar_multiscale": 15,
+      "hawkes_cross": 40,
+      "bayes_dirichlet_forget": 53,
+      "markov_pairs": 10,
+      "naive_bayes_last": 20,
+      "evalue_kelly_w104": 13,
+      "neighbor_adjacent": 28,
+      "ridge_pooled_feats": 8
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 9,
+    "code": 34,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      18,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      22,
+      0,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      22,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "gap_current",
+    "fixed_method_same_metric": "compact_renewal_hazard",
+    "frequency": [
+      26,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      21,
+      1,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "drift_linear": 50,
+      "frequency": 120,
+      "pair_transition": 10,
+      "croston_interval": 49,
+      "rwr_last_draw": 56,
+      "compact_transition_prior": 11,
+      "runs_persistence": 98,
+      "markov_self_state": 11,
+      "haar_multiscale": 15,
+      "hawkes_cross": 40,
+      "bayes_dirichlet_forget": 53,
+      "markov_pairs": 10,
+      "naive_bayes_last": 20,
+      "evalue_kelly_w104": 13,
+      "neighbor_adjacent": 28,
+      "ridge_pooled_feats": 8
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      48,
+      5,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      38,
+      4,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 412,
+      "compact_transition_prior": 62,
+      "compact_multiscale_shrink": 53,
+      "compact_renewal_hazard": 24,
+      "markov_lag2": 41
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": 23,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      48,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      38,
+      4,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 412,
+      "compact_transition_prior": 62,
+      "compact_multiscale_shrink": 53,
+      "compact_renewal_hazard": 24,
+      "markov_lag2": 41
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": 24,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      41,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      35,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 1,
+    "dynamic_method_draws": {
+      "frequency": 412,
+      "compact_transition_prior": 62,
+      "compact_multiscale_shrink": 53,
+      "compact_renewal_hazard": 24,
+      "markov_lag2": 41
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      29,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      50,
+      6,
+      1,
+      0
+    ],
+    "random": [
+      38,
+      4,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 6,
+    "dynamic_method_draws": {
+      "frequency": 34,
+      "hedge_experts_mixture": 64,
+      "ar_ls_pooled": 12,
+      "season_period2": 38,
+      "rwr_last_draw": 77,
+      "knn_pattern_self": 16,
+      "hot_consistency": 49,
+      "holt_forecast": 1,
+      "knn_feature_pooled": 4,
+      "markov_self_state": 19,
+      "runs_persistence": 32,
+      "naive_bayes_last": 63,
+      "gap_current": 97,
+      "hawkes_cross": 31,
+      "pagerank_cooc": 18,
+      "markov_pairs": 2,
+      "neighbor_adjacent": 1,
+      "gbm_stumps_pooled": 10,
+      "evalue_kelly_w104": 13,
+      "markov_lag2": 11
+    },
+    "p_two_sided": 0.2890625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": 23,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      29,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      50,
+      6,
+      0,
+      0
+    ],
+    "random": [
+      38,
+      4,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 6,
+    "dynamic_method_draws": {
+      "frequency": 34,
+      "hedge_experts_mixture": 64,
+      "ar_ls_pooled": 12,
+      "season_period2": 38,
+      "rwr_last_draw": 77,
+      "knn_pattern_self": 16,
+      "hot_consistency": 49,
+      "holt_forecast": 1,
+      "knn_feature_pooled": 4,
+      "markov_self_state": 19,
+      "runs_persistence": 32,
+      "naive_bayes_last": 63,
+      "gap_current": 97,
+      "hawkes_cross": 31,
+      "pagerank_cooc": 18,
+      "markov_pairs": 2,
+      "neighbor_adjacent": 1,
+      "gbm_stumps_pooled": 10,
+      "evalue_kelly_w104": 13,
+      "markov_lag2": 11
+    },
+    "p_two_sided": 0.2890625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 10,
+    "code": 24,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      27,
+      2,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      43,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      35,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 34,
+      "hedge_experts_mixture": 64,
+      "ar_ls_pooled": 12,
+      "season_period2": 38,
+      "rwr_last_draw": 77,
+      "knn_pattern_self": 16,
+      "hot_consistency": 49,
+      "holt_forecast": 1,
+      "knn_feature_pooled": 4,
+      "markov_self_state": 19,
+      "runs_persistence": 32,
+      "naive_bayes_last": 63,
+      "gap_current": 97,
+      "hawkes_cross": 31,
+      "pagerank_cooc": 18,
+      "markov_pairs": 2,
+      "neighbor_adjacent": 1,
+      "gbm_stumps_pooled": 10,
+      "evalue_kelly_w104": 13,
+      "markov_lag2": 11
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      68,
+      9,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      64,
+      9,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      64,
+      9,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      64,
+      9,
+      1,
+      0
+    ],
+    "random": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 2,
+    "dynamic_method_draws": {
+      "frequency": 414,
+      "compact_renewal_hazard": 35,
+      "compact_multiscale_shrink": 30,
+      "compact_transition_prior": 26,
+      "markov_lag2": 87
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 11,
+    "code": 15,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      68,
+      3,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      64,
+      5,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      64,
+      2,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      64,
+      5,
+      0,
+      0
+    ],
+    "random": [
+      49,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 0,
+    "only_fixed": 2,
+    "dynamic_method_draws": {
+      "frequency": 414,
+      "compact_renewal_hazard": 35,
+      "compact_multiscale_shrink": 30,
+      "compact_transition_prior": 26,
+      "markov_lag2": 87
+    },
+    "p_two_sided": 0.5,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 11,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      52,
+      5,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      58,
+      6,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      58,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "selfcalib_online_logit",
+    "fixed_method_same_metric": "selfcalib_online_logit",
+    "frequency": [
+      64,
+      9,
+      1,
+      0
+    ],
+    "random": [
+      49,
+      6,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 5,
+    "dynamic_method_draws": {
+      "frequency": 90,
+      "autocorr_lag": 8,
+      "ar_ls_pooled": 1,
+      "repeat_last_draw": 47,
+      "freq_window_50": 22,
+      "haar_multiscale": 25,
+      "rwr_last_draw": 37,
+      "selfcalib_online_logit": 12,
+      "runs_persistence": 64,
+      "knn_feature_pooled": 7,
+      "drift_linear": 38,
+      "gap_current": 81,
+      "hawkes_cross": 55,
+      "pagerank_cooc": 5,
+      "bayes_dirichlet_forget": 36,
+      "markov_lag2": 64
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 11,
+    "code": 15,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      52,
+      1,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      58,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      64,
+      2,
+      0,
+      0
+    ],
+    "fixed_method": "selfcalib_online_logit",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      64,
+      5,
+      0,
+      0
+    ],
+    "random": [
+      49,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 90,
+      "autocorr_lag": 8,
+      "ar_ls_pooled": 1,
+      "repeat_last_draw": 47,
+      "freq_window_50": 22,
+      "haar_multiscale": 25,
+      "rwr_last_draw": 37,
+      "selfcalib_online_logit": 12,
+      "runs_persistence": 64,
+      "knn_feature_pooled": 7,
+      "drift_linear": 38,
+      "gap_current": 81,
+      "hawkes_cross": 55,
+      "pagerank_cooc": 5,
+      "bayes_dirichlet_forget": 36,
+      "markov_lag2": 64
+    },
+    "p_two_sided": 0.625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      68,
+      11,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      73,
+      12,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      73,
+      12,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      73,
+      12,
+      1,
+      0
+    ],
+    "random": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 387,
+      "compact_renewal_hazard": 22,
+      "compact_multiscale_shrink": 78,
+      "markov_lag2": 105
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 12,
+    "code": 14,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      68,
+      4,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      73,
+      3,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      80,
+      6,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      73,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      68,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 1,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "frequency": 387,
+      "compact_renewal_hazard": 22,
+      "compact_multiscale_shrink": 78,
+      "markov_lag2": 105
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 12,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      64,
+      10,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      72,
+      4,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      72,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "ssa_forecast",
+    "frequency": [
+      73,
+      12,
+      1,
+      0
+    ],
+    "random": [
+      68,
+      8,
+      0,
+      0
+    ],
+    "only_dynamic": 9,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 31,
+      "croston_interval": 108,
+      "repeat_last_draw": 52,
+      "selfcalib_online_logit": 32,
+      "runs_persistence": 49,
+      "drift_linear": 28,
+      "gbm_stumps_pooled": 5,
+      "gap_ratio": 5,
+      "gap_current": 34,
+      "neighbor_adjacent": 10,
+      "compact_multiscale_shrink": 18,
+      "weighted_recent_linear": 10,
+      "cooc_last3": 12,
+      "hawkes_cross": 33,
+      "bayes_dirichlet_forget": 27,
+      "interval_extrema_k16": 36,
+      "rwr_last_draw": 12,
+      "markov_lag2": 65,
+      "ewma_cold_hl30": 7,
+      "markov_pairs": 4
+    },
+    "p_two_sided": 0.14599609375,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 12,
+    "code": 14,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      64,
+      4,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      72,
+      2,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      70,
+      4,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "repeat_last_draw",
+    "frequency": [
+      73,
+      3,
+      0,
+      0
+    ],
+    "random": [
+      68,
+      3,
+      0,
+      0
+    ],
+    "only_dynamic": 4,
+    "only_fixed": 2,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 31,
+      "croston_interval": 108,
+      "repeat_last_draw": 52,
+      "selfcalib_online_logit": 32,
+      "runs_persistence": 49,
+      "drift_linear": 28,
+      "gbm_stumps_pooled": 5,
+      "gap_ratio": 5,
+      "gap_current": 34,
+      "neighbor_adjacent": 10,
+      "compact_multiscale_shrink": 18,
+      "weighted_recent_linear": 10,
+      "cooc_last3": 12,
+      "hawkes_cross": 33,
+      "bayes_dirichlet_forget": 27,
+      "interval_extrema_k16": 36,
+      "rwr_last_draw": 12,
+      "markov_lag2": 65,
+      "ewma_cold_hl30": 7,
+      "markov_pairs": 4
+    },
+    "p_two_sided": 0.6875,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 13,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      79,
+      14,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      84,
+      20,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      84,
+      20,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      84,
+      20,
+      1,
+      0
+    ],
+    "random": [
+      87,
+      9,
+      1,
+      0
+    ],
+    "only_dynamic": 3,
+    "only_fixed": 9,
+    "dynamic_method_draws": {
+      "frequency": 346,
+      "compact_renewal_hazard": 79,
+      "compact_transition_prior": 5,
+      "compact_multiscale_shrink": 51,
+      "markov_lag2": 111
+    },
+    "p_two_sided": 0.14599609375,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 13,
+    "code": 13,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      79,
+      7,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      84,
+      8,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      100,
+      3,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      84,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      87,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 2,
+    "only_fixed": 3,
+    "dynamic_method_draws": {
+      "frequency": 346,
+      "compact_renewal_hazard": 79,
+      "compact_transition_prior": 5,
+      "compact_multiscale_shrink": 51,
+      "markov_lag2": 111
+    },
+    "p_two_sided": 1.0,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 13,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      90,
+      13,
+      1,
+      0
+    ],
+    "fixed_pool_choice": [
+      89,
+      5,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      89,
+      5,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "ssa_forecast",
+    "frequency": [
+      84,
+      20,
+      1,
+      0
+    ],
+    "random": [
+      87,
+      9,
+      1,
+      0
+    ],
+    "only_dynamic": 12,
+    "only_fixed": 4,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 40,
+      "compact_renewal_hazard": 36,
+      "compact_transition_prior": 5,
+      "croston_interval": 18,
+      "rwr_last_draw": 20,
+      "season_period2": 13,
+      "repeat_last_draw": 62,
+      "bayes_dirichlet_forget": 56,
+      "freq_window_200": 35,
+      "gbm_stumps_pooled": 90,
+      "freq_window_50": 9,
+      "gap_current": 45,
+      "neighbor_adjacent": 8,
+      "frequency": 33,
+      "weighted_recent_linear": 2,
+      "gap_ratio": 12,
+      "hawkes_cross": 19,
+      "markov_lag2": 7,
+      "hedge_experts_mixture": 28,
+      "dmd_forecast": 40
+    },
+    "p_two_sided": 0.076812744140625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 13,
+    "code": 13,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      90,
+      6,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      89,
+      2,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      89,
+      2,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "ssa_forecast",
+    "frequency": [
+      84,
+      8,
+      0,
+      0
+    ],
+    "random": [
+      87,
+      2,
+      0,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 2,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 14,
+      "knn_feature_pooled": 40,
+      "compact_renewal_hazard": 36,
+      "compact_transition_prior": 5,
+      "croston_interval": 18,
+      "rwr_last_draw": 20,
+      "season_period2": 13,
+      "repeat_last_draw": 62,
+      "bayes_dirichlet_forget": 56,
+      "freq_window_200": 35,
+      "gbm_stumps_pooled": 90,
+      "freq_window_50": 9,
+      "gap_current": 45,
+      "neighbor_adjacent": 8,
+      "frequency": 33,
+      "weighted_recent_linear": 2,
+      "gap_ratio": 12,
+      "hawkes_cross": 19,
+      "markov_lag2": 7,
+      "hedge_experts_mixture": 28,
+      "dmd_forecast": 40
+    },
+    "p_two_sided": 0.2890625,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 15,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      138,
+      22,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      125,
+      29,
+      1,
+      0
+    ],
+    "fixed_same_metric": [
+      125,
+      29,
+      1,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      125,
+      29,
+      1,
+      0
+    ],
+    "random": [
+      121,
+      19,
+      1,
+      0
+    ],
+    "only_dynamic": 6,
+    "only_fixed": 13,
+    "dynamic_method_draws": {
+      "frequency": 305,
+      "compact_multiscale_shrink": 115,
+      "compact_transition_prior": 46,
+      "markov_lag2": 126
+    },
+    "p_two_sided": 0.1670684814453125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 15,
+    "code": 12,
+    "scope": "best_ticket",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      138,
+      10,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      125,
+      7,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      141,
+      11,
+      0,
+      0
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "compact_multiscale_shrink",
+    "frequency": [
+      125,
+      7,
+      0,
+      0
+    ],
+    "random": [
+      121,
+      8,
+      0,
+      0
+    ],
+    "only_dynamic": 5,
+    "only_fixed": 2,
+    "dynamic_method_draws": {
+      "frequency": 305,
+      "compact_multiscale_shrink": 115,
+      "compact_transition_prior": 46,
+      "markov_lag2": 126
+    },
+    "p_two_sided": 0.453125,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna1",
+    "k": 15,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      129,
+      30,
+      2,
+      0
+    ],
+    "fixed_pool_choice": [
+      116,
+      13,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      116,
+      13,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "ssa_forecast",
+    "frequency": [
+      125,
+      29,
+      1,
+      0
+    ],
+    "random": [
+      121,
+      19,
+      1,
+      0
+    ],
+    "only_dynamic": 29,
+    "only_fixed": 12,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 22,
+      "knn_feature_pooled": 25,
+      "hurst_persistence": 7,
+      "rwr_last_draw": 18,
+      "frequency": 19,
+      "hedge_experts_mixture": 46,
+      "croston_interval": 3,
+      "bayes_dirichlet_forget": 128,
+      "season_period2": 51,
+      "gbm_stumps_pooled": 73,
+      "gap_current": 97,
+      "markov_lag2": 75,
+      "compact_multiscale_shrink": 3,
+      "ewma_cold_hl30": 5,
+      "dmd_forecast": 17,
+      "cooc_last3": 3
+    },
+    "p_two_sided": 0.011507789735333063,
+    "p_holm": 0.6674518046493176
+  },
+  {
+    "game": "joker_urna1",
+    "k": 15,
+    "code": 12,
+    "scope": "best_ticket",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 59,
+    "thresholds": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "dynamic": [
+      129,
+      13,
+      0,
+      0
+    ],
+    "fixed_pool_choice": [
+      116,
+      1,
+      0,
+      0
+    ],
+    "fixed_same_metric": [
+      116,
+      1,
+      0,
+      0
+    ],
+    "fixed_method": "ssa_forecast",
+    "fixed_method_same_metric": "ssa_forecast",
+    "frequency": [
+      125,
+      7,
+      0,
+      0
+    ],
+    "random": [
+      121,
+      8,
+      0,
+      0
+    ],
+    "only_dynamic": 12,
+    "only_fixed": 0,
+    "dynamic_method_draws": {
+      "evalue_kelly_w104": 22,
+      "knn_feature_pooled": 25,
+      "hurst_persistence": 7,
+      "rwr_last_draw": 18,
+      "frequency": 19,
+      "hedge_experts_mixture": 46,
+      "croston_interval": 3,
+      "bayes_dirichlet_forget": 128,
+      "season_period2": 51,
+      "gbm_stumps_pooled": 73,
+      "gap_current": 97,
+      "markov_lag2": 75,
+      "compact_multiscale_shrink": 3,
+      "ewma_cold_hl30": 5,
+      "dmd_forecast": 17,
+      "cooc_last3": 3
+    },
+    "p_two_sided": 0.00048828125,
+    "p_holm": 0.02978515625
+  },
+  {
+    "game": "joker_urna2",
+    "k": 1,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      1
+    ],
+    "dynamic": [
+      23
+    ],
+    "fixed_pool_choice": [
+      31
+    ],
+    "fixed_same_metric": [
+      31
+    ],
+    "fixed_method": "markov_lag2",
+    "fixed_method_same_metric": "markov_lag2",
+    "frequency": [
+      17
+    ],
+    "random": [
+      27
+    ],
+    "only_dynamic": 10,
+    "only_fixed": 18,
+    "dynamic_method_draws": {
+      "markov_lag2": 229,
+      "compact_multiscale_shrink": 106,
+      "frequency": 177,
+      "compact_transition_prior": 32,
+      "compact_renewal_hazard": 48
+    },
+    "p_two_sided": 0.1849333420395851,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna2",
+    "k": 1,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 51,
+    "thresholds": [
+      1
+    ],
+    "dynamic": [
+      36
+    ],
+    "fixed_pool_choice": [
+      27
+    ],
+    "fixed_same_metric": [
+      27
+    ],
+    "fixed_method": "runs_persistence",
+    "fixed_method_same_metric": "runs_persistence",
+    "frequency": [
+      17
+    ],
+    "random": [
+      27
+    ],
+    "only_dynamic": 35,
+    "only_fixed": 26,
+    "dynamic_method_draws": {
+      "vlmm_self_k3": 40,
+      "gap_hazard": 4,
+      "knn_pattern_self": 11,
+      "autocorr_lag": 151,
+      "rhythm_phase": 14,
+      "ridge_pooled_feats": 52,
+      "frequency": 19,
+      "knn_feature_pooled": 35,
+      "markov_lag2": 15,
+      "knn_draw_similarity": 3,
+      "ar_ls_pooled": 70,
+      "dmd_forecast": 19,
+      "logit_pooled_feats": 40,
+      "markov_self_state": 3,
+      "haar_multiscale": 20,
+      "gbm_stumps_pooled": 34,
+      "holt_forecast": 27,
+      "evalue_kelly_w104": 6,
+      "freq_window_200": 29
+    },
+    "p_two_sided": 0.30567741986311836,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna2",
+    "k": 5,
+    "code": null,
+    "scope": "pool",
+    "bank": "active",
+    "n": 592,
+    "candidate_count": 5,
+    "thresholds": [
+      1
+    ],
+    "dynamic": [
+      150
+    ],
+    "fixed_pool_choice": [
+      145
+    ],
+    "fixed_same_metric": [
+      145
+    ],
+    "fixed_method": "frequency",
+    "fixed_method_same_metric": "frequency",
+    "frequency": [
+      145
+    ],
+    "random": [
+      143
+    ],
+    "only_dynamic": 85,
+    "only_fixed": 80,
+    "dynamic_method_draws": {
+      "markov_lag2": 307,
+      "compact_renewal_hazard": 53,
+      "frequency": 83,
+      "compact_transition_prior": 69,
+      "compact_multiscale_shrink": 80
+    },
+    "p_two_sided": 0.7556058753183409,
+    "p_holm": 1.0
+  },
+  {
+    "game": "joker_urna2",
+    "k": 5,
+    "code": null,
+    "scope": "pool",
+    "bank": "including_archived",
+    "n": 592,
+    "candidate_count": 51,
+    "thresholds": [
+      1
+    ],
+    "dynamic": [
+      164
+    ],
+    "fixed_pool_choice": [
+      147
+    ],
+    "fixed_same_metric": [
+      147
+    ],
+    "fixed_method": "season_period2",
+    "fixed_method_same_metric": "season_period2",
+    "frequency": [
+      145
+    ],
+    "random": [
+      143
+    ],
+    "only_dynamic": 120,
+    "only_fixed": 103,
+    "dynamic_method_draws": {
+      "markov_lag2": 62,
+      "knn_pattern_self": 20,
+      "evalue_kelly_w104": 65,
+      "hurst_persistence": 13,
+      "dmd_forecast": 18,
+      "knn_feature_pooled": 2,
+      "spectral_phase": 85,
+      "rhythm_phase": 14,
+      "ssa_forecast": 5,
+      "knn_draw_similarity": 104,
+      "haar_multiscale": 30,
+      "compact_transition_prior": 6,
+      "gbm_stumps_pooled": 49,
+      "ridge_pooled_feats": 101,
+      "online_logit_sgd": 2,
+      "ewma_hl30": 16
+    },
+    "p_two_sided": 0.28394633404739555,
+    "p_holm": 1.0
+  }
+]

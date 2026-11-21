@@ -30,7 +30,24 @@ Fiecare pool principal folosește maximum două numere consecutive. Pragurile de
 
 Cele opt metode cu scoruri plate la fiecare dată în Urna 2 au rânduri `no_own_forecast`, fără numărătoare proprie la acest joc. În urnele principale, toate metodele au produs scoruri valabile pe toate datele evaluate.
 
-Niciuna dintre comparații nu a trecut pragul de 5% după corecția Holm. La pragul principal, analiza a corectat 3.522 de comparații ale metodelor individuale și separat 122 de rezultate cu metoda fixată înaintea testului. Cel mai mic p brut pentru o metodă individuală a fost 0,000278 pentru `bayes_dirichlet_forget`, cu 39 de extrageri față de 21,30 așteptate la Joker Urna 1, pool 15. După corecție, p = 0,979. Am verificat separat familiile de 3+ și de 5+/6. Rezultatele sunt retrospective, deoarece perioadele istorice au fost analizate în studii anterioare.
+Niciuna dintre comparațiile cu hazardul nu a trecut pragul de 5% după corecția Holm. La pragul principal, analiza a corectat 3.522 de comparații ale metodelor individuale și separat 122 de rezultate cu metoda fixată înaintea testului. Cel mai mic p brut pentru o metodă individuală a fost 0,000278 pentru `bayes_dirichlet_forget`, cu 39 de extrageri față de 21,30 așteptate la Joker Urna 1, pool 15. După corecție, p = 0,979. Am verificat separat familiile de 3+ și de 5+/6. Rezultatele sunt retrospective, deoarece perioadele istorice au fost analizate în studii anterioare.
+
+## Selecție dinamică sau metodă fixă
+
+Am comparat aceeași bancă în ambele moduri. Metoda fixă se alege pe primele 70% dintre zile după 4+ în pool. Selectorul dinamic reface alegerea înaintea fiecărei zile, folosind cel mult 104 zile deja încheiate, cu cel puțin 26 pentru selecție. Am păstrat regula v5 față de martorul aleator. Cifrele privesc ultimele 30% dintre zile, pe aceleași extrageri și la același buget LR.
+
+| Bancă de metode | Criteriu | Dinamic mai bun | Egalitate | Fix mai bun |
+|---|---|---:|---:|---:|
+| Activă · 5 candidați | 4+ în pool · 26 dimensiuni | 14 | 3 | 9 |
+| Activă · 5 candidați | 4+ pe cel puțin o variantă · 33 coduri LR | 20 | 1 | 12 |
+| Extinsă · 59 de candidați | 4+ în pool · 26 dimensiuni | 9 | 4 | 13 |
+| Extinsă · 59 de candidați | 4+ pe cel puțin o variantă · 33 coduri LR | 12 | 3 | 18 |
+
+De exemplu, la 6/49 Cod 59, banca activă are 58 de extrageri cu 4+ pe o variantă în regim dinamic și 57 în regim fix. Banca extinsă are 44 și 54. La 5/40 Cod 37, perechile sunt 70 și 66, respectiv 67 și 82. La Joker Cod 12, banca extinsă are 13 și 1, în condițiile în care hazardul ar produce în medie 9,35. Codurile cu aceeași dimensiune folosesc aceleași pool-uri, deci numărul de coduri câștigătoare este descriptiv.
+
+La Joker Urna 2, într-un experiment separat pe top 1, banca activă a obținut 23 de bile corecte dinamic și 31 cu metoda fixă. Banca extinsă, cu 51 de candidați care au produs scoruri proprii, a avut 36 și 27. În aplicație, urna a doua folosește decizia ei fixă.
+
+Rezultatul susține păstrarea selectorului v5 cu banca restrânsă. Simularea cu toate metodele istorice arată mai des pierderi decât câștiguri la pragul ales. [Comparația pe fiecare configurație](dynamic_vs_fixed_ro_2026_11_21.json) · [Scriptul de reproducere](dynamic_vs_fixed_ro_2026_11_21.py)
 
 ## Rețetele selectorului dinamic anterior
 
