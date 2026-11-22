@@ -196,9 +196,6 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             from covering.lr_selection import lr_scheme_signature
 
             scheme = _lr_scheme_for(g_label)
-            task["lr_budget_lei"] = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
-            task["lr_budget_objective"] = _budget_objective()
-            h.update(f"|lr_budget={task['lr_budget_lei']}:{task['lr_budget_objective']}|".encode("ascii"))
             task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
                         max_variants=scheme.size)
             if _spec.bench_key_urna2:
@@ -213,13 +210,13 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         if not _spec.is_romanian:
             task["country"] = _spec.country
             h.update(f"country={_spec.country}|game_id={_spec.game_id}".encode("utf-8"))
-        datasets_cfg.append(
-            {
-                "fname": fname,
-                "df_json": df_json,
-                "tasks": [task],
-            }
-        )
+        dataset = {"fname": fname, "df_json": df_json, "tasks": [task]}
+        if _spec.is_romanian:
+            amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
+            objective = _budget_objective()
+            dataset["lr_mail_settings"] = {"lr_budget_lei": amount, "lr_budget_objective": objective}
+            h.update(f"|lr_budget={amount}:{objective}|".encode("ascii"))
+        datasets_cfg.append(dataset)
         h.update(fname.encode("utf-8"))
         h.update(hashlib.sha256(df_json.encode("utf-8")).hexdigest().encode("ascii"))
     config = {"use_cache": False, "datasets": datasets_cfg}
@@ -778,10 +775,15 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
             for dataset in datasets:
                 ds = dict(dataset)
                 ds["tasks"] = [dict(template or task) for task in dataset.get("tasks", [])]
-                for original_task, task in zip(dataset.get("tasks", []), ds["tasks"], strict=True):
-                    for key in ("lr_budget_lei", "lr_budget_objective"):
-                        if key in original_task:
-                            task[key] = original_task[key]
+                if "lr_mail_settings" not in ds and len(dataset.get("tasks", [])) == 1:
+                    # Previously queued jobs stored the mail budget inside the worker task.
+                    original_task = dataset["tasks"][0]
+                    legacy = {key: original_task[key] for key in ("lr_budget_lei", "lr_budget_objective") if key in original_task}
+                    if legacy:
+                        ds["lr_mail_settings"] = legacy
+                for task in ds["tasks"]:
+                    task.pop("lr_budget_lei", None)
+                    task.pop("lr_budget_objective", None)
                     task["bench_hit_target"] = _clamped_bench_target()
                 merged.append(ds)
     for dataset in merged:
@@ -1795,6 +1797,10 @@ def _result_sources_from_job(job: dict) -> dict | None:
                             "lookback", "dynamic_method", "joker_pool_size",
                         ) if key in task
                     }
+                    mail = dataset.get("lr_mail_settings", {})
+                    frame.attrs["lr_mail_settings"].update(
+                        {key: mail[key] for key in ("lr_budget_lei", "lr_budget_objective") if key in mail}
+                    )
             sources[fname] = frame
     except (TypeError, ValueError, KeyError, AttributeError) as exc:
         logger.warning("[RESULT] Original job source unavailable: %s", exc)

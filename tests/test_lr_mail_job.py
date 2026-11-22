@@ -17,8 +17,10 @@ def test_result_email_uses_the_committed_job_budget_history_and_original_pool(mo
     }.items():
         monkeypatch.setitem(app.SETTINGS, key, value)
     config = app._build_config_json()
-    task, = json.loads(config)["datasets"][0]["tasks"]
-    assert (task["lr_budget_lei"], task["lr_budget_objective"]) == (200, ANY_PRIZE)
+    dataset, = json.loads(config)["datasets"]
+    assert dataset["lr_mail_settings"] == {"lr_budget_lei": 200, "lr_budget_objective": ANY_PRIZE}
+    task, = dataset["tasks"]
+    assert "lr_budget_lei" not in task and "lr_budget_objective" not in task
     sources = app._result_sources_from_job({"config_json": config})
     monkeypatch.setitem(app.SETTINGS, "lr_budget_lei", 100)
     monkeypatch.setitem(app.SETTINGS, "lr_budget_objective", FOUR_PLUS)
