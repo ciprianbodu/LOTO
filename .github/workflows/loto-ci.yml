@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      LOTO_RUNTIME_DIR: ${{ runner.temp }}/loto-runtime
-      LOTO_WF_CACHE_DIR: ${{ runner.temp }}/loto-wf-cache
       LOTO_UI_PORT: "8765"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -27,6 +25,9 @@ jobs:
           python-version: "3.15"
           cache: pip
           cache-dependency-path: requirements_base.txt
+      - name: Isolate test runtime
+        run: |
+          printf 'LOTO_RUNTIME_DIR=%s/loto-runtime\nLOTO_WF_CACHE_DIR=%s/loto-wf-cache\n' "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: |
           python -m pip install -r requirements_base.txt
