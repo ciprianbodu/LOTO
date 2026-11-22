@@ -353,7 +353,12 @@ def test_mail_names_the_lr_code_of_the_pool(monkeypatch):
     )
     monkeypatch.setitem(app.STATE, "result_sources", {"loto_6_49.csv": df})
     body = app._build_mail_body()
-    assert "SCHEMĂ LR: Cod 59 (112 var. ≈ 896 lei)" in body
+    assert "REFERINȚĂ LR: Cod 59 (112 var. ≈ 896 lei în variante" in body
+    played = {**_data(), "lr_scheme_code": 59}
+    monkeypatch.setitem(app.STATE, "results", ([("loto_6_49.csv", {"6/49": played})], 0))
+    body = app._build_mail_body()
+    assert "SCHEMĂ LR: Cod 59 (112 var. ≈ 896 lei în variante" in body
+    assert "taxa pe bilet se adaugă separat" in body
 
 
 # --------------------------------------------------------------------------- #

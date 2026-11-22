@@ -1,4 +1,4 @@
-"""History displays4+ across games and retains the full WF denominator."""
+"""History displays 4+ across games and retains the full WF denominator."""
 
 from types import SimpleNamespace
 
@@ -22,7 +22,7 @@ def entries(game, levels=(3, 4, 5)):
                 draw_index=i,
                 draw_date=f"{i + 1:02d}-10-2026",
                 variant=ticket,
-                hits=hits,
+                hits=min(hits, play_n),
                 hits_union=hits,
                 wheel_coverage=100.0,
                 joker_hit=(i == 1) if game == "joker" else None,
@@ -38,26 +38,40 @@ def test_only_four_plus_rows_are_visible_without_changing_rates_or_bench(
     monkeypatch, game, bench_target
 ):
     monkeypatch.setattr(ui_hits, "_bench_target", lambda: bench_target)
+    has_six = game != "joker"
+    levels = (3, 4, 5, 6) if has_six else (3, 4, 5)
     with capture_ui() as ui:
-        ui_hits._render_hits_4plus(entries(game), game, {"pool_size": 16}, pool_n=16)
+        ui_hits._render_hits_4plus(entries(game, levels), game, {"pool_size": 16}, pool_n=16)
     nodes = list(ui.walk())
     summary = next(n for n in nodes if n["kind"] == "table")
-    assert [r["prag"] for r in summary["kwargs"]["rows"]] == ["+4", "+5"]
-    assert summary["kwargs"]["rows"][0]["pool"] == "2 (66.67%)"
-    assert summary["kwargs"]["rows"][1]["pool"] == "1 (33.33%)"
+    rows = summary["kwargs"]["rows"]
+    if has_six:
+        assert [row["prag"] for row in rows] == ["+4", "+5", "+6"]
+        assert [row["pool"] for row in rows] == ["3 (75.00%)", "2 (50.00%)", "1 (25.00%)"]
+        # At 5/40 all six drawn numbers can be in the pool, but a ticket has five.
+        assert rows[-1]["tick"] == ("—" if game == "5/40" else "1 (25.00%)")
+    else:
+        assert [row["prag"] for row in rows] == ["+4", "+5"]
+        assert [row["pool"] for row in rows] == ["2 (66.67%)", "1 (33.33%)"]
     start = next(
         i
         for i, n in enumerate(nodes)
         if n["kind"] == "label" and str((n["args"] or [""])[0]).startswith("🗓️ POOL")
     )
     pool = next(n for n in nodes[start:] if n["kind"] == "table")
-    assert [r["draw"] for r in pool["kwargs"]["rows"]] == ["03-10-2026", "02-10-2026"]
+    six_dates = ["04-10-2026"] if has_six else []
+    five_dates = six_dates + ["03-10-2026"]
+    four_dates = five_dates + ["02-10-2026"]
+    assert [row["draw"] for row in pool["kwargs"]["rows"]] == four_dates
     toggle = next(n for n in nodes[start:] if n["kind"] == "toggle")
-    assert toggle["args"][0] == {4: "≥4", 5: "≥5"}
+    assert toggle["args"][0] == ({4: "≥4", 5: "≥5", 6: "≥6"} if has_six else {4: "≥4", 5: "≥5"})
+    if has_six:
+        toggle["kwargs"]["on_change"](SimpleNamespace(value=6))
+        assert [row["draw"] for row in pool["attrs"]["rows"]] == six_dates
     toggle["kwargs"]["on_change"](SimpleNamespace(value=5))
-    assert [r["draw"] for r in pool["attrs"]["rows"]] == ["03-10-2026"]
+    assert [row["draw"] for row in pool["attrs"]["rows"]] == five_dates
     toggle["kwargs"]["on_change"](SimpleNamespace(value=4))
-    assert [r["draw"] for r in pool["attrs"]["rows"]] == ["03-10-2026", "02-10-2026"]
+    assert [row["draw"] for row in pool["attrs"]["rows"]] == four_dates
     assert pool["attrs"]["pagination"]["page"] == 1
     assert "≥3 în pool" not in ui.text() and "⭐" not in ui.text()
     assert ui_hits._bench_target() == bench_target

@@ -297,10 +297,12 @@ def test_wf_cache_fallback_key_also_separates_the_limit(monkeypatch):
     assert off.startswith("nd") and on.startswith("nd") and off != on
 
 
-def test_semantics_markers_stay_in_sync():
+def test_future_ui_jobs_have_no_consecutive_setting_in_persistence():
     import ui_runtime
 
-    assert ui_runtime._CONSECUTIVE_SEMANTICS == wf._CONSECUTIVE_SEMANTICS
+    assert "max_consecutive_run_enabled_val" not in ui_runtime.UI_PERSIST_KEYS
+    # Adapterul continuă să separe rezultatele istorice care au folosit limita.
+    assert wf._CONSECUTIVE_SEMANTICS in wf._consecutive_sig(2)
 
 
 def _tail(n=14):
@@ -424,43 +426,28 @@ def _app_with_dataset(monkeypatch, rows=40):
     return app
 
 
-def test_checkbox_sends_an_int_and_enters_the_hash_only_when_on(monkeypatch):
+def test_new_ui_jobs_ignore_the_retired_consecutive_setting(monkeypatch):
     app = _app_with_dataset(monkeypatch)
+    baseline = json.loads(app._build_config_json())
     monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", True)
-    on = json.loads(app._build_config_json())
-    value = on["datasets"][0]["tasks"][0]["max_consecutive_run"]
-    assert value == 2 and type(value) is int
-
-    monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", False)
-    off = json.loads(app._build_config_json())
-    assert off["datasets"][0]["tasks"][0]["max_consecutive_run"] == 0
-    assert on["input_hash"] != off["input_hash"]
-
-    # Marcajul de semantică schimbă hash-ul numai cu limita activă.
-    monkeypatch.setattr(app, "_CONSECUTIVE_SEMANTICS", "test")
-    assert json.loads(app._build_config_json())["input_hash"] == off["input_hash"]
-    monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", True)
-    assert json.loads(app._build_config_json())["input_hash"] != on["input_hash"]
+    generated = json.loads(app._build_config_json())
+    assert generated["input_hash"] == baseline["input_hash"]
+    value = generated["datasets"][0]["tasks"][0]["max_consecutive_run"]
+    assert value == 0 and type(value) is int
 
 
-def test_checkbox_is_on_by_default_and_its_state_survives_a_restart(
-    tmp_path, monkeypatch
-):
-    """Implicit pornită; o bifă scoasă rămâne scoasă după repornire."""
+def test_retired_consecutive_setting_is_ignored_on_restart(tmp_path, monkeypatch):
     import ui_runtime
 
-    assert ui_runtime.DEFAULTS["max_consecutive_run_enabled_val"] is True
+    key = "max_consecutive_run_enabled_val"
+    assert key not in ui_runtime.DEFAULTS
     state = tmp_path / ".ui_state.json"
     monkeypatch.setattr(ui_runtime, "UI_STATE_FILE", state)
-    monkeypatch.setitem(ui_runtime.SETTINGS, "max_consecutive_run_enabled_val", True)
-    state.write_text(json.dumps({"max_consecutive_run_enabled_val": False}), "utf-8")
+    monkeypatch.setattr(ui_runtime, "SETTINGS", dict(ui_runtime.DEFAULTS))
+    state.write_text(json.dumps({key: True, "pool_size_val": 12}), "utf-8")
     ui_runtime._load_settings()
-    assert ui_runtime.SETTINGS["max_consecutive_run_enabled_val"] is False
-    # Stare salvată înainte de opțiune (fără cheie): rămâne implicitul.
-    monkeypatch.setitem(ui_runtime.SETTINGS, "max_consecutive_run_enabled_val", True)
-    state.write_text(json.dumps({"pool_size_val": 10}), "utf-8")
-    ui_runtime._load_settings()
-    assert ui_runtime.SETTINGS["max_consecutive_run_enabled_val"] is True
+    assert key not in ui_runtime.SETTINGS
+    assert ui_runtime.SETTINGS["pool_size_val"] == 12
 
 
 def test_wf_options_come_from_the_result_not_from_the_sidebar(monkeypatch):
@@ -632,13 +619,16 @@ def test_wf_history_names_the_limit_it_used():
 
 
 # --- E2E: sidebar → coadă → worker → rezultat decodat → opțiuni WF -------------
-def test_submit_worker_result_and_wf_options_carry_the_limit(tmp_path, monkeypatch):
-    """AGENTS.md §4.4: o cheie nouă în config_json cere un test E2E."""
+def test_legacy_worker_result_and_wf_options_preserve_an_explicit_limit(tmp_path, monkeypatch):
     app = _app_with_dataset(monkeypatch, rows=400)
-    monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", True)
     monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 12)
+    legacy = json.loads(app._build_config_json())
+    task = legacy["datasets"][0]["tasks"][0]
+    for key in ("lr_scheme_code", "dynamic_method"):
+        task.pop(key, None)
+    task.update(max_consecutive_run=2, guarantee=3, max_variants=4, wheel_condition=3)
     db = str(tmp_path / "jobs.db")
-    jid = jq.submit_job("pipeline", app._build_config_json(), db_path=db)
+    jid = jq.submit_job("pipeline", json.dumps(legacy), db_path=db)
     job = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
     assert job and job["id"] == jid
     monkeypatch.setattr(

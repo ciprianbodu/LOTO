@@ -49,34 +49,27 @@ def test_runner_defaults_to_per_draw_scoring():
     assert inspect.signature(run_benchmark).parameters["block_size"].default == 1
 
 
-def test_curated_benchmark_runs_only_relevant_methods_per_game():
-    from loto_enterprise.benchmark.curated import load_curated, resolve_methods_per_game
-
-    games = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2")
-    matrix = resolve_methods_per_game(load_curated(), games)
-
-    # Existing methods remain on every game; the new experiment is scoped to
-    # 6/49. Validate membership, not only counts that can hide substitutions.
+def test_curated_benchmark_runs_only_relevant_methods_per_game(monkeypatch):
+    from loto_enterprise.benchmark import curated
     from loto_enterprise.benchmark.methods import list_methods
+    from loto_enterprise.benchmark.runner import _methods_for_game
 
-    registry = set(list_methods())
-    experimental = {"interval_extrema_k16"}
-    assert set(matrix["loto_6_49"]) == registry
-    for game in ("loto_5_40", "joker_urna1"):
-        assert set(matrix[game]) == registry - experimental
-    # Urna 2: fără metodele „bila precedentă” și fără duplicatul markov_pairs.
-    # (Curarea BENCH-ului din curated_methods.json e independentă de listele de
-    # excludere din producție, goale din 2026-10-31 — aici e vorba de matricea
-    # de măsurare, deci setul literal rămâne cel curatat.)
-    assert set(matrix["joker_urna2"]) == (
-        registry
-        - experimental
-        - {"markov_self_state", "vlmm_self_k3"}
-        - {"naive_bayes_last"}
+    countries = ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2", "at_lotto")
+    registry = list_methods()
+    monkeypatch.setattr(
+        curated, "load_per_game", lambda: {
+            "loto_6_49": ["compact_renewal_hazard", "compact_renewal_hazard"],
+            "at_lotto": ["markov_lag2", "compact_renewal_hazard"],
+        },
     )
-    for selected in matrix.values():
-        assert "random" in selected
-        assert "frequency" in selected
+    config = curated.resolve_methods_per_game(registry, countries)
+    assert set(config["loto_6_49"]) == {"compact_renewal_hazard", "random", "frequency"}
+    assert set(config["at_lotto"]) == {"compact_renewal_hazard", "random", "frequency"}
+    for game in ("loto_5_40", "joker_urna1", "joker_urna2"):
+        assert set(_methods_for_game(registry, config, game)) == set(registry)
+    for game in countries:
+        selected = _methods_for_game(registry, config, game)
+        assert len(selected) == len(set(selected))
 
 
 def test_runner_method_matrix_is_safe_and_deduplicated():

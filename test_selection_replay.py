@@ -20,17 +20,18 @@ def _game(key="loto_6_49"):
 def test_prediction_and_selection_exclude_all_targets_on_same_day(monkeypatch):
     seen = []
 
-    def scorer(_method, history, maximum):
-        seen.append(history.copy())
+    def scorer(_method, history, maximum, *, history_cutoffs):
+        seen.append((history.copy(), history_cutoffs))
         return {number: float(number) for number in range(1, maximum + 1)}, 0.0
 
     monkeypatch.setattr(replay, "call_method", scorer)
     draws = np.arange(48).reshape(8, 6) % 49 + 1
     cutoffs = (0, 1, 2, 3, 4, 5, 5, 7)
     result = replay.evaluate_method("fake", draws, cutoffs, [5, 6, 7], 49, 16, 0, 2)
-    assert [len(history) for history in seen] == [5, 7]
-    assert np.array_equal(seen[0], draws[:5])
-    assert np.array_equal(seen[1], draws[:7])
+    assert [len(history) for history, _ in seen] == [5, 7]
+    for (history, supplied), end in zip(seen, (5, 7), strict=True):
+        np.testing.assert_array_equal(history, draws[:end])
+        assert supplied == cutoffs[:end]
     assert replay.available_prediction_offsets([4, 5, 6, 7], cutoffs[6]) == [0]
     assert len(result.raw_hits) == len(result.limited_hits) == 3
     assert not result.errors
@@ -58,7 +59,8 @@ def test_global_target_restored_when_temporal_selection_raises(monkeypatch):
     original = replay.decision.BENCH_HIT_TARGET
     received = []
 
-    def fail(*_args):
+    def fail(*_args, candidate_methods):
+        assert set(candidate_methods) == {"frequency"}
         received.append(replay.decision.BENCH_HIT_TARGET)
         raise RuntimeError("selection failed")
 
@@ -70,7 +72,7 @@ def test_global_target_restored_when_temporal_selection_raises(monkeypatch):
 
 
 def test_failed_prediction_is_missing_and_cannot_improve_selection_denominator(monkeypatch):
-    monkeypatch.setattr(replay, "call_method", lambda *_args: ({1: 1.0, 2: 1.0}, 0.0))
+    monkeypatch.setattr(replay, "call_method", lambda *_args, **_kwargs: ({1: 1.0, 2: 1.0}, 0.0))
     result = replay.evaluate_method("flat", np.ones((8, 6), dtype=int), tuple(range(8)), [5, 6, 7], 49, 16, 0, 2)
     assert result.raw_hits == result.limited_hits == [-1, -1, -1]
     assert len(result.errors) == 3

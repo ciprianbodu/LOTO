@@ -94,11 +94,14 @@ def test_lottery_caps_and_defaults():
     caps = {g.game_id: g.max_pool for g in L.GAMES}
     assert caps["5/40"] == 40 and caps["6/49"] == 49 and caps["joker"] == 45
     assert all(v == 16 for k, v in caps.items() if not L.GAMES_BY_ID[k].is_romanian)
+    played = {"6/49": (48, 9), "5/40": (16, 8), "joker": (24, 10)}
     for game, key in ui_runtime._POOL_KEYS.items():
         largest = max(s.n for s in lr.lr_schemes(game))
-        want = min(largest, L.GAMES_BY_ID[game].max_pool)
+        assert L.GAMES_BY_ID[game].default_pool == min(largest, L.GAMES_BY_ID[game].max_pool)
+        code, want = played[game]
+        assert next(s for s in lr.lr_schemes(game) if s.code == code).n == want
         assert ui_runtime.DEFAULTS[key] == ui_runtime._POOL_DEFAULTS[game] == want
-    assert ui_runtime._POOL_DEFAULTS == {"6/49": 16, "5/40": 19, "joker": 15}
+    assert ui_runtime._POOL_DEFAULTS == {"6/49": 9, "5/40": 8, "joker": 10}
 
 
 # --------------------------------------------------------------------------- #
@@ -117,7 +120,7 @@ def test_pool_setting_per_game_is_reset_at_each_restart(tmp_path, monkeypatch):
         monkeypatch.setitem(ui_runtime.SETTINGS, key, None)
     ui_runtime._load_settings()
     assert {g: ui_runtime.SETTINGS[key] for g, key in keys.items()} == {
-        "6/49": 16, "5/40": 19, "joker": 15,
+        "6/49": 9, "5/40": 8, "joker": 10,
     }
     assert set(keys.values()) <= set(ui_runtime.UI_PERSIST_KEYS)
 
@@ -133,7 +136,7 @@ def test_pool_size_for_reads_the_games_field(monkeypatch):
     for key, want in (
         ("5/40", 18), ("loto_5_40", 18), ("loto_5_40.csv", 18),
         ("6/49", 12), ("loto_6_49", 12),
-        ("joker", 45), ("joker_urna1", 45),
+        ("joker", 15), ("joker_urna1", 15),
         ("at_lotto", 11), ("de_lotto", 11),
     ):
         assert app._pool_size_for(key) == want, key
@@ -156,15 +159,16 @@ def test_config_sends_each_game_its_own_pool(monkeypatch):
     monkeypatch.setitem(app.SETTINGS, "games_val", [])
     cfg = json.loads(app._build_config_json())
     pools = {ds["tasks"][0]["game_label"]: ds["tasks"][0]["pool_size"] for ds in cfg["datasets"]}
-    assert pools == {"6/49": 16, "5/40": 19, "joker": 15}
+    assert pools == {"6/49": 9, "5/40": 8, "joker": 10}
     monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["5/40"], 17)
     again = json.loads(app._build_config_json())
     assert again["input_hash"] != cfg["input_hash"]
     pools = {ds["tasks"][0]["game_label"]: ds["tasks"][0]["pool_size"] for ds in again["datasets"]}
-    assert pools == {"6/49": 16, "5/40": 17, "joker": 15}
+    assert pools == {"6/49": 9, "5/40": 17, "joker": 10}
 
 
-def test_autopilot_asks_each_game_for_its_own_pool(monkeypatch):
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_autopilot_uses_each_games_pool_for_the_active_selection_mode(monkeypatch, dynamic):
     import app_nicegui as app
     import loto_enterprise.core.method_selector as ms
 
@@ -176,16 +180,25 @@ def test_autopilot_asks_each_game_for_its_own_pool(monkeypatch):
 
     monkeypatch.setattr(ms, "recommend_optimal_config", _rec)
     monkeypatch.setattr(app, "_selected_games", lambda: list(L.games_for_country(L.RO)))
-    monkeypatch.setattr(app, "submit_generation", lambda **_kw: None)
-    monkeypatch.setattr(app.ui, "notify", lambda *_a, **_kw: None)
+    submitted, notices = [], []
+    monkeypatch.setattr(app, "submit_generation", lambda **kwargs: submitted.append(kwargs))
+    monkeypatch.setattr(app.ui, "notify", lambda message, **_kwargs: notices.append(message))
+    monkeypatch.setitem(app.SETTINGS, "dynamic_method_enabled_val", dynamic)
     monkeypatch.setitem(
         app.STATE, "datasets", [("loto_6_49.csv", None), ("loto_5_40.csv", None), ("joker.csv", None)]
     )
     for game, size in (("6/49", 16), ("5/40", 19), ("joker", 15)):
         monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS[game], size)
     app.apply_autopilot_and_generate()
-    assert ("loto_6_49", 16) in asked and ("loto_5_40", 19) in asked
-    assert ("joker_urna1", 15) in asked
+    if dynamic:
+        assert asked == [("joker_urna2", 1)]
+        for key, size in (("loto_6_49", 16), ("loto_5_40", 19), ("joker_urna1", 15)):
+            assert f"{key} · selecție dinamică" in notices[0]
+            assert f"Pool de {size} numere." in notices[0]
+        assert submitted == [{"pure": False, "sim_depth_per_game": {}}]
+    else:
+        assert asked == [("loto_6_49", 16), ("loto_5_40", 19), ("joker_urna1", 15), ("joker_urna2", 1)]
+        assert submitted == [{"pure": False, "sim_depth_per_game": {"6/49": 30, "5/40": 30, "joker": 30}}]
 
 
 def test_live_leaderboard_shows_each_games_pool(tmp_path, monkeypatch):
@@ -205,14 +218,6 @@ def test_live_leaderboard_shows_each_games_pool(tmp_path, monkeypatch):
     with capture_ui():
         ui_bench._render_bench_live_leaderboard(progress=0.5)
     assert seen == [("loto_6_49", 16), ("joker_urna1", 15), ("loto_5_40", 18)]
-
-
-def test_base_interval_memo_holds_every_game_and_pool():
-    import app_nicegui as app
-
-    assert app._BASE_TABLE_MEMO_MAX == 2 * sum(
-        L.GAMES_BY_ID[g].max_pool - 5 for g in ("6/49", "5/40", "joker")
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -238,6 +243,8 @@ def test_submit_worker_result_panel_and_wf_options_at_19(tmp_path, monkeypatch):
     monkeypatch.setitem(app.SETTINGS, "max_variants_val", 0)
     monkeypatch.setitem(app.SETTINGS, "wheel_condition_val", 0)
     monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", False)
+    # The static path below tests an exact synthetic ranking through the worker.
+    monkeypatch.setitem(app.SETTINGS, "dynamic_method_enabled_val", False)
     db = str(tmp_path / "jobs.db")
     jid = jq.submit_job("pipeline", app._build_config_json(), db_path=db)
     job = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
@@ -261,7 +268,7 @@ def test_submit_worker_result_panel_and_wf_options_at_19(tmp_path, monkeypatch):
     with capture_ui() as ui:
         app._render_cost("5/40", data)
     text = ui.text()
-    assert "Cod 48" in text and "930 var." in text
+    assert "Cod 48" in text and "930 de variante" in text
     assert "fără schemă redusă" not in text
     assert any("Cod 48" in line for line in app._lr_scheme_lines("5/40", data))
 
@@ -334,15 +341,22 @@ def test_lotto_cover_at_19_numbers_takes_seconds_not_minutes():
     assert len(cover) == 376
 
 
-def test_foreign_interval_table_uses_the_shared_pool_field(monkeypatch):
-    import app_nicegui as app
+def test_foreign_live_leaderboard_uses_the_shared_pool_field(monkeypatch, tmp_path):
+    import ui_bench
     from scripts.analysis.audit_output import capture_ui
 
-    monkeypatch.setitem(app.SETTINGS, "country_val", "AT")
-    monkeypatch.setitem(app.SETTINGS, "pool_size_val", 9)
-    monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 16)
-    monkeypatch.setitem(app._BASE_TABLE_OPENED, "value", True)
-    with capture_ui() as ui:
-        app._render_base_interval_tables.func()
-    titles = [str(n["args"][0]) for n in ui.walk() if n["kind"] == "expansion"]
-    assert titles and all("pool 9," in t for t in titles), titles
+    folds = tmp_path / "folds.csv"
+    pd.DataFrame({"method": ["frequency"], "game": ["at_lotto"]}).to_csv(folds, index=False)
+    monkeypatch.setattr(ui_bench, "_country_folds_path", lambda *_args, **_kwargs: folds)
+    monkeypatch.setitem(ui_bench.STATE, "bench_country", "AT")
+    monkeypatch.setitem(ui_bench.SETTINGS, "country_val", "RO")
+    monkeypatch.setitem(ui_bench.SETTINGS, "pool_size_val", 9)
+    monkeypatch.setitem(ui_bench.SETTINGS, ui_bench._POOL_KEYS["6/49"], 16)
+    seen = []
+    monkeypatch.setattr(
+        ui_bench, "_render_bench_leaderboard_slice",
+        lambda df, game, pool, *args, **kwargs: seen.append((game, pool)),
+    )
+    with capture_ui():
+        ui_bench._render_bench_live_leaderboard(progress=0.5)
+    assert seen == [("at_lotto", 9)]

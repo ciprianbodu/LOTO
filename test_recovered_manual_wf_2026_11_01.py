@@ -25,6 +25,7 @@ def recovered(monkeypatch):
         "result_sources": {"history.csv": frame}, "results_recovered": "job #28",
         "retro": {}, "retro_meta": {}, "wf_seq": 0, "wf_running": False,
         "wf_user_cancel": False, "active_job_id": None, "job_start_time": None,
+        "bench_was_running": False, "_bench_history_pending": None,
     }.items(): monkeypatch.setitem(app.STATE, key, value)
     notices = []
     monkeypatch.setattr(app.ui, "notify", lambda message, **_kw: notices.append(message))
@@ -52,6 +53,8 @@ def test_manual_recovered_wf_uses_original_snapshot_without_shutdown(recovered, 
 
 
 def test_new_generation_retains_normal_automatic_finalization(recovered, monkeypatch):
+    # This completion test is independent of an external benchmark.
+    monkeypatch.setattr(app, "_bench_running", lambda: False)
     finalized = []
     monkeypatch.setattr(app, "_finalize_pipeline", lambda: finalized.append(True))
     monkeypatch.setattr(wf, "run_honest_walk_forward", lambda **_kw: (
@@ -108,30 +111,73 @@ def test_recovered_action_is_visible_without_folds_or_cached_history(recovered, 
     assert not buttons and not starts
 
 
-def test_effective_guarantees_follow_live_input_for_all_three_games(sidebar_context):
+def test_official_lr_guarantees_follow_each_live_slider_code_for_all_three_games(sidebar_context):
     from nicegui import binding, ui
+    from covering.lr_schemes import lr_schemes, scheme_guarantees
 
     client, settings, _state = sidebar_context
+    settings.update(country_val="RO", lr_scheme_649_val=48, lr_scheme_540_val=16,
+                    lr_scheme_joker_val=24, pool_size_649_val=9,
+                    pool_size_540_val=8, pool_size_joker_val=10)
     settings["guarantee_val"] = 6
     app.main_page()
-    output = next(
-        element for element in client.elements.values()
-        if isinstance(element, ui.label) and element.text.startswith("Garanția cerută pe joc:")
-    )
-    field = next(
-        element for element in client.elements.values()
-        if isinstance(element, ui.number)
-        and element._props.get("label") == "Garanție minimă (Set Cover)"
-    )
-    assert "6/49: 6" in output.text
-    assert "5/40: 5 (plafonată la 5)" in output.text
-    assert "Joker: 5 (plafonată la 5)" in output.text
+    generic_labels = {
+        "Garanție minimă (Set Cover)",
+        "Garanția se aplică dacă în pool cad (0 = câte cere garanția)",
+        "Limită maximă variante (0=nelimitat)",
+    }
+    assert not any(isinstance(element, ui.number) and element._props.get("label") in generic_labels
+                   for element in client.elements.values())
+    assert not any(isinstance(element, ui.label) and element.text.startswith("Garanția cerută pe joc:")
+                   for element in client.elements.values())
+    elements = list(client.elements.values())
+    # Only the scheme sliders label their thumb with the size of the chosen pool.
+    sliders = [
+        element for element in elements
+        if isinstance(element, ui.slider) and "label-value" in element._props
+    ]
+    assert len(sliders) == 3
+    visited = []
+    for game, slider in zip(("6/49", "5/40", "joker"), sliders):
+        schemes = sorted(lr_schemes(game), key=lambda scheme: (scheme.n, scheme.size, scheme.code))
+        following_labels = [element for element in elements[elements.index(slider) + 1:]
+                            if isinstance(element, ui.label)]
+        summary, guarantee = following_labels[:2]
+        assert slider._props["max"] == len(schemes) - 1
+        for index, scheme in enumerate(schemes):
+            slider.set_value(index)
+            binding._refresh_step()
+            _finish_ui_updates()
+            assert settings[app._LR_CODE_KEYS[game]] == scheme.code
+            assert app._pool_size_for(game) == scheme.n
+            assert f"Cod {scheme.code} · {scheme.n} numere · {scheme.size} variante" in summary.text
+            assert guarantee.text.startswith("Garanții condiționate: ")
+            parts = guarantee.text.removeprefix("Garanții condiționate: ").split("; ")
+            profile = scheme_guarantees(scheme)
+            assert len(parts) == len(profile)
+            for (pool_hits, probabilities), part in zip(profile.items(), parts):
+                assert part.startswith((f"{pool_hits} ieșite → ", f"{pool_hits} → "))
+                sure = max((t for t, p in probabilities.items() if p >= 1.0 - 1e-12), default=None)
+                if sure is None:
+                    assert "sigur" not in part
+                else:
+                    assert f"→ {sure} sigur" in part
+            assert settings["guarantee_val"] == 6  # the retired generic setting cannot rewrite LR guarantees
+            visited.append((game, scheme.code))
+    assert len(visited) == len(set(visited)) == sum(len(lr_schemes(game)) for game in ("6/49", "5/40", "joker"))
+
+
+def test_legacy_generic_guarantee_text_still_clamps_at_each_games_pick_size(sidebar_context):
+    _client, settings, _state = sidebar_context
+    settings["guarantee_val"] = 6
+    text = app._romanian_guarantee_text()
+    assert "6/49: 6" in text
+    assert "5/40: 5 (plafonată la 5)" in text
+    assert "Joker: 5 (plafonată la 5)" in text
     for value in (3, 4, 5):
-        field.value = value
-        binding._refresh_step()
-        _finish_ui_updates()
-        assert settings["guarantee_val"] == value
-        assert f"6/49: {value}" in output.text
-        assert f"5/40: {value}" in output.text
-        assert f"Joker: {value}" in output.text
-        assert "plafonată" not in output.text
+        settings["guarantee_val"] = value
+        text = app._romanian_guarantee_text()
+        assert f"6/49: {value}" in text
+        assert f"5/40: {value}" in text
+        assert f"Joker: {value}" in text
+        assert "plafonată" not in text

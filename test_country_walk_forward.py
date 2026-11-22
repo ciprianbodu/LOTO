@@ -71,7 +71,7 @@ def _de_tail(n: int) -> pd.DataFrame:
     [("6/49", "loto_6_49"), ("5/40", "loto_5_40"), ("joker", "joker_urna1")],
 )
 def test_romanian_signature_and_cache_path_unchanged(decisions, game_type, key):
-    _decision(decisions / "best_methods.json", key, "ewma_hl30", None)
+    _decision(decisions / "best_methods.json", key, "compact_multiscale_shrink", None)
     kw = dict(recent_penalty_draws=2, max_consecutive_run=2)
     keyless = wf._decision_sig(game_type, 12, **kw)
     assert wf._decision_sig(game_type, 12, **kw, country="RO") == keyless
@@ -89,21 +89,21 @@ def test_romanian_signature_and_cache_path_unchanged(decisions, game_type, key):
 def test_foreign_signature_is_separate_and_follows_the_country_file(decisions):
     ro_file = decisions / "best_methods.json"
     de_file = ms.decision_path_for("DE")
-    _decision(ro_file, "loto_6_49", "ewma_hl30", None)
+    _decision(ro_file, "loto_6_49", "compact_multiscale_shrink", None)
     ro_sig = wf._decision_sig("6/49", 12)
     absent = wf._decision_sig("6/49", 12, game_key="de_lotto", country="DE")
     assert absent != ro_sig
     # Fără identitate de joc explicită, țara singură ajunge (un singur 6/49 în DE).
     assert wf._decision_sig("6/49", 12, country="DE") == absent
 
-    _decision(de_file, "de_lotto", "gap_hazard", "DE")
+    _decision(de_file, "de_lotto", "compact_renewal_hazard", "DE")
     with_de = wf._decision_sig("6/49", 12, game_key="de_lotto", country="DE")
     assert with_de not in (absent, ro_sig)
     # Decizia românească nu atinge cheia străină …
-    _decision(ro_file, "loto_6_49", "gap_hazard", None)
+    _decision(ro_file, "loto_6_49", "compact_renewal_hazard", None)
     assert wf._decision_sig("6/49", 12, game_key="de_lotto", country="DE") == with_de
     # … iar un alt conținut al fișierului țării o schimbă.
-    _decision(de_file, "de_lotto", "ewma_hl30", "DE")
+    _decision(de_file, "de_lotto", "compact_multiscale_shrink", "DE")
     assert wf._decision_sig("6/49", 12, game_key="de_lotto", country="DE") != with_de
 
     path = wf._cache_path(
@@ -206,7 +206,7 @@ def test_romanian_backtester_keeps_keyless_step_engines():
 
 
 def test_worker_step_takes_identity_from_shared_by_name(decisions, monkeypatch):
-    _decision(ms.decision_path_for("DE"), "de_lotto", "ewma_hl30", "DE")
+    _decision(ms.decision_path_for("DE"), "de_lotto", "compact_multiscale_shrink", "DE")
     b = bt.LotoBacktester(_de_tail(30), "6/49", game_key="de_lotto", country="DE")
     monkeypatch.setattr(
         bt,
@@ -239,7 +239,7 @@ def test_worker_step_takes_identity_from_shared_by_name(decisions, monkeypatch):
     assert (step.game_key, step.country, step.bench_method) == (
         "de_lotto",
         "DE",
-        "ewma_hl30",
+        "compact_multiscale_shrink",
     )
 
 
@@ -267,8 +267,8 @@ def test_foreign_wf_uses_the_foreign_decision_in_process(
     decisions, monkeypatch, use_feedback
 ):
     """Calea în proces (sondă + secvențial) și calea secvențială cu stare."""
-    _decision(decisions / "best_methods.json", "loto_6_49", "gap_hazard", None)
-    _decision(ms.decision_path_for("DE"), "de_lotto", "ewma_hl30", "DE")
+    _decision(decisions / "best_methods.json", "loto_6_49", "compact_renewal_hazard", None)
+    _decision(ms.decision_path_for("DE"), "de_lotto", "compact_multiscale_shrink", "DE")
     monkeypatch.setattr(bt, "_WF_SERIAL_MAX_MS", 1e9)
     b = bt.LotoBacktester(_de_tail(40), "6/49", game_key="de_lotto", country="DE")
     preds = b.run_retroactive_backtest(
@@ -281,14 +281,14 @@ def test_foreign_wf_uses_the_foreign_decision_in_process(
     )
     assert preds
     assert {(p.game_key, p.country, p.bench_method) for p in preds} == {
-        ("de_lotto", "DE", "ewma_hl30")
+        ("de_lotto", "DE", "compact_multiscale_shrink")
     }
 
 
 def test_run_honest_walk_forward_foreign_meta_and_cache(
     decisions, monkeypatch, tmp_path
 ):
-    _decision(ms.decision_path_for("DE"), "de_lotto", "ewma_hl30", "DE")
+    _decision(ms.decision_path_for("DE"), "de_lotto", "compact_multiscale_shrink", "DE")
     monkeypatch.setattr(wf, "CACHE_DIR", tmp_path / "wf")
     monkeypatch.setattr(bt, "_WF_SERIAL_MAX_MS", 1e9)
     seen = []

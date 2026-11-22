@@ -43,11 +43,13 @@ def ui_state(monkeypatch):
 # --------------------------------------------------------------------------- #
 def test_country_bench_target_counts_random_once(ui_state, monkeypatch):
     from loto_enterprise.benchmark.curated import apply_curation
-    from loto_enterprise.benchmark.methods import list_methods, method_meta
+    from loto_enterprise.benchmark.methods import list_methods, method_applies_to_game, method_meta
 
     avail = [m for m in list_methods() if method_meta(m).get("available", True)]
     kept, _ = apply_curation(avail)
+    kept = [name for name in kept if method_applies_to_game(name, "at_lotto")]
     assert "random" in kept  # REQUIRED_METHODS: runner-ul îl rulează din listă
+    assert "markov_lag2" not in kept  # catalogul lui este limitat la România
     monkeypatch.setattr(app, "_avg_fold_runtime", lambda *a, **k: 1.0)
     texts = app._country_bench_texts("AT")
     n_win = len([p for p in app._PCTS.split(",") if p.strip()])

@@ -218,7 +218,7 @@ def test_leaderboard_weighted_ties_match_decision(monkeypatch):
         for name, rate, tie in (
             ("random", 0.085, 0),
             ("frequency", 0.11, 0.99 if n < 1000 else 0.05),
-            ("markov_pairs", 0.15, 0.05 if n < 1000 else 0.8),
+            ("compact_transition_prior", 0.15, 0.05 if n < 1000 else 0.8),
         ):
             rows.append(
                 dict(
@@ -251,7 +251,7 @@ def test_leaderboard_weighted_ties_match_decision(monkeypatch):
     with capture_ui() as capture:
         app._render_bench_leaderboard_slice(frame, "joker_urna1", 11, "Joker", 20)
     assert capture.ranking()[0] == "frequency"
-    assert "markov_pairs" not in capture.ranking()
+    assert "compact_transition_prior" not in capture.ranking()
 
 
 def test_leaderboard_partial_evaluations_have_no_rank(monkeypatch):
@@ -264,14 +264,14 @@ def test_leaderboard_partial_evaluations_have_no_rank(monkeypatch):
         for name, rate in (
             ("random", 0.085),
             ("frequency", 0.11),
-            ("markov_pairs", 0.15),
+            ("compact_transition_prior", 0.15),
         ):
             rows.append(
                 dict(
                     game="joker_urna1",
                     method=name,
                     percentile=pct,
-                    n_eval=n - 1 if name == "markov_pairs" else n,
+                    n_eval=n - 1 if name == "compact_transition_prior" else n,
                     n_test=n,
                     runtime_sec=0.01,
                     is_random=False,
@@ -289,7 +289,7 @@ def test_leaderboard_partial_evaluations_have_no_rank(monkeypatch):
             pd.DataFrame(rows), "joker_urna1", 11, "Joker", 20
         )
     assert capture.ranking()[0] == "frequency"
-    assert "markov_pairs" not in capture.ranking()
+    assert "compact_transition_prior" not in capture.ranking()
     assert "extrageri neevaluate" in capture.text()
 
 

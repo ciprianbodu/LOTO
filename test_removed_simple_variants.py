@@ -25,7 +25,7 @@ def test_old_simple_ticket_settings_are_ignored_and_dropped_on_save(tmp_path, mo
     ui_runtime._load_settings()
     assert settings["guarantee_val"] == 3
     assert {g: ui_runtime._pool_size_for(g) for g in ("6/49", "joker", "5/40")} == {
-        "6/49": 16, "joker": 15, "5/40": 19,
+        "6/49": 9, "joker": 10, "5/40": 8,
     }
     ui_runtime._save_settings()
     saved = json.loads(state.read_text(encoding="utf-8"))

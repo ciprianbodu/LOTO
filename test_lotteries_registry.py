@@ -170,9 +170,6 @@ def test_ui_maps_match_the_registry():
     import ui_runtime
 
     assert ui_results.PRICES == {g.game_id: g.price for g in RO_GAMES}
-    assert {label: m for label, _s, m in ui_runtime._RESTRICT_BASE_GAMES} == {
-        g.game_id: g.max_n for g in RO_GAMES
-    }
     assert ui_runtime._GAME_DISPLAY_ORDER == {
         g.game_id: g.display_order for g in RO_GAMES
     }
@@ -346,10 +343,12 @@ def test_foreign_bench_keys_get_their_own_geometry_in_the_decision_tables():
         assert hit_target.game_hit_target(g.bench_key, 3) == max(3, g.min_hit_target)
 
 
-def test_foreign_decision_uses_the_hypergeometric_reference():
+@pytest.mark.parametrize("target", [3, 4])
+def test_foreign_decision_uses_the_hypergeometric_reference(target):
     from loto_enterprise.benchmark import decision
 
-    base = decision.expected_random_rate(49, 6, 10, 3)
+    game = L.lottery_by_id("de_lotto")
+    base = decision.expected_random_rate(game.max_n, game.draw_n, 10, target)
     rows = []
     for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
         for method, rate in (("random", base + 0.05), ("frequency", base + 0.02)):
@@ -364,10 +363,12 @@ def test_foreign_decision_uses_the_hypergeometric_reference():
                     "failed": False,
                     "runtime_sec": 0.1,
                     "k10": 1.0,
-                    "rate_3plus_k10": rate,
+                    f"rate_{target}plus_k10": rate,
                 }
             )
-    cfg = decision.decide_optimal_config_for_pool(pd.DataFrame(rows), "de_lotto", 10, 6)
+    cfg = decision.decide_optimal_config_for_pool(
+        pd.DataFrame(rows), game.bench_key, 10, game.draw_n, hit_target=target
+    )
     assert cfg["baseline_source"] == "hypergeometric"
     assert cfg["baseline_rate"] == pytest.approx(base)
 

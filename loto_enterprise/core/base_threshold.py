@@ -1,7 +1,7 @@
 """Rata exacta de `target`+ hituri pentru un pool restrans la un interval de numere.
 
-Sursa unica pentru tabelul afisat in UI (submeniul de sub restrangerea bazei) si
-pentru diagnosticul din `scripts/analysis/bench_base_threshold.py`.
+Sursa pentru studiile și diagnosticul offline al intervalelor, inclusiv
+`scripts/analysis/bench_base_threshold.py`.
 
 Rata NU este simulata. Pentru fiecare extragere se numara cate dintre numerele
 iesite au cazut in interval; de acolo probabilitatea ca un pool de `pool_size`
@@ -188,6 +188,8 @@ def interval_table(
     langa valoarea asteptata pentru acea latime. Ultimul rand (latime == max_num)
     este jocul nerestrans, unde toate coloanele cad pe rata teoretica.
     """
+    if not 1 <= pool_size <= max_num:
+        raise ValueError(f"dimensiune de pool invalida ({pool_size}) pentru {max_num} numere")
     half = len(draws) // 2
     if half < 1:
         raise ValueError("istoric prea scurt pentru tabel")

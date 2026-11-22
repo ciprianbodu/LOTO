@@ -153,12 +153,12 @@ def test_production_method_follows_the_numbers_not_their_labels(
         )
 
 
-def _urn2_repeat_share(name: str, histories: list[np.ndarray]) -> float:
+def _urn2_repeat_share(scorer, histories: list[np.ndarray]) -> float:
     from loto_enterprise.core.ranking import rank_by_score
 
     hits = 0
     for history in histories:
-        scores, _ = call_method(name, history, 20)
+        scores = scorer(history, 20)
         top = rank_by_score(scores, 1)
         hits += bool(top) and top[0] == int(history[-1, 0])
     return hits / len(histories)
@@ -170,42 +170,27 @@ def uniform_urn2() -> list[np.ndarray]:
     return [rng.integers(1, 21, size=(200, 1)) for _ in range(100)]
 
 
-def test_single_pick_previous_ball_class_is_characterized_not_excluded(uniform_urn2) -> None:
-    """Pe o urnă cu o bilă, măsurăm clasa „ultima bilă” (top-1 = bila precedentă).
-
-    Pe extrageri uniforme, la întâmplare top-1 repetă bila precedentă în 5% din
-    pași. Până în 2026-10-31 metodele din această clasă erau excluse din
-    producție pe urnele single-pick (`EXCLUDED_FROM_SINGLE_PICK`); din
-    2026-10-31, la cererea explicită a utilizatorului, listele de excludere sunt
-    GOALE — testul păstrează doar caracterizarea măsurată (ce metode sunt de fapt
-    clasa „ultima bilă”), fără să mai interzică nimic.
-    """
+def test_single_pick_previous_ball_class_is_archived(uniform_urn2) -> None:
+    """Păstrează măsurarea clasei istorice pe extrageri uniforme."""
     from loto_enterprise.benchmark.decision import (
         EXCLUDED_FROM_PRODUCTION,
         EXCLUDED_FROM_SINGLE_PICK,
     )
+    from scripts.analysis.legacy_methods_2026_11_20 import METHODS as historical_methods
 
-    assert EXCLUDED_FROM_PRODUCTION == frozenset()
+    assert EXCLUDED_FROM_PRODUCTION == frozenset({"random"})
     assert EXCLUDED_FROM_SINGLE_PICK == frozenset()
 
-    shares = {
-        name: _urn2_repeat_share(name, uniform_urn2)
-        for name in sorted(set(METHODS) - {"random"})
-    }
-    previous_ball_class = {name for name, share in shares.items() if share >= 0.5}
-    # Măsurat 2026-10-31 pe 100 de istorii uniforme (seed 20261007): exact aceste
-    # patru metode repetă bila precedentă în majoritatea pașilor (0,71–1,00).
-    assert previous_ball_class == {
+    historical_names = {
         "haar_multiscale",
         "markov_self_state",
         "repeat_last_draw",
         "vlmm_self_k3",
     }
-    for name in previous_ball_class:
-        assert shares[name] >= 0.5, f"{name}: {shares[name]:.0%}"
-    for name, share in shares.items():
-        if name not in previous_ball_class:
-            assert share < 0.5, (
-                f"{name}: top-1 repetă bila precedentă în {share:.0%} din pași pe "
-                "extrageri uniforme — clasa „ultima bilă”, nu un clasament"
-            )
+    assert historical_names.isdisjoint(METHODS)
+    assert all(
+        _urn2_repeat_share(historical_methods[name][0], uniform_urn2) >= 0.5
+        for name in historical_names
+    )
+    active = set(METHODS) - {"random"}
+    assert all(_urn2_repeat_share(METHODS[name][0], uniform_urn2) < 0.5 for name in active)

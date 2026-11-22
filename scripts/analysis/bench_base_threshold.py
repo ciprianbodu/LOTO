@@ -41,10 +41,17 @@ from loto_enterprise.core.base_threshold import (  # noqa: E402
     theoretical_rate,
 )
 from loto_enterprise.core.draw_validation import valid_draw_matrix  # noqa: E402
+from loto_enterprise.core.lotteries import RO, games_for_country  # noqa: E402
 
 GAMES = {
-    "6/49": ("_ISTORIC/loto_6_49.csv", ["n1", "n2", "n3", "n4", "n5", "n6"], 6, 49),
-    "5/40": ("_ISTORIC/loto_5_40.csv", ["n1", "n2", "n3", "n4", "n5"], 5, 40),
+    game.game_id: (
+        game.csv,
+        [f"n{i}" for i in range(1, game.draw_n + 1)],
+        game.draw_n,
+        game.max_n,
+    )
+    for game in games_for_country(RO)
+    if game.game_id in ("6/49", "5/40")
 }
 
 K = 10  # marimea pool-ului jucat

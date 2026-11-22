@@ -50,7 +50,7 @@ def test_smaller_cover_changes_only_affected_keys_and_budget_branch(tmp_path, mo
     before_budget = wf._wheel_sig(7, "6/49", 3, None, 4)
     smaller_budget = wf._wheel_sig(7, "6/49", 3, None, 3)
     other_geometry = wf._wheel_sig(8, "6/49", 3)
-    assert before_budget.endswith("|sa1")
+    assert "sa1" in before_budget.split("|")
 
     _replace_file(path, _block_text(compact))
     # Do not clear caches: their file stamps must notice this update themselves.

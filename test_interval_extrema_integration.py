@@ -1,7 +1,4 @@
-"""Integration contracts for the experimental interval method.
-
-Din 2026-10-31 metoda este eligibilă și în producție (cerere explicită a
-utilizatorului); rămâne etichetată experimentală în UI."""
+"""Integration contracts for the archived interval scorer and causal benchmark."""
 
 from __future__ import annotations
 
@@ -10,13 +7,18 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from loto_enterprise.benchmark import curated, methods, runner
-from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+from loto_enterprise.benchmark import methods, runner
 from loto_enterprise.core import method_selector
 from loto_enterprise.core.ranking import rank_by_score
+from scripts.analysis import legacy_methods_2026_11_20 as archive
 
 
 METHOD = "interval_extrema_k16"
+
+
+@pytest.fixture
+def replay_interval_scorer(monkeypatch):
+    monkeypatch.setitem(methods.METHODS, METHOD, archive.METHODS[METHOD])
 
 
 def _draws(n: int) -> np.ndarray:
@@ -99,7 +101,7 @@ def test_runner_passes_only_the_observable_cutoff_prefix(monkeypatch, with_dates
     )
     assert not fold.failed, fold.error
     assert fold.n_eval == 7
-    expected_ends = [8, 10, 10, 12, 12, 14, 14] if with_dates else list(range(9, 16))
+    expected_ends = [8, 10, 12, 14] if with_dates else list(range(9, 16))
     assert [len(past) for past, _ in seen] == expected_ends
     for (past, supplied), end in zip(seen, expected_ends, strict=True):
         np.testing.assert_array_equal(past, draws[:end])
@@ -122,10 +124,11 @@ def test_runner_keeps_legacy_call_method_invocation_unchanged(monkeypatch):
         "frequency", draws[:13], draws[13:], _game(16), block_size=1
     )
     assert not fold.failed, fold.error
-    assert seen == [("frequency", 12, 49), ("frequency", 14, 49), ("frequency", 14, 49)]
+    assert fold.n_eval == 3
+    assert seen == [("frequency", 12, 49), ("frequency", 14, 49)]
 
 
-def test_actual_policy_ignores_same_day_target_and_future(monkeypatch):
+def test_actual_policy_ignores_same_day_target_and_future(monkeypatch, replay_interval_scorer):
     draws = _draws(224)
     game = _game(len(draws))
     captured = []
@@ -144,8 +147,8 @@ def test_actual_policy_ignores_same_day_target_and_future(monkeypatch):
     assert not original.failed, original.error
     assert original.n_eval == 4
     original_scores = captured.copy()
-    assert original_scores[0] == original_scores[1]
-    assert original_scores[2] == original_scores[3]
+    # One prediction per distinct observable prefix, reused for both targets.
+    assert len(original_scores) == 2
     assert len(rank_by_score(original_scores[0], 16)) == 16
 
     # Change both targets on the first test day and every later outcome. Neither
@@ -158,10 +161,11 @@ def test_actual_policy_ignores_same_day_target_and_future(monkeypatch):
     )
     assert not perturbed.failed, perturbed.error
     assert perturbed.n_eval == 4
-    assert captured[:2] == original_scores[:2]
+    assert len(captured) == 2
+    assert captured[0] == original_scores[0]
 
 
-def test_warmup_is_reported_as_partial_evaluation():
+def test_warmup_is_reported_as_partial_evaluation(replay_interval_scorer):
     draws = _draws(204)
     fold, _ = runner._evaluate_fold(
         METHOD, draws[:198], draws[198:], _game(204), block_size=1
@@ -174,78 +178,43 @@ def test_warmup_is_reported_as_partial_evaluation():
     assert fold.blocks == 6
 
 
-def test_experimental_registration_is_curated_only_for_649():
-    meta = methods.method_meta(METHOD)
-    assert meta["available"] is True
-    assert meta["uses_history_cutoffs"] is True
-    assert "experimental" in meta["family"].lower()
-    assert METHOD in curated.load_curated()
-    per_game = curated.load_per_game()
-    assert METHOD in per_game["loto_6_49"]
+def test_archived_interval_method_is_scoped_to_649():
+    scorer, family, *_ = archive.METHODS[METHOD]
+    assert scorer._uses_history_cutoffs
+    assert "experimental" in family.lower()
+    assert METHOD in archive.eligible_methods_for_game("loto_6_49")
     assert all(
-        METHOD not in names for game, names in per_game.items() if game != "loto_6_49"
+        METHOD not in archive.eligible_methods_for_game(game)
+        for game in ("loto_5_40", "joker_urna1", "joker_urna2")
     )
+    assert METHOD not in methods.list_methods()
+    assert not methods.method_meta(METHOD)["available"]
 
 
-def test_experimental_method_is_allowed_as_production_scorer_since_2026_10_31(
-    monkeypatch,
-):
-    # Reactivată în producție la cererea explicită a utilizatorului
-    # (2026-10-31): nu mai e în EXCLUDED_FROM_PRODUCTION, deci un best_methods.json
-    # care o numește (inclusiv editat manual) este onorat, nu forțat pe frequency.
-    assert METHOD not in EXCLUDED_FROM_PRODUCTION
-    assert method_selector._sanitize_production_name(METHOD, context="test") == METHOD
-    monkeypatch.setattr(method_selector, "_CACHE", {})
+def test_legacy_interval_decision_uses_the_deterministic_fallback(monkeypatch):
+    from loto_enterprise.benchmark.methods import score_frequency
+
+    assert method_selector._sanitize_production_name(METHOD, context="test") is None
     monkeypatch.setattr(method_selector, "get_winner_name", lambda *args: METHOD)
-    scorer = method_selector.get_scorer_for_game("loto_6_49", 16)
-    assert scorer is methods.METHODS[METHOD][0]
+    assert method_selector.get_scorer_for_game("loto_6_49", 16) is score_frequency
 
 
 @pytest.mark.parametrize("rate", [None, float("nan"), 0.1234])
-def test_ui_caption_separates_experiment_scope_from_measured_pool(rate):
+def test_ui_does_not_present_an_archived_method_as_an_active_experiment(rate):
     import ui_bench
 
-    caption = ui_bench._experimental_method_caption(METHOD, 16, rate)
-    assert "experimentală" in caption
-    assert "pool 16 / 4+" in caption
-    assert "Eligibilă în producție din 2026-10-31" in caption
-    assert "date noi" in caption
-    if rate is None or np.isnan(rate):
-        assert "indisponibilă" in caption
-        assert "nan" not in caption.lower()
-    else:
-        assert "brut 4+: 12.34%" in caption
-        assert "rată 4+" not in caption
-    same = ui_bench._experimental_method_caption(
-        METHOD,
-        16,
-        0.0948,
-        rate3=0.3012,
-        wilson=0.0848,
-        rnd3=0.2981,
-        rnd4=0.0796,
-        shown_t=4,
-    )
+    assert ui_bench._experimental_method_caption(METHOD, 16, rate) == ""
     line = ui_bench._bench_rate_line(
-        4,
-        single_pick=False,
-        wilson=0.0848,
-        raw_primary=0.3012,
-        raw_4=0.0948,
-        rnd_primary=0.2981,
-        rnd_4=0.0796,
+        4, single_pick=False, wilson=0.0848, raw_primary=0.3012,
+        raw_4=0.0948, rnd_primary=0.2981, rnd_4=0.0796,
     )
-    assert line in same
     assert "Wilson 4+: 8.48%" in line
     assert "brut 3+: 30.12%" in line
     assert "brut 4+: 9.48%" in line
-    projected = ui_bench._experimental_method_caption(METHOD, 11, rate)
-    assert "prefixul aceluiași clasament" in projected
-    assert ui_bench._experimental_method_caption("frequency", 16, rate) == ""
 
 
 @pytest.mark.parametrize("with_candidate", [False, True])
-def test_ui_shows_experiment_as_eligible_candidate(
+def test_ui_filters_archived_interval_and_keeps_random_as_baseline(
     monkeypatch, tmp_path, with_candidate
 ):
     import pandas as pd
@@ -289,20 +258,11 @@ def test_ui_shows_experiment_as_eligible_candidate(
         app._render_bench_leaderboard_slice(
             pd.DataFrame(rows), "loto_6_49", 16, "6/49", top_n=20
         )
-    assert METHOD in captured.text()
-    assert "experimentală" in captured.text()
-    # Din 2026-10-31 metoda NU mai e baseline exclus: e candidată și primește rang.
-    assert "Eligibilă în producție din 2026-10-31" in captured.text()
-    assert METHOD in captured.ranking()
-    assert f"🎯 {METHOD}" not in captured.text()  # fără decizie salvată, nimeni nu e 🎯
+    assert METHOD not in captured.text()
     assert not state_file.exists()
     if with_candidate:
-        # METHOD (0.99) rămâne peste frequency (0.12) în clasament.
-        assert captured.ranking()[0] == METHOD
-        assert captured.ranking()[1] == "frequency"
+        assert captured.ranking() == ["frequency"]
+        assert "random" in captured.text()
     else:
-        # Din 2026-10-31 `random` e candidată vizibilă și în clasament (după
-        # METHOD, fiindcă rata ei 0.08 < 0.99).
-        assert captured.ranking() == [METHOD, "random"]
-    # `random` apare mereu ca ultimă candidată (rată 0.08, cea mai mică).
-    assert captured.ranking()[-1] == "random"
+        assert captured.ranking() == []
+        assert "Nicio metodă eligibilă" in captured.text()

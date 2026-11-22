@@ -87,11 +87,9 @@ def test_gate_uses_hypergeometric_reference_not_noisy_random_row(monkeypatch):
     )
     assert cfg["baseline_source"] == "hypergeometric"
     assert cfg["baseline_rate"] == pytest.approx(base)
-    # Din 2026-10-31 `random` e candidată eligibilă și are rata cea mai mare
-    # (base+0.05), deci ea câștigă; referința porții rămâne hipergeometrică,
-    # nu rândul zgomotos `random` (altfel niciuna n-ar fi trecut poarta și
-    # low_confidence ar fi True).
-    assert cfg["scorer"] == "random"
+    # The stronger random sample is diagnostic only: the production scorer
+    # qualifies against the exact hypergeometric reference.
+    assert cfg["scorer"] == "m_signal"
     assert cfg["low_confidence"] is False
     assert cfg["random_empirical_rate"] == pytest.approx(base + 0.05, abs=1e-4)
 

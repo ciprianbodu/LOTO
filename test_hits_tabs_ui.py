@@ -1,7 +1,7 @@
 """Organizarea pe file (tab-uri) a panoului „📜 Istoric hits” și a meniului de analiză.
 
 La cererea utilizatorului (2026-10-31): în „Istoric hits” nu mai sunt amestecate
-toate tabelele într-o singură coloană — sumarul +4/+5 rămâne sus, iar tabelele
+toate tabelele într-o singură coloană — sumarul +4/+5/+6 rămâne sus, iar tabelele
 detaliate (Pool, Variante 4+ și 5+, Schemă LR) sunt pe câte o filă.
 La nivelul „📊 Analiză & Clasament”, fiecare joc are propria filă, nu toate
 clasamentele și istoricele stivuite.
@@ -65,9 +65,9 @@ def test_hits_history_tables_are_on_tabs_and_summary_stays_first():
     with capture_ui() as ui:
         ui_hits._render_hits_4plus(_entries(), "6/49", {"pool_size": 16}, pool_n=16)
     nodes = list(ui.walk())
-    # Sumarul (+4/+5) rămâne primul tabel, deasupra filelor.
+    # Sumarul (+4/+5/+6) rămâne primul tabel, deasupra filelor.
     summary = next(n for n in nodes if n["kind"] == "table")
-    assert [r["prag"] for r in summary["kwargs"]["rows"]] == ["+4", "+5"]
+    assert [r["prag"] for r in summary["kwargs"]["rows"]] == ["+4", "+5", "+6"]
     # O singură bară de file, cu câte o filă per secțiune (joc românesc → și LR).
     tabs = [n for n in nodes if n["kind"] == "tabs"]
     assert len(tabs) == 1

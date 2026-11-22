@@ -497,11 +497,9 @@ def test_method_without_common_rate_data_cannot_win(monkeypatch):
         draw_n=6,
     )
 
-    # Din 2026-10-31 `random` nu mai e exclusă din candidați: e singura metodă
-    # cu rată validă, deci câștigă fallback-ul low-confidence (nu bate baseline-ul
-    # empiric 0.10, deci low_confidence rămâne True). Rândul cu rată NaN e în
-    # continuare sărit și raportat — nu poate câștiga cu avg_hits mare.
-    assert cfg["scorer"] == "random"
+    # Random provides only the benchmark control. With no usable production
+    # candidate the deterministic fallback must still be chosen.
+    assert cfg["scorer"] == "frequency"
     assert cfg["low_confidence"] is True
     assert {"method": "missing_rate_method"} in cfg["rate_data_missing"]
 
@@ -595,26 +593,24 @@ def test_pooled_none_on_missing_or_empty():
     )
 
 
-def test_clamp_bench_hit_target_only_3_or_4():
-    assert decision.clamp_bench_hit_target(3) == 3
-    assert decision.clamp_bench_hit_target(4) == 4
-    assert decision.clamp_bench_hit_target("4") == 4
-    assert decision.clamp_bench_hit_target(5) == 3
-    assert decision.clamp_bench_hit_target(2) == 3
-    assert decision.clamp_bench_hit_target("nope") == 3
-    assert decision.clamp_bench_hit_target(None) == 3
-    assert decision.clamp_bench_hit_target(5, default=4) == 4
+def test_clamp_bench_hit_target_accepts_three_through_six():
+    for target in range(3, 7):
+        assert decision.clamp_bench_hit_target(target) == target
+        assert decision.clamp_bench_hit_target(str(target)) == target
+    for invalid in (2, 7, "nope", None):
+        assert decision.clamp_bench_hit_target(invalid) == 4
+    assert decision.clamp_bench_hit_target(7, default=3) == 3
 
 
 def test_clamp_bench_hit_target_logs_on_unparsable_value(caplog):
     """O valoare neparsabila (ex. "4.0" scrisa programatic din str(float(x)))
     cadea tacut pe default, spre deosebire de o valoare doar in afara
-    intervalului (3/4), care logheaza — asimetrie care ascundea o
+    intervalului (3–6), care logheaza — asimetrie care ascundea o
     reconfigurare gresita a tintei de decizie."""
     import logging
 
     with caplog.at_level(logging.WARNING):
-        assert decision.clamp_bench_hit_target("4.0") == 3
+        assert decision.clamp_bench_hit_target("4.0", default=3) == 3
     assert "neparsabil" in caplog.text
 
 

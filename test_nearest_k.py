@@ -28,12 +28,12 @@ _CFG = {
                     "ensemble": [{"method": "frequency", "weight": 1.0}],
                 },
                 "k12": {
-                    "scorer": "fourier",
+                    "scorer": "compact_transition_prior",
                     "sim_depth_pct": 60,
                     "avg_hits": 1.3,
                     "use_blacklist": True,
                     "rationale": "Wilson_lb=0.1102 la pool 12",
-                    "ensemble": [{"method": "fourier", "weight": 1.0}],
+                    "ensemble": [{"method": "compact_transition_prior", "weight": 1.0}],
                 },
             }
         }
