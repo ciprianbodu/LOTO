@@ -3955,6 +3955,22 @@ def _render_lr_pool_input(game: str, title: str):
     return control
 
 
+def _apply_budget_plan(plans):
+    """Use the budget's official scoring schemes for the next generator and Re-Bench job."""
+    from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
+
+    updated = {"lr_budget_lei": plans[0]["budget_bani"] // 100} if plans else {}
+    for plan in plans:
+        if plan["tickets"]:
+            scheme = budget_plan_scheme(plan)
+            game = plan["game"]
+            updated[_POOL_KEYS[game]] = scheme.n
+            updated[_LR_CODE_KEYS[game]] = scheme.code
+    if any(SETTINGS.get(key) != value for key, value in updated.items()):
+        SETTINGS.update(updated)
+        _save_settings()
+
+
 @ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
@@ -3981,7 +3997,7 @@ def main_page() -> None:
                     audit = data.get("audit") or {}
                     snapshot["audit"] = {
                         key: deepcopy(audit[key])
-                        for key in ("bench_winner", "dynamic_selection", "lr_scheme") if key in audit
+                        for key in ("bench_winner", "dynamic_selection", "lr_scheme", "hash") if key in audit
                     }
                     generated[lot.game_id] = (name, snapshot)
             for name, history in STATE["datasets"]:
@@ -3994,7 +4010,8 @@ def main_page() -> None:
             return {
                 "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
                 "generated": generated,
-                "pool_codes": {game: _lr_scheme_for(game).code for game in games - generated.keys()},
+                "pool_codes": {game: _lr_scheme_for(game).code for game in games},
+                "hit_target": _clamped_bench_target(),
                 "lookback": _effective_lookback_pct(),
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "joker_size": _int_setting("joker_pool_size_val"),
@@ -4213,7 +4230,7 @@ def main_page() -> None:
             )
             ui.label(
                 "La fiecare generare și pas walk-forward, metoda se alege după numărul de extrageri "
-                "anterioare cu cel puțin 4 numere în pool-ul de dimensiunea aleasă. "
+                "anterioare cu cel puțin 4 numere pe aceeași variantă a schemei reduse. "
                 "Premiile se verifică pe variantele schemei LR. Debifează pentru metoda fixă din Re-Bench."
             ).classes("text-caption text-grey")
             for _plabel, _ptitle in (
@@ -4236,12 +4253,15 @@ def main_page() -> None:
             ui.label(
                 "Glisoarele de cod LR aleg scheme oficiale complete. Codurile cu "
                 "același număr de numere au poziții distincte, în ordinea costului. "
-                "La pornire: Cod 48 la 6/49, Cod 16 la 5/40 și Cod 24 la Joker. "
+                "Glisorul de buget actualizează automat codul și pool-ul pentru jocurile comparate. "
                 "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
             ui.separator()
-            budget_slider = lr_budget_slider()
+            from covering.lr_budget import FOUR_PLUS, recommend_games
+
+            budget_slider = lr_budget_slider(SETTINGS.get("lr_budget_lei"))
+            _apply_budget_plan(recommend_games(int(budget_slider.value), FOUR_PLUS))
         else:
             _pool_inputs.append(
                 _bind_save(
@@ -4339,7 +4359,7 @@ def main_page() -> None:
                 return
             _rebuild_decision_for_target(target)
 
-        ui.select(
+        bench_target_input = ui.select(
             {3: "3+ în pool", 4: "4+ în pool (implicit)", 5: "5+ în pool", 6: "6 în pool"},
             value=_clamped_bench_target(),
             label="🎯 Ținta Re-Bench pentru pool",
@@ -4469,7 +4489,8 @@ def main_page() -> None:
         nested_wfv_panel(_cc)
         if budget_slider is not None:
             refresh_budget = lr_budget_panel(
-                budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, *_pool_inputs,
+                budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
+                on_budget_plan=_apply_budget_plan,
             )
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(

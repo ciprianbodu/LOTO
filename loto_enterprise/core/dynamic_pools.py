@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from loto_enterprise.core.pool_selection import select_pool_from_scores
-from loto_enterprise.core.score_validation import SCORE_VARIANCE_EPSILON
+from loto_enterprise.core.score_validation import SCORE_VARIANCE_EPSILON, has_usable_score_variance
 
 
 def _below_free_scores(scores, adjusted, hit, counts):
@@ -92,6 +92,7 @@ def ranked_pools(
     past_draws=None,
     penalty_draws: int = 0,
     penalty_factor: float = 0.5,
+    eligible_numbers: tuple[int, ...] | None = None,
 ) -> np.ndarray:
     """One ascending 1-based pool per scorer; ties favor the larger label.
 
@@ -114,6 +115,39 @@ def ranked_pools(
     k = int(pool_size)
     if not 1 <= lo <= hi <= universe or not 1 <= k <= width:
         raise ValueError("Expected a normalized interval that contains the pool")
+    if eligible_numbers is not None:
+        # Exclusions can leave gaps. Keep real ball labels for penalties,
+        # official LR positions and the consecutive-run constraint.
+        labels = np.asarray(eligible_numbers)
+        if (
+            labels.ndim != 1 or labels.dtype.kind not in "iu" or len(labels) < k
+            or labels[0] < lo or labels[-1] > hi or np.any(labels[1:] <= labels[:-1])
+        ):
+            raise ValueError("Expected sorted distinct eligible numbers within the interval")
+        restricted = scores[:, labels.astype(np.intp) - 1]
+        penalize = (
+            penalty_draws > 0 and past_draws is not None and len(past_draws) > 0
+            and penalty_factor < 1
+        )
+        if not penalize and max_run <= 0:
+            order = np.argsort(restricted, axis=1, kind="stable")[:, ::-1]
+            return np.sort(labels[order[:, :k]], axis=1).astype(np.uint8)
+
+        from loto_engine import LotoEngine
+
+        pools = []
+        for row in restricted:
+            live = dict(zip(eligible_numbers, row, strict=True))
+            if penalize:
+                adjusted, _ = LotoEngine.apply_recent_penalty(
+                    live, past_draws, penalty_draws, penalty_factor, universe,
+                )
+                if has_usable_score_variance(adjusted):
+                    live = adjusted
+            pools.append(select_pool_from_scores(
+                live, k, set(), max_num=hi, max_consecutive_run=max_run,
+            ))
+        return np.asarray(pools, dtype=np.uint8)
     if (
         penalty_draws > 0
         and past_draws is not None

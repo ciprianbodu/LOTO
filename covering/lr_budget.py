@@ -10,6 +10,7 @@ from covering.lr_portfolio import recommend_main_hits
 from loto_enterprise.core.lotteries import games_for_country
 
 MIN_BUDGET_LEI = 100
+DEFAULT_BUDGET_LEI = 200
 FOUR_PLUS = "four_plus"
 ANY_PRIZE = "any_prize"
 

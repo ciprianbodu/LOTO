@@ -406,6 +406,33 @@ class FoldResult:
     failed: bool = False
     error: str = ""
 
+    def as_record(self) -> dict:
+        """Flat fold metrics accepted by the decision function and folds.csv."""
+        row = asdict(self)
+        for k, v in row.pop("hits_per_pool").items():
+            row[k] = v
+        for k, v in row.pop("hits_per_pool_bl").items():
+            row[f"{k}_bl"] = v
+        for k, v in row.pop("rates_4plus_per_pool", {}).items():
+            row[f"rate_4plus_{k}"] = v
+        for k, v in row.pop("rates_3plus_per_pool", {}).items():
+            row[f"rate_3plus_{k}"] = v
+        for k, v in row.pop("rates_5plus_per_pool", {}).items():
+            row[f"rate_5plus_{k}"] = v
+        for k, v in row.pop("rates_6plus_per_pool", {}).items():
+            row[f"rate_6plus_{k}"] = v
+        for k, v in row.pop("rates_1plus_per_pool", {}).items():
+            row[f"rate_1plus_{k}"] = v
+        for k, v in (row.pop("tiebreak_per_pool", {}) or {}).items():
+            row[f"tiebreak_{k}"] = v
+        return row
+
+
+def fold_sizes(n: int, percentile: int) -> tuple[int, int]:
+    """Training and test lengths for a production walk-forward window."""
+    train = 80 if percentile >= 100 else max(0, n - max(1, math.ceil(n * percentile / 100)))
+    return train, n - train
+
 
 def _top_k(scores: dict[int, float], k: int) -> list[int]:
     # Deleagă la regula canonică (scor desc, apoi număr desc — departajare
@@ -425,6 +452,8 @@ def _evaluate_fold(
     test_draws: np.ndarray,
     game: GameDef,
     block_size: int,
+    *,
+    score_method=None,
 ) -> tuple[FoldResult, HwSnapshot]:
     """Run a single fold with hardware sampling. Returns (FoldResult, hw_snap)."""
     n_test = len(test_draws)
@@ -452,6 +481,7 @@ def _evaluate_fold(
         tiebreak_per_pool={f"k{k}": 0.0 for k in pool_sizes},
     )
 
+    scorer = score_method or call_method
     sampler = HwSampler(interval=0.1).start()
     t0 = time.perf_counter()
     try:
@@ -497,7 +527,7 @@ def _evaluate_fold(
                 {"history_cutoffs": game.history_cutoffs[:prefix_end]}
                 if uses_day_context and game.history_cutoffs else {}
             )
-            scores, _t = call_method(method_name, history, game.max_num, **context)
+            scores, _t = scorer(method_name, history, game.max_num, **context)
             blocks += block_weight
 
             if not has_usable_score_variance(scores):
@@ -752,13 +782,7 @@ def run_benchmark(
             if not meta["available"]:
                 continue
             for pct in percentiles:
-                n_test = max(1, int(math.ceil(_n_g * pct / 100.0)))
-                n_train = max(0, _n_g - n_test)
-                if pct >= 100:
-                    # Aceeași corecție ca în bucla reală de mai jos: verificarea
-                    # trebuie să fie pe n_test (n_train e mereu 80 prin construcție).
-                    n_train = 80
-                    n_test = _n_g - n_train
+                n_train, n_test = fold_sizes(_n_g, pct)
                 if n_train < 80 or n_test < 1:
                     continue
                 total_folds_est += 2 if shuffled_control else 1
@@ -805,24 +829,7 @@ def run_benchmark(
             return pd.DataFrame()
         rows = []
         for fr in fold_rows:
-            row = asdict(fr)
-            for k, v in row.pop("hits_per_pool").items():
-                row[k] = v
-            for k, v in row.pop("hits_per_pool_bl").items():
-                row[f"{k}_bl"] = v
-            for k, v in row.pop("rates_4plus_per_pool", {}).items():
-                row[f"rate_4plus_{k}"] = v
-            for k, v in row.pop("rates_3plus_per_pool", {}).items():
-                row[f"rate_3plus_{k}"] = v
-            for k, v in row.pop("rates_5plus_per_pool", {}).items():
-                row[f"rate_5plus_{k}"] = v
-            for k, v in row.pop("rates_6plus_per_pool", {}).items():
-                row[f"rate_6plus_{k}"] = v
-            for k, v in row.pop("rates_1plus_per_pool", {}).items():
-                row[f"rate_1plus_{k}"] = v
-            for k, v in (row.pop("tiebreak_per_pool", {}) or {}).items():
-                row[f"tiebreak_{k}"] = v
-            rows.append(row)
+            rows.append(fr.as_record())
         _df = pd.DataFrame(rows)
         # Ordine CANONICA a randurilor: future-urile se termina in alta ordine
         # decat au fost trimise, iar decizia/clasamentul citesc metodele in
@@ -944,23 +951,7 @@ def run_benchmark(
                 )
                 continue
             for pct in percentiles:
-                n_test = max(1, int(math.ceil(n * pct / 100.0)))
-                n_train = max(0, n - n_test)
-                if pct >= 100:
-                    # La pct=100, n_test inițial e mereu n și n_train mereu 0 (înainte
-                    # de override) — deci `n_train = max(80, n_train)` fixa n_train la
-                    # 80 NECONDIȚIONAT, indiferent de `n` real. Garda de mai jos
-                    # (`n_train < 80`) verifica apoi valoarea deja fixată la 80, deci
-                    # nu se declanșa NICIODATĂ pentru pct=100 — pe un istoric cu
-                    # n <= 80 extrageri, n_test rezultat (`n - 80`) putea fi 0 sau
-                    # NEGATIV, iar fold-ul nu era marcat `failed`: `_evaluate_fold`
-                    # primea n_test<=0, bucla nu executa nimic, `blocks` rămânea 0
-                    # (deci verificarea `blocks>0 and unusable==blocks` nu se aplica),
-                    # și rezultatul era o rată fabricată 0.0 tratată ca fereastră
-                    # completă la poarta de consistență 60%. Verificarea corectă e
-                    # pe `n_test` (mai jos), nu pe `n_train` (mereu 80 prin construcție).
-                    n_train = 80
-                    n_test = n - n_train
+                n_train, n_test = fold_sizes(n, pct)
                 if n_train < 80 or n_test < 1:
                     logger.info(
                         "[%s/%s/%d%%] skip — train too small (%d) sau test insuficient (%d)",

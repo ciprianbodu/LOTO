@@ -5,7 +5,7 @@ from collections import Counter
 
 from nicegui import run, ui
 
-from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, MIN_BUDGET_LEI
+from covering.lr_budget import ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, recommend_games
 from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.ro_text import count
@@ -13,8 +13,8 @@ from ui_lr_portfolio import _percent, _price
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
-_DEFAULT_BUDGET_LEI = 200
 _MAX_SLIDER_BUDGET_LEI = 400
+_INVERSE_RANGE = (10, 40)
 
 
 def _columns(fields):
@@ -55,6 +55,7 @@ def _ticket_details(plan, *, expanded=False):
     with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full"):
         if forecast := plan.get("forecast"):
             pool = forecast["pool"]
+            excluded = forecast.get("excluded_pool")
             origin = "Pool din generare" if forecast["generated"] else "Pool calculat cu setările generatorului"
             if "expanded_from" in forecast:
                 origin = "Pool LR maxim pentru buget" if forecast["expanded_to_max"] else "Pool pentru codul recomandat"
@@ -62,8 +63,19 @@ def _ticket_details(plan, *, expanded=False):
             else:
                 origin += f" · {len(pool)} numere"
             code = f" · Cod {forecast['code']}" if forecast["code"] is not None else ""
+            if excluded is not None:
+                ui.label("Pool normal exclus").classes("text-weight-bold")
+                ui.label(", ".join(map(str, excluded))).classes("text-body2")
+                eligible = count(forecast["eligible_count"], "numere eligibile", "număr eligibil")
+                if limits := forecast.get("inverse_range"):
+                    eligible += f" între {limits[0]} și {limits[1]} inclusiv"
+                origin = f"Pool invers · {count(len(pool), 'numere selectate', 'număr selectat')} din {eligible}"
             ui.label(f"{origin}{code}").classes("text-weight-bold")
             ui.label(", ".join(map(str, pool))).classes("text-body2")
+            if excluded_jokers := forecast.get("excluded_jokers"):
+                eligible = count(forecast["eligible_joker_count"], "numere eligibile", "număr eligibil")
+                ui.label(f"Urna 2 Joker · pool normal exclus · {eligible} după excludere").classes("text-caption")
+                ui.label(", ".join(map(str, excluded_jokers))).classes("text-body2")
             if forecast["jokers"]:
                 ui.label("Pool Urna 2 · " + ", ".join(map(str, forecast["jokers"]))).classes("text-caption")
             date = f" · ultima extragere {forecast['date']}" if forecast["date"] else ""
@@ -100,7 +112,8 @@ def _ticket_details(plan, *, expanded=False):
                         )
                     if selection.get("reason") not in (None, "winner"):
                         evidence += " · metodă de rezervă"
-                ui.label(f"Metoda pool-ului · {evidence}").classes("text-caption")
+                method_label = "Metoda pool-ului invers" if excluded is not None else "Metoda pool-ului"
+                ui.label(f"{method_label} · {evidence}").classes("text-caption")
             bonus = forecast["joker_selection"] or {}
             if bonus.get("method"):
                 ui.label(f"Urna 2 Joker · {_bench_method(bonus)}").classes("text-caption")
@@ -181,13 +194,15 @@ def _render_recommendations(records, budget_lei, objective):
         columns=_columns(fields), rows=rows, row_key="game", pagination={"rowsPerPage": 0},
     ).props("dense flat hide-bottom wrap-cells").classes("w-full")
     for plan in records[1:]:
-        _ticket_details(plan)
+        _ticket_details(plan, expanded=bool(plan.get("forecast_error")))
 
 
-def lr_budget_slider():
+def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
+    value = value if type(value) is int else DEFAULT_BUDGET_LEI
+    value = max(MIN_BUDGET_LEI, min(_MAX_SLIDER_BUDGET_LEI, value))
     budget_label = ui.label().classes("text-bold mt-2")
     slider = ui.slider(
-        min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=_DEFAULT_BUDGET_LEI,
+        min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=value,
     ).props('aria-label="Buget pentru bilete LR" label').classes("w-full")
     budget_label.bind_text_from(
         slider, "value", lambda value: f"Buget bilete LR · {int(value)} lei"
@@ -199,7 +214,21 @@ def lr_budget_slider():
     return slider
 
 
-def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
+def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None):
+    with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
+        generate = ui.button(
+            "Generează recomandarea", icon="confirmation_number", color="positive",
+        ).props("no-caps aria-busy=false").classes("w-full sm:w-auto")
+        inverse = ui.switch("Metoda inversă", value=False).props('aria-label="Metoda inversă"').tooltip(
+            "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
+        )
+        range_filter = ui.switch("Doar numere principale între 10 și 40", value=False).props(
+            'aria-label="Doar numere principale între 10 și 40"'
+        ).classes("max-w-full").tooltip(
+            "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
+        )
+        range_filter.bind_visibility_from(inverse, "value")
+        range_filter.bind_enabled_from(inverse, "value")
     with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
         ui.label(
             "Șansa teoretică se calculează pentru o extragere uniformă. "
@@ -216,37 +245,66 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
         output = ui.column().classes("w-full gap-2")
         revision = 0
         running = False
+        applied_budget = None
+
+        def selected_budget():
+            return int(slider.value), objective.value, None if game.value == "all" else game.value
+
+        def selected_method():
+            enabled = bool(inverse.value)
+            return enabled, _INVERSE_RANGE if enabled and range_filter.value else None
 
         async def refresh():
-            nonlocal revision, running
+            nonlocal revision, running, applied_budget
             revision += 1
             if output.is_deleted:
                 return
             output.clear()
             if not panel.value:
+                generate.props("aria-busy=false", remove="loading")
                 return
+            generate.props("loading aria-busy=true")
             with output:
-                ui.label("Se compară schemele din pool…").classes("text-caption")
+                inverse_mode, limits = selected_method()
+                mode = " inversă" if inverse_mode else ""
+                interval = f" · interval {limits[0]}–{limits[1]}" if limits else ""
+                ui.label(f"Se calculează recomandarea{mode} pentru {int(slider.value)} lei{interval}…").props(
+                    'role="status"'
+                ).classes("text-caption")
             if running:
                 return
             running = True
             try:
                 while panel.value and not output.is_deleted:
                     current = revision
-                    amount, goal = int(slider.value), objective.value
-                    game_id = None if game.value == "all" else game.value
+                    budget_settings = selected_budget()
+                    amount, goal, game_id = budget_settings
+                    method_settings = selected_method()
+                    inverse_mode, limits = method_settings
                     try:
+                        if on_budget_plan is not None and applied_budget != budget_settings:
+                            templates = await run.io_bound(recommend_games, *budget_settings)
+                            if output.is_deleted or not panel.value:
+                                return
+                            if current != revision or selected_budget() != budget_settings:
+                                continue
+                            if templates is None:
+                                raise RuntimeError("Planificarea bugetului a fost întreruptă.")
+                            on_budget_plan(templates)
+                            applied_budget = budget_settings
                         plans = await run.io_bound(
-                            recommend_playable_games, amount, goal, game_id, **forecast_inputs(game_id),
+                            recommend_playable_games, amount, goal, game_id,
+                            inverse=inverse_mode, inverse_range=limits, **forecast_inputs(game_id),
                         )
                     except Exception:
                         logging.getLogger(__name__).exception(
                             "Calcul LR la %d lei pentru %s (%s)", amount, goal, game_id or "all"
                         )
                         plans = None
-                    if output.is_deleted:
+                    if output.is_deleted or not panel.value:
                         return
-                    if current != revision:
+                    if (current != revision or selected_budget() != budget_settings
+                            or selected_method() != method_settings):
                         continue
                     output.clear()
                     with output:
@@ -257,16 +315,21 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls):
                     return
             finally:
                 running = False
+                if not generate.is_deleted:
+                    generate.props("aria-busy=false", remove="loading")
 
-        async def on_budget_change():
+        async def show_recommendation():
             if not panel.value:
                 panel.set_value(True)
                 return
             await refresh()
 
         panel.on_value_change(refresh)
+        generate.on_click(show_recommendation)
+        inverse.on_value_change(show_recommendation)
+        range_filter.on_value_change(show_recommendation)
+        slider.on_value_change(show_recommendation)
         game.on_value_change(refresh)
-        slider.on_value_change(on_budget_change)
         objective.on_value_change(refresh)
         for control in scoring_controls:
             control.on_value_change(refresh)

@@ -108,6 +108,7 @@ def dynamic_forecasts(
     scheme,
     origins,
     *,
+    excluded_numbers=(),
     max_run=0,
     restrict_min=0,
     restrict_max=0,
@@ -119,6 +120,8 @@ def dynamic_forecasts(
 
     matrix contains 1-based main draw numbers. cutoffs[i] is the first row
     of i's date. origins are entire prior prefixes or the next live draw.
+    A fixed exclusion restricts all candidates and the control on every evaluation
+    day. The returned live scores use that same eligible set.
     The history passed in already respects the caller's scoring lookback.
     When cancelled, only fully prepared forecast origins are returned.
     """
@@ -140,6 +143,7 @@ def dynamic_forecasts(
             "candidate_methods": list(CANDIDATES),
             "control_method": "random",
         },
+        excluded_numbers=excluded_numbers,
         max_run=max_run,
         restrict_min=restrict_min,
         restrict_max=restrict_max,
@@ -160,6 +164,7 @@ def _forecast_origins(
     selection_metadata,
     ticket_hits=None,
     prepare_archived_scores=None,
+    excluded_numbers=(),
     max_run=0,
     restrict_min=0,
     restrict_max=0,
@@ -221,6 +226,27 @@ def _forecast_origins(
         raise ValueError(
             f"Cod {scheme.code} cere {scheme.n} numere în intervalul permis"
         )
+    excluded = tuple(excluded_numbers)
+    eligible = None
+    if excluded:
+        if any(
+            isinstance(n, bool)
+            or not isinstance(n, (int, np.integer))
+            or not 1 <= n <= universe
+            for n in excluded
+        ):
+            raise ValueError(f"Numerele excluse trebuie să fie întregi între 1 și {universe}.")
+        blocked = set(map(int, excluded))
+        if len(blocked) != len(excluded):
+            raise ValueError("Lista numerelor excluse conține duplicate.")
+        eligible = tuple(n for n in range(low, high + 1) if n not in blocked)
+        if len(eligible) < scheme.n:
+            raise ValueError(
+                f"Cod {scheme.code} cere {scheme.n} numere, dar după excluderi rămân {len(eligible)}."
+            )
+        selection_metadata = {
+            **selection_metadata, "excluded_numbers": sorted(blocked), "eligible_count": len(eligible),
+        }
     maximum_hits = lot.draw_n if ticket_hits is None else lot.pick_n
     thresholds = tuple(range(4, maximum_hits + 1))
     days = all_starts[all_starts >= WARMUP_DRAWS]
@@ -270,6 +296,8 @@ def _forecast_origins(
                 forecast = score_frequency(matrix[:start], universe)
             else:
                 forecast = dict(enumerate(scores[chosen].tolist(), start=1))
+            if eligible is not None:
+                forecast = {n: forecast[n] for n in eligible}
             details = {
                 **selection_metadata,
                 "method": candidates[chosen],
@@ -297,6 +325,7 @@ def _forecast_origins(
                 past_draws=matrix[:start],
                 penalty_draws=penalty_draws,
                 penalty_factor=penalty_factor,
+                eligible_numbers=eligible,
             )
             columns = pools.astype(np.intp) - 1
             daily = np.zeros_like(totals)
@@ -313,7 +342,9 @@ def _forecast_origins(
     return results
 
 
-def choose_dynamic_winner(matrix, cutoffs, scheme, **settings):
+def choose_dynamic_winner(matrix, cutoffs, scheme, *, excluded_numbers=(), **settings):
     """Select after the latest completed draw date, including live and uploads."""
     end = len(matrix)
-    return dynamic_forecasts(matrix, cutoffs, scheme, [end], **settings)[end]
+    return dynamic_forecasts(
+        matrix, cutoffs, scheme, [end], excluded_numbers=excluded_numbers, **settings
+    )[end]

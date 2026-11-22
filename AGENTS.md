@@ -2084,22 +2084,28 @@ Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de ext
 ### Sugestii LR după buget — 2026-11-21
 
 În ecranul României, glisorul de buget se află în bara din stânga, sub
-glisoarele de pool. Valoarea inițială este 200 lei, cu reglaj direct între
-100 și 400 lei în pași de 1 leu.
-Schimbarea sumei deschide și actualizează panoul „Bilete LR în buget”.
-Panoul compară până la trei jocuri după probabilitatea teoretică pentru
-obiectivul ales. Arată codurile, variantele, biletele fizice și taxa aferentă.
-Probabilitățile folosesc toate cele șase bile extrase la 5/40 și categoriile
-cu bila Joker la obiectivul „Orice premiu”.
+glisoarele de pool. Bugetul inițial este 200 lei și se reglează între 100 și
+400 lei în pași de 1 leu. La redeschidere se aplică ultima sumă salvată.
+Glisorul de buget și butonul verde „Generează recomandarea” deschid panoul
+„Bilete LR în buget”. Bugetul, jocul și obiectivul aleg codurile oficiale și
+actualizează dimensiunile folosite la generare și la următorul Re-Bench. La o
+singură zonă se folosește exact codul recomandat. Pentru mai multe zone se alege
+cea mai mică dimensiune oficială care cuprinde pozițiile necesare, până la
+maximul catalogului. Fiecare zonă de pe bilet păstrează o schemă redusă
+oficială, iar costul total include taxa de bilet.
 
-Panoul alege întâi portofoliul după buget și obiectiv. Dacă pozițiile sale
-încap în pool-ul generat, zonele preiau numere din acel pool. Panoul
-calculează pool-ul configurat înaintea primei generări. Dacă este nevoie
-de mai multe numere, motorul recalculează pool-ul la dimensiunea codului
-recomandat pentru o singură zonă sau la dimensiunea maximă a catalogului
-LR pentru mai multe zone. În ambele cazuri aplică metoda câștigătoare la
-dimensiunea folosită. Panoul indică dimensiunea, codul de referință și
-metoda sursei. Urna 2 Joker își folosește pool-ul propriu.
+„Metoda inversă” pornește de la pool-ul normal pentru același joc, cod și
+istoric. Exclude toate numerele lui pe întreaga fereastră de comparație și la
+alegerea numerelor de jucat. În modul dinamic, candidații și martorul sunt
+evaluați pe variantele schemei oficiale. În modul fix, Re-Bench reevaluează
+metodele pe numerele eligibile în ferestrele istorice obișnuite, în memorie.
+La Joker, excluderea se aplică separat și pool-ului Urnei 2. Dacă numerele
+rămase sunt insuficiente, panoul arată câte sunt disponibile și câte ar trebui.
+Opțiunea „Doar numere principale între 10 și 40” restrânge suplimentar
+complementul pool-ului normal la intervalul inclusiv. Comparația istorică și
+numerele propuse pentru fiecare zonă folosesc aceeași bază eligibilă.
+Filtrul de interval este oprit implicit și se aplică exclusiv urnei principale.
+Pool-ul exclus și numerele de jucat sunt afișate în detaliile biletului.
 
 Când configurația cere mai multe numere decât oferă pool-urile disponibile,
 panoul caută în buget completări cu zone care se pot suprapune. Șansa se

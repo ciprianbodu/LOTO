@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
+from covering.lr_budget import DEFAULT_BUDGET_LEI
 from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.hit_target import (
     BENCH_TARGET_REVISION, DEFAULT_BENCH_HIT_TARGET, clamp_bench_hit_target,
@@ -368,6 +369,7 @@ def _clamped_bench_target(value=None) -> int:
 
 
 UI_PERSIST_KEYS = [
+    "lr_budget_lei",
     "bench_target_revision",
     "dynamic_method_enabled_val",
     "joker_pool_size_val",
@@ -388,6 +390,7 @@ UI_PERSIST_KEYS = [
     "bench_hit_target",
 ]
 DEFAULTS = {
+    "lr_budget_lei": DEFAULT_BUDGET_LEI,
     "pool_size_val": 10,
     "joker_pool_size_val": 5,
     **{_POOL_KEYS[label]: size for label, size in _POOL_DEFAULTS.items()},
