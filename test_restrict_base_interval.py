@@ -284,148 +284,55 @@ def test_semantics_change_invalidates_only_the_restricted_cache_keys():
     assert wf._restrict_base_sig(40, 10) != wf._restrict_base_sig(40, 12)
 
 
-def test_config_hash_carries_the_semantics_only_when_a_restriction_is_active():
-    """Același contract pentru cache-ul de pipeline al worker-ului.
-
-    Praguri PE JOC: cheia din SETTINGS are sufixul jocului (`_649_`), iar totul
-    e sub bifa `restrict_base_enabled_val` — fără ea, un prag tastat rămâne
-    inert (vezi și `test_active_restrict_base_is_per_game`)."""
+def test_saved_ui_intervals_no_longer_change_any_task_or_cache_key(monkeypatch):
+    """Setările vechi din UI nu restrâng generarea pe schema oficială."""
     import json
 
     import app_nicegui as app
 
-    app.STATE["datasets"] = [
-        ("loto_6_49.csv", pd.read_csv("_ISTORIC/loto_6_49.csv").tail(30))
+    datasets = [
+        ("loto_6_49.csv", pd.read_csv("_ISTORIC/loto_6_49.csv").tail(10)),
+        ("loto_5_40.csv", pd.read_csv("_ISTORIC/loto_5_40.csv").tail(10)),
     ]
-    app.SETTINGS["restrict_base_enabled_val"] = False
-    app.SETTINGS["restrict_base_min_649_val"] = 0
-    app.SETTINGS["restrict_base_max_649_val"] = 0
-    free = json.loads(app._build_config_json())["input_hash"]
-
-    app.SETTINGS["restrict_base_enabled_val"] = True
-    app.SETTINGS["restrict_base_max_649_val"] = 40
-    restricted = json.loads(app._build_config_json())["input_hash"]
-    assert restricted != free
-
-    # Marcajul trebuie să conteze: aceleași setări, altă semantică → alt hash.
-    original = app._RESTRICT_SEMANTICS
-    try:
-        app._RESTRICT_SEMANTICS = "999"
-        assert json.loads(app._build_config_json())["input_hash"] != restricted
-        # ...dar fără restricție activă, semantica nu atinge hash-ul.
-        app.SETTINGS["restrict_base_enabled_val"] = False
-        assert json.loads(app._build_config_json())["input_hash"] == free
-    finally:
-        app._RESTRICT_SEMANTICS = original
-        app.SETTINGS["restrict_base_enabled_val"] = False
-        app.SETTINGS["restrict_base_max_649_val"] = 0
-        app.STATE["datasets"] = []
-
-
-def test_active_restrict_base_is_per_game():
-    """Un prag setat pentru un joc nu are voie să se aplice altui joc."""
-    import app_nicegui as app
-
-    app.SETTINGS["restrict_base_enabled_val"] = True
-    for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
-        app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
-        app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
-    try:
-        app.SETTINGS["restrict_base_min_649_val"] = 10
-        app.SETTINGS["restrict_base_max_649_val"] = 40
-        assert app._active_restrict_base("6/49") == (10, 40)
-        assert app._active_restrict_base("5/40") == (0, 0)
-        assert app._active_restrict_base("joker") == (0, 0)
-        # Un joc necunoscut (viitoare geometrie neînregistrată) nu aruncă.
-        assert app._active_restrict_base("altceva") == (0, 0)
-        # Bifa oprită anulează TOATE jocurile deodată.
-        app.SETTINGS["restrict_base_enabled_val"] = False
-        assert app._active_restrict_base("6/49") == (0, 0)
-    finally:
-        app.SETTINGS["restrict_base_enabled_val"] = False
-        for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
-            app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
-            app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
+    monkeypatch.setitem(app.STATE, "datasets", datasets)
+    monkeypatch.setitem(app.SETTINGS, "country_val", "RO")
+    monkeypatch.setitem(app.SETTINGS, "games_val", [])
+    unrestricted = json.loads(app._build_config_json())
+    old = {
+        "restrict_base_enabled_val": True,
+        "restrict_base_min_649_val": 10,
+        "restrict_base_max_649_val": 40,
+        "restrict_base_min_540_val": 5,
+        "restrict_base_max_540_val": 35,
+    }
+    for key, value in old.items():
+        monkeypatch.setitem(app.SETTINGS, key, value)
+    assert json.loads(app._build_config_json()) == unrestricted
+    by_game = {
+        dataset["tasks"][0]["game_label"]: dataset["tasks"][0]
+        for dataset in unrestricted["datasets"]
+    }
+    assert set(by_game) == {"6/49", "5/40"}
+    for task in by_game.values():
+        assert (task["restrict_base_min"], task["restrict_base_max"]) == (0, 0)
+        assert task["pure_bench_mode"] is True
 
 
-def test_the_two_semantics_markers_stay_in_sync():
-    """Aceeași schimbare de regulă invalidează ambele cache-uri sau niciunul."""
-    import app_nicegui as app
-
-    assert app._RESTRICT_SEMANTICS == wf._RESTRICT_SEMANTICS
-
-
-def test_config_json_gives_each_dataset_its_own_games_interval(monkeypatch):
-    """Doua fisiere in aceeasi submisie -> fiecare task primeste PROPRIUL joc.
-
-    5/40 nu poate incapea in 10-40 la fel ca 6/49 (universul se opreste la 40),
-    iar Joker n-are niciun prag setat: task-ul lui trebuie sa ramana (0, 0).
-    """
+def test_old_ui_interval_controls_are_not_loaded_or_saved_again(tmp_path, monkeypatch):
     import json
 
-    import app_nicegui as app
+    import ui_runtime
 
-    df649 = pd.read_csv("_ISTORIC/loto_6_49.csv").tail(10)
-    df540 = pd.read_csv("_ISTORIC/loto_5_40.csv").tail(10)
-    app.STATE["datasets"] = [("loto_6_49.csv", df649), ("loto_5_40.csv", df540)]
-    app.SETTINGS["restrict_base_enabled_val"] = True
-    app.SETTINGS["restrict_base_min_649_val"] = 10
-    app.SETTINGS["restrict_base_max_649_val"] = 40
-    app.SETTINGS["restrict_base_min_540_val"] = 5
-    app.SETTINGS["restrict_base_max_540_val"] = 35
-    try:
-        cfg = json.loads(app._build_config_json())
-        by_game = {
-            d["tasks"][0]["game_label"]: d["tasks"][0] for d in cfg["datasets"]
-        }
-        assert (by_game["6/49"]["restrict_base_min"], by_game["6/49"]["restrict_base_max"]) == (10, 40)
-        assert (by_game["5/40"]["restrict_base_min"], by_game["5/40"]["restrict_base_max"]) == (5, 35)
-
-        # Hash-ul reflectă ambele jocuri deodată, nu doar ultimul procesat.
-        app.SETTINGS["restrict_base_max_540_val"] = 36
-        cfg2 = json.loads(app._build_config_json())
-        assert cfg2["input_hash"] != cfg["input_hash"]
-    finally:
-        app.SETTINGS["restrict_base_enabled_val"] = False
-        for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
-            app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
-            app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
-        app.STATE["datasets"] = []
-
-
-def test_toggle_on_prefills_each_game_scaled_to_its_own_universe():
-    """La prima activare, fiecare joc primeste un punct de plecare in universul lui.
-
-    Nu e o recomandare — testul verifica doar ca 5/40 nu primeste un prag de
-    sus care depaseste 40, adica exemplul „10-40" de la 6/49 nu e copiat orb.
-    """
-    import app_nicegui as app
-
-    for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
-        app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
-        app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
-    app.SETTINGS["restrict_base_enabled_val"] = False
-    try:
-        from types import SimpleNamespace
-
-        # Handler-ul real e definit local in interiorul functiei de randare a
-        # sidebar-ului (nu exportat) -- reproducem exact aceeasi regula aici,
-        # ca testul sa surprinda o eventuala desincronizare intre cele doua.
-        for _label, suffix, max_num in app._RESTRICT_BASE_GAMES:
-            lo_key = f"restrict_base_min_{suffix}_val"
-            hi_key = f"restrict_base_max_{suffix}_val"
-            if not app.SETTINGS.get(lo_key) and not app.SETTINGS.get(hi_key):
-                app.SETTINGS[lo_key] = 10
-                app.SETTINGS[hi_key] = max(10, max_num - 9)
-        assert (app.SETTINGS["restrict_base_min_649_val"], app.SETTINGS["restrict_base_max_649_val"]) == (10, 40)
-        assert (app.SETTINGS["restrict_base_min_540_val"], app.SETTINGS["restrict_base_max_540_val"]) == (10, 31)
-        assert (app.SETTINGS["restrict_base_min_joker_val"], app.SETTINGS["restrict_base_max_joker_val"]) == (10, 36)
-        for _label, suffix, max_num in app._RESTRICT_BASE_GAMES:
-            assert app.SETTINGS[f"restrict_base_max_{suffix}_val"] <= max_num
-    finally:
-        for _label, suffix, _max_num in app._RESTRICT_BASE_GAMES:
-            app.SETTINGS[f"restrict_base_min_{suffix}_val"] = 0
-            app.SETTINGS[f"restrict_base_max_{suffix}_val"] = 0
+    state = tmp_path / "ui-state.json"
+    legacy = {"restrict_base_enabled_val": True, "restrict_base_max_649_val": 40}
+    state.write_text(json.dumps({**legacy, "mail_on_complete": True}), encoding="utf-8")
+    monkeypatch.setattr(ui_runtime, "UI_STATE_FILE", state)
+    monkeypatch.setattr(ui_runtime, "SETTINGS", dict(ui_runtime.DEFAULTS))
+    ui_runtime._load_settings()
+    assert ui_runtime.SETTINGS["mail_on_complete"]
+    assert legacy.keys().isdisjoint(ui_runtime.SETTINGS)
+    ui_runtime._save_settings()
+    assert legacy.keys().isdisjoint(json.loads(state.read_text(encoding="utf-8")))
 
 
 def test_wf_history_section_is_wired_to_the_same_audit_as_the_pool():

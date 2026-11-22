@@ -40,7 +40,7 @@ def test_mixed_pool30_selects_algorithm_and_labels_for_each_game(virtual_setup, 
     assert app.STATE["retro"] == {"old": ["actual"]}
     with capture_ui() as view:
         app._render_virtual_history()
-    assert "sisteme simulate și virtuale" in view.text()
+    assert "Istoricul sistemelor simulate și virtuale" in view.text()
     assert "una dintre cele simulate" in view.text()
     assert "Exemplul de variantă este construit după extragerea istorică" in view.text()
     tables=[t for t in view.walk() if t["kind"] == "table"]

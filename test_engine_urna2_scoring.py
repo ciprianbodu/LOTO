@@ -104,7 +104,7 @@ def test_unusable_bench_scores_audit_names_frequency_fallback(monkeypatch):
 
 def test_pair_lift_last_is_unusable_on_single_pick():
     """Urna 2: co-apariție inexistentă → scor plat, nu ranking Laplace fabricat."""
-    from loto_enterprise.benchmark.methods_relational import score_pair_lift_last
+    from scripts.analysis.legacy_scoring.methods_relational import score_pair_lift_last
     from loto_enterprise.core.score_validation import has_usable_score_variance
 
     rng = np.random.default_rng(0)
@@ -115,7 +115,7 @@ def test_pair_lift_last_is_unusable_on_single_pick():
 
 
 def test_pair_lift_last_has_variance_on_multi_ball():
-    from loto_enterprise.benchmark.methods_relational import score_pair_lift_last
+    from scripts.analysis.legacy_scoring.methods_relational import score_pair_lift_last
     from loto_enterprise.core.score_validation import has_usable_score_variance
 
     rng = np.random.default_rng(0)

@@ -43,29 +43,23 @@ def test_target_bench_folds_matches_the_documented_matrix():
     assert expected > 0
 
 
-def test_target_bench_folds_is_larger_without_curation():
-    """Poarta din `bench_all_methods.py`: matricea restransa per joc se aplica
-    DOAR cu curarea activa. Fara ea, `run_rebench()` ruleaza toata lista de
-    metode pe fiecare din cele 4 jocuri — un numar mult mai mare, nu acelasi."""
-    original = curated.load_curated
-    curated.load_curated = lambda: {}
-    try:
-        without = app._target_bench_folds()
-    finally:
-        curated.load_curated = original
-    with_curation = app._target_bench_folds()
-    # The interval experiment is measured only for 6/49 under curation.
-    # Count omitted method/game cells instead of freezing the old registry size.
+def test_target_bench_folds_is_larger_without_curation(monkeypatch):
+    """An explicit curated method list reduces the fold count by exactly one per game/window."""
     from loto_enterprise.benchmark.methods import list_methods, method_meta
 
-    available = [m for m in list_methods() if method_meta(m).get("available", True)]
-    kept, _ = curated.apply_curation(available)
     games = runner.discover_games()
-    matrix = curated.resolve_methods_per_game(kept, (g.key for g in games))
-    omitted = sum(len(available) - len(matrix.get(g.key, kept)) for g in games)
+    available = [name for name in list_methods() if method_meta(name)["available"]]
+    omitted = "compact_renewal_hazard"
+    assert omitted in available
+    active = [name for name in available if name != omitted]
+    monkeypatch.setattr(curated, "load_curated", lambda: active)
+    monkeypatch.setattr(curated, "load_per_game", lambda: {})
+    with_curation = app._target_bench_folds()
+    monkeypatch.setattr(curated, "load_curated", lambda: [])
+    without = app._target_bench_folds()
     windows = len([p for p in app._PCTS.split(",") if p.strip()])
     assert without > with_curation > 0
-    assert without - with_curation == omitted * max(1, windows)
+    assert without - with_curation == len(games) * windows
 
 
 def test_target_bench_folds_falls_back_to_zero_without_istoric():

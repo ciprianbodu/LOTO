@@ -25,7 +25,7 @@ def test_empty_wf_reason_is_in_report_and_ui(monkeypatch, meta, expected):
     with capture_ui() as ui:
         ui_hits._render_game_analysis("loto_6_49.csv", "6/49", data)
     assert "Walk-forward" in ui.text()
-    assert "Istoric hits" in ui.text()
+    assert "Istoricul variantelor (walk-forward)" in ui.text()
     assert "eșuat" in ui.text() if meta.get("wf_error") else expected in ui.text()
 
 

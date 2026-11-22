@@ -189,11 +189,11 @@ def test_resolve_bench_target_order(tmp_path):
     )
     assert bam.resolve_bench_target({}, state) == (4, "ui_state.json")
     assert bam.resolve_bench_target({"LOTO_BENCH_TARGET": " "}, state)[0] == 4
-    assert bam.resolve_bench_target({}, tmp_path / "absent.json") == (3, "implicit")
+    assert bam.resolve_bench_target({}, tmp_path / "absent.json") == (4, "implicit")
     state.write_text("{corupt", encoding="utf-8")
-    assert bam.resolve_bench_target({}, state) == (3, "implicit")
+    assert bam.resolve_bench_target({}, state) == (4, "implicit")
     state.write_text(json.dumps({"bench_hit_target": 7}), encoding="utf-8")
-    assert bam.resolve_bench_target({}, state)[0] == 3  # clamp 3/4
+    assert bam.resolve_bench_target({}, state)[0] == 4  # invalid saved target; use the default
 
 
 def test_decision_target_mismatch_follows_the_effective_game_target():

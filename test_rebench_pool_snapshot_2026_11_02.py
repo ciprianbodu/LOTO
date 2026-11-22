@@ -43,7 +43,8 @@ def test_rebench_starts_compact_actual_variants_with_frozen_pool(session, monkey
     app._on_bench_finished(context=context)
     assert calls[0]["simulated"] and calls[0]["materialize_full"]
     task = json.loads(calls[0]["config_json"])["datasets"][0]["tasks"][0]
-    assert task["pool_size"] == 16 and task["guarantee"] == 6
+    assert task["pool_size"] == 16 and task["guarantee"] == 4
+    assert task["lr_scheme_code"] == 59 and task["max_variants"] == 112
     assert app.STATE["result_sources"]["custom_649.csv"] is session[1]
 
 

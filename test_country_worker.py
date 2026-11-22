@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent
 RO_CSV = ROOT / "_ISTORIC/loto_6_49.csv"
 DE_CSV = ROOT / "_ISTORIC/externe/germania_lotto_6aus49.csv"
 ECHO = ("country", "game_id", "bench_key", "geometry")
-LEGACY_TASK_KEYS = {
+BASE_TASK_KEYS = {
     "game_label",
     "pool_size",
     "guarantee",
@@ -167,8 +167,8 @@ def queue(tmp_path, monkeypatch):
                     "loto_6_49": {
                         "auto_pilot_per_pool": {
                             "k12": {
-                                "scorer": "ewma_hl30",
-                                "ensemble": [{"method": "ewma_hl30", "weight": 1.0}],
+                                "scorer": "compact_multiscale_shrink",
+                                "ensemble": [{"method": "compact_multiscale_shrink", "weight": 1.0}],
                             }
                         }
                     }
@@ -207,14 +207,17 @@ def _app_config(monkeypatch, rows=300) -> dict:
     monkeypatch.setattr(
         app, "STATE", {**app.STATE, "datasets": [("loto_6_49.csv", df)]}
     )
-    # România: pool-ul pe joc (2026-10-22); câmpul comun e al altor țări.
+    monkeypatch.setitem(app.SETTINGS, "country_val", "RO")
+    monkeypatch.setitem(app.SETTINGS, "dynamic_method_enabled_val", False)
     monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 12)
     return json.loads(app._build_config_json())
 
 
 def _foreign_dataset(task_template: dict, rows=300, **identity) -> dict:
     df = pd.read_csv(DE_CSV).tail(rows).reset_index(drop=True)
-    task = {**task_template, **identity}
+    # Schema LR din taskul românesc nu se aplică jocului străin.
+    task = {k: v for k, v in task_template.items() if k not in {"lr_scheme_code", "dynamic_method"}}
+    task.update(identity)
     return {
         "fname": DE_CSV.name,
         "df_json": df.to_json(orient="split"),
@@ -232,10 +235,11 @@ def test_romanian_task_keeps_its_config_and_gets_only_the_echo(
     queue, monkeypatch, tmp_path
 ):
     cfg = _app_config(monkeypatch)
-    # Config-ul românesc nu are chei noi: config_json și input_hash neschimbate.
+    # Taskul folosește schema LR și rămâne compatibil cu identitatea implicită.
     for ds in cfg["datasets"]:
         for task in ds["tasks"]:
-            assert set(task) == LEGACY_TASK_KEYS
+            assert set(task) == BASE_TASK_KEYS | {"lr_scheme_code"}
+            assert "country" not in task and "game_id" not in task
     rb, _status = queue(cfg)
     ((fname, outs),) = rb
     data = outs["6/49"]
@@ -246,7 +250,7 @@ def test_romanian_task_keeps_its_config_and_gets_only_the_echo(
         "geometry": "6/49",
     }
     assert "country" not in data["audit"]  # auditul românesc rămâne cel de dinainte
-    assert data["audit"]["bench_winner"]["loto_6_49"]["method"] == "ewma_hl30"
+    assert data["audit"]["bench_winner"]["loto_6_49"]["method"] == "compact_multiscale_shrink"
     history = json.loads(
         Path(tmp_path / "pool_history.json").read_text(encoding="utf-8")
     )
@@ -260,6 +264,9 @@ def test_keyless_old_task_is_byte_identical_to_the_legacy_engine(
     motorul fără identitate (`LotoEngine("6/49")`), plus ecoul aditiv; un task
     românesc cu `country: "RO"` explicit produce același lucru."""
     cfg = _app_config(monkeypatch)
+    task = cfg["datasets"][0]["tasks"][0]
+    task.pop("lr_scheme_code")
+    task.update(guarantee=3, max_variants=5, wheel_condition=3)
     history = tmp_path / "pool_history.json"
 
     history.unlink(missing_ok=True)
@@ -319,7 +326,8 @@ def test_foreign_task_runs_with_its_identity_and_flagged_frequency(
             _foreign_dataset(template, game_label="de_lotto", country="DE"),
         ],
     }
-    rb, _ = queue(cfg)
+    rb, status = queue(cfg)
+    assert rb is not None, status
     outs = {fname: o for fname, o in rb}
     de = outs[DE_CSV.name]["de_lotto"]
     assert {k: de[k] for k in ECHO} == {
@@ -340,7 +348,7 @@ def test_foreign_task_runs_with_its_identity_and_flagged_frequency(
     assert len(de["hard_core"]) == 12 and de["variants"]
     ro = outs["loto_6_49.csv"]["6/49"]
     assert ro["country"] == "RO"
-    assert ro["audit"]["bench_winner"]["loto_6_49"]["method"] == "ewma_hl30"
+    assert ro["audit"]["bench_winner"]["loto_6_49"]["method"] == "compact_multiscale_shrink"
     history = json.loads(
         Path(tmp_path / "pool_history.json").read_text(encoding="utf-8")
     )
@@ -360,8 +368,8 @@ def test_foreign_task_uses_its_country_decision(queue, monkeypatch, tmp_path):
                     "de_lotto": {
                         "auto_pilot_per_pool": {
                             "k12": {
-                                "scorer": "gap_hazard",
-                                "ensemble": [{"method": "gap_hazard", "weight": 1.0}],
+                                "scorer": "compact_renewal_hazard",
+                                "ensemble": [{"method": "compact_renewal_hazard", "weight": 1.0}],
                             }
                         }
                     }
@@ -376,9 +384,10 @@ def test_foreign_task_uses_its_country_decision(queue, monkeypatch, tmp_path):
         "use_cache": False,
         "datasets": [_foreign_dataset(template, game_label="de_lotto", country="DE")],
     }
-    rb, _ = queue(cfg)
+    rb, status = queue(cfg)
+    assert rb is not None, status
     info = rb[0][1]["de_lotto"]["audit"]["bench_winner"]["de_lotto"]
-    assert info["method"] == "gap_hazard" and "fallback" not in info
+    assert info["method"] == "compact_renewal_hazard" and "fallback" not in info
 
 
 @pytest.mark.parametrize(

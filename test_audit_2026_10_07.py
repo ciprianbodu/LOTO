@@ -208,17 +208,15 @@ def _engine_649(n: int = 80):
 
 
 _LEGACY = {
-    "winners_per_pool_best": {"k12": {"winner": "ewma_hl30"}},
-    "winners_per_pool": {"k12": "ewma_hl30"},
-    "overall_winner": "ewma_hl30",
+    "winners_per_pool_best": {"k12": {"winner": "compact_multiscale_shrink"}},
+    "winners_per_pool": {"k12": "compact_multiscale_shrink"},
+    "overall_winner": "compact_multiscale_shrink",
 }
 
 
 def test_rejected_decision_scorer_falls_to_frequency_not_to_old_avg_hits_winner(
     monkeypatch, tmp_path
 ):
-    # Din 2026-10-31 nimic nu mai e „interzis” (liste goale), deci singurul motiv
-    # de respingere rămas e numele NECUNOSCUT registry-ului („omnius”).
     ms = _decision_file(
         monkeypatch,
         tmp_path,
@@ -236,7 +234,7 @@ def test_rejected_decision_scorer_falls_to_frequency_not_to_old_avg_hits_winner(
     assert [n for n, _fn, _w in ms.get_ensemble_for_game("loto_6_49", 12)] == ["frequency"]
     cfg = ms.recommend_optimal_config("loto_6_49", 12)
     assert cfg["scorer"] == "frequency" and cfg["fallback"] is True
-    # Iar `random`, fost interzis, este acum onorat (pool nedeterminist — AGENTS.md).
+    # Random este controlul de benchmark și nu poate furniza pool-ul jucat.
     ms = _decision_file(
         monkeypatch,
         tmp_path,
@@ -250,10 +248,11 @@ def test_rejected_decision_scorer_falls_to_frequency_not_to_old_avg_hits_winner(
             }
         },
     )
-    assert ms.get_winner_name("loto_6_49", 12) == "random"
+    assert ms.get_winner_name("loto_6_49", 12) == "frequency"
+    assert ms.rejected_decision_scorer("loto_6_49", 12) == "random"
     # Fără auto_pilot_per_pool, câmpurile vechi rămân rezerva documentată.
     ms = _decision_file(monkeypatch, tmp_path, {"loto_6_49": {"draw_n": 6, **_LEGACY}})
-    assert ms.get_winner_name("loto_6_49", 12) == "ewma_hl30"
+    assert ms.get_winner_name("loto_6_49", 12) == "compact_multiscale_shrink"
 
 
 def test_engine_audit_marks_the_reserve_when_the_decision_names_an_unknown_method(
@@ -284,9 +283,9 @@ def test_engine_audit_marks_the_reserve_when_the_decision_names_an_unknown_metho
     assert info["fallback"] is True and info["attempted"] == "omnius"
 
 
-def test_engine_runs_random_scorer_since_2026_10_31(monkeypatch, tmp_path):
-    # `random` nu mai e interzis: decizia care îl numește este rulată efectiv
-    # (fără fallback), cu toate că pool-ul rezultat e nedeterminist.
+def test_engine_falls_back_when_saved_decision_names_random(monkeypatch, tmp_path):
+    from loto_enterprise.benchmark.methods import score_frequency
+
     _decision_file(
         monkeypatch,
         tmp_path,
@@ -301,10 +300,10 @@ def test_engine_runs_random_scorer_since_2026_10_31(monkeypatch, tmp_path):
     )
     eng = _engine_649()
     scores = eng._get_timesfm_scores()
-    assert scores  # scoruri nenule, de la metoda random
+    assert scores == score_frequency(eng._draw_matrix.astype("int64"), 49)
     info = eng.audit["bench_winner"]["loto_6_49"]
-    assert info["method"] == "random"
-    assert "fallback" not in info
+    assert info["method"] == "frequency"
+    assert info["fallback"] is True and info["attempted"] == "random"
 
 
 def test_romanian_game_without_decision_is_audited_as_no_decision(monkeypatch, tmp_path):
@@ -646,14 +645,14 @@ def _gate_folds(rates: dict[str, float], p0: float, pool: int = 12) -> "pd.DataF
 
 def test_a_lucky_winner_among_many_candidates_is_flagged_but_still_chosen(monkeypatch):
     from loto_enterprise.benchmark import decision
-    from loto_enterprise.benchmark.methods import METHODS
-
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
-    names = sorted(set(METHODS) - set(decision.EXCLUDED_FROM_PRODUCTION) - {"random"})[:40]
+    names = tuple(f"candidate_{i:02}" for i in range(40))
     p0 = decision.expected_random_rate(49, 6, 12, 3)
     # +0,8..1,2 pp peste rata aleatoare, la fiecare dintre 40 de candidați.
     weak = {name: p0 + 0.008 + i * 1e-4 for i, name in enumerate(names)}
-    cfg = decision.decide_optimal_config_for_pool(_gate_folds(weak, p0), "loto_6_49", 12, 6)
+    cfg = decision.decide_optimal_config_for_pool(
+        _gate_folds(weak, p0), "loto_6_49", 12, 6, candidate_methods=names,
+    )
     assert cfg["scorer"] == names[-1] and cfg["low_confidence"] is False
     assert cfg["multiplicity"]["candidates"] == 40
     assert cfg["multiplicity"]["proven"] is False
@@ -661,7 +660,9 @@ def test_a_lucky_winner_among_many_candidates_is_flagged_but_still_chosen(monkey
     assert ui_bench._multiplicity_note(cfg).startswith("⚠️ Avantaj nedemonstrat")
 
     strong = {**weak, names[0]: p0 + 0.08}
-    cfg = decision.decide_optimal_config_for_pool(_gate_folds(strong, p0), "loto_6_49", 12, 6)
+    cfg = decision.decide_optimal_config_for_pool(
+        _gate_folds(strong, p0), "loto_6_49", 12, 6, candidate_methods=names,
+    )
     assert cfg["scorer"] == names[0] and cfg["multiplicity"]["proven"] is True
     assert ui_bench._multiplicity_note(cfg) is None
 
@@ -669,13 +670,13 @@ def test_a_lucky_winner_among_many_candidates_is_flagged_but_still_chosen(monkey
 # --------------------------------------------------------------------------- #
 # Urna 2: metodele care repetă bila precedentă și duplicatul naive_bayes_last
 # --------------------------------------------------------------------------- #
-def test_urn2_decision_skips_methods_that_repeat_the_previous_ball(monkeypatch):
+def test_urn2_decision_ignores_retired_scorer_even_if_its_saved_rate_is_higher():
     import pandas as pd
 
     from loto_enterprise.benchmark import decision
 
     rows = []
-    for method, rate in (("random", 0.05), ("markov_self_state", 0.30), ("ewma_hl30", 0.09)):
+    for method, rate in (("random", 0.05), ("markov_self_state", 0.30), ("compact_multiscale_shrink", 0.09)):
         for pct, n in {10: 66, 30: 197, 60: 394, 100: 657}.items():
             rows.append({
                 "game": "joker_urna2", "method": method, "percentile": pct,
@@ -684,16 +685,13 @@ def test_urn2_decision_skips_methods_that_repeat_the_previous_ball(monkeypatch):
                 "tiebreak_k1": 0.1, "runtime_sec": 0.1,
             })
     cfg = decision.decide_optimal_config_for_pool(pd.DataFrame(rows), "joker_urna2", 1, 1)
-    assert cfg["scorer"] == "ewma_hl30"
+    assert cfg["scorer"] == "compact_multiscale_shrink"
     assert "markov_self_state" not in cfg["ranked_methods"]
 
 
-def test_stale_urn2_decision_with_a_previous_ball_method_is_honored_since_2026_10_31(
+def test_stale_decision_with_a_retired_previous_ball_method_uses_fallback(
     monkeypatch, tmp_path
 ):
-    # Din 2026-10-31 EXCLUDED_FROM_SINGLE_PICK e gol: o decizie veche care numește
-    # o metodă „bila precedentă" pe Urna 2 este onorată (nu mai cade pe frequency).
-    # Doar numele necunoscute mai sunt respinse.
     entry = {"scorer": "markov_self_state", "ensemble": [{"method": "markov_self_state", "weight": 1.0}]}
     ms = _decision_file(
         monkeypatch,
@@ -703,9 +701,9 @@ def test_stale_urn2_decision_with_a_previous_ball_method_is_honored_since_2026_1
             "loto_6_49": {"draw_n": 6, "auto_pilot_per_pool": {"k12": entry}},
         },
     )
-    assert ms.get_winner_name("joker_urna2", 1) == "markov_self_state"
-    assert ms.rejected_decision_scorer("joker_urna2", 1) is None
-    assert ms.get_winner_name("loto_6_49", 12) == "markov_self_state"
+    assert ms.get_winner_name("joker_urna2", 1) == "frequency"
+    assert ms.rejected_decision_scorer("joker_urna2", 1) == "markov_self_state"
+    assert ms.get_winner_name("loto_6_49", 12) == "frequency"
     # Nume necunoscut: cade determinist pe frequency și e raportat ca respins.
     stale = {"scorer": "omnius", "ensemble": [{"method": "omnius", "weight": 1.0}]}
     ms = _decision_file(
@@ -717,12 +715,13 @@ def test_stale_urn2_decision_with_a_previous_ball_method_is_honored_since_2026_1
     assert ms.rejected_decision_scorer("joker_urna2", 1) == "omnius"
 
 
-def test_urn2_curation_drops_excluded_and_duplicate_methods():
-    from loto_enterprise.benchmark.curated import load_per_game
+def test_urn2_benchmark_includes_the_active_markov_scorer_and_controls():
+    from app_nicegui import _default_bench_methods_by_game
 
-    urn2 = set(load_per_game()["joker_urna2"])
-    assert not urn2 & {"markov_self_state", "vlmm_self_k3", "naive_bayes_last"}
-    assert {"markov_pairs", "frequency"} <= urn2
+    urn2 = _default_bench_methods_by_game(["joker_urna2"])["joker_urna2"]
+    assert len(urn2) == len(set(urn2))
+    assert not set(urn2) & {"markov_self_state", "vlmm_self_k3", "naive_bayes_last"}
+    assert {"markov_lag2", "frequency", "random"} <= set(urn2)
 
 
 def _station_db(tmp_path, monkeypatch):

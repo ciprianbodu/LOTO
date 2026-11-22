@@ -107,10 +107,8 @@ def test_fallback_winner_and_all_its_metrics_ignore_foreign_windows():
     original = _decide(rows)
     extra = [_row("contract_beta", p, 10000, 0.08) for p in STRAY]
     assert original["low_confidence"] is True
-    # Din 2026-10-31 nicio metodă nu mai e exclusă, deci fallback-ul
-    # low-confidence poate alege și `random` — aici are rata cea mai mare
-    # (0.09) și câștigă pe Wilson.
-    assert original["scorer"] == "random"
+    # The low-confidence fallback selects the best real method; random is the control.
+    assert original["scorer"] == "contract_alpha"
     assert _decide(rows + extra) == original
 
 

@@ -169,10 +169,10 @@ def test_method_selector_decision_paths(decisions):
 def test_foreign_game_without_decision_uses_flagged_frequency_not_the_romanian_winner(
     decisions, tmp_path
 ):
-    _decision(decisions / "best_methods.json", "loto_6_49", "ewma_hl30", None)
+    _decision(decisions / "best_methods.json", "loto_6_49", "compact_multiscale_shrink", None)
     ro = LotoEngine("6/49")
     _run(ro, _csv(tmp_path, RO_CSV, "ro.csv"))
-    assert ro.audit["bench_winner"]["loto_6_49"]["method"] == "ewma_hl30"
+    assert ro.audit["bench_winner"]["loto_6_49"]["method"] == "compact_multiscale_shrink"
 
     de = LotoEngine("6/49", game_key="de_lotto", country="DE")
     _run(de, _csv(tmp_path, DE_CSV, "de.csv"))
@@ -192,8 +192,8 @@ def test_foreign_game_without_decision_uses_flagged_frequency_not_the_romanian_w
 
 
 def test_foreign_game_uses_its_own_country_decision(decisions, tmp_path):
-    _decision(decisions / "best_methods.json", "de_lotto", "gap_hazard", None)
-    _decision(ms.decision_path_for("DE"), "de_lotto", "ewma_hl30", "DE")
+    _decision(decisions / "best_methods.json", "de_lotto", "compact_renewal_hazard", None)
+    _decision(ms.decision_path_for("DE"), "de_lotto", "compact_multiscale_shrink", "DE")
     de = LotoEngine("6/49", game_key="de_lotto", country="DE")
     progress = []
     _run(
@@ -202,9 +202,9 @@ def test_foreign_game_uses_its_own_country_decision(decisions, tmp_path):
         progress_cb=lambda m, p: progress.append(m),
     )
     info = de.audit["bench_winner"]["de_lotto"]
-    assert info["method"] == "ewma_hl30"
+    assert info["method"] == "compact_multiscale_shrink"
     assert "fallback" not in info
-    assert any("Scoring: ewma_hl30" in m for m in progress)
+    assert any("Scoring: compact_multiscale_shrink" in m for m in progress)
 
 
 @pytest.mark.parametrize("meta_country", [None, "RO", "PL"])
@@ -213,7 +213,7 @@ def test_country_decision_file_of_another_country_is_treated_as_missing(
 ):
     """O copie a deciziei românești (fără țară) sau decizia altei țări pusă în
     decisions/DE/ nu devine decizie germană."""
-    _decision(ms.decision_path_for("DE"), "de_lotto", "ewma_hl30", meta_country)
+    _decision(ms.decision_path_for("DE"), "de_lotto", "compact_multiscale_shrink", meta_country)
     de = LotoEngine("6/49", game_key="de_lotto", country="DE")
     progress = []
     _run(
@@ -233,10 +233,10 @@ def test_romanian_decision_file_stamped_for_another_country_is_treated_as_missin
 ):
     for stamp, expected in (
         ("DE", "frequency"),
-        ("RO", "ewma_hl30"),
-        (None, "ewma_hl30"),
+        ("RO", "compact_multiscale_shrink"),
+        (None, "compact_multiscale_shrink"),
     ):
-        _decision(decisions / "best_methods.json", "loto_6_49", "ewma_hl30", stamp)
+        _decision(decisions / "best_methods.json", "loto_6_49", "compact_multiscale_shrink", stamp)
         ms._CONFIG = None  # rescris în aceeași milisecundă: mtime poate coincide
         assert ms.get_winner_name("loto_6_49", 12) == expected, stamp
 
@@ -244,10 +244,10 @@ def test_romanian_decision_file_stamped_for_another_country_is_treated_as_missin
 def test_explicit_config_paths_are_not_country_checked(tmp_path):
     """Fișierele din afara căilor de țară (teste, `--out` explicit) se citesc ca înainte."""
     cfg = tmp_path / "other.json"
-    _decision(cfg, "de_lotto", "ewma_hl30", "PL")
-    assert ms.get_winner_name("de_lotto", 12, str(cfg)) == "ewma_hl30"
+    _decision(cfg, "de_lotto", "compact_multiscale_shrink", "PL")
+    assert ms.get_winner_name("de_lotto", 12, str(cfg)) == "compact_multiscale_shrink"
     rec = ms.recommend_optimal_config("de_lotto", 12, config_path=str(cfg))
-    assert rec["scorer"] == "ewma_hl30" and rec["hit_target"] == 3
+    assert rec["scorer"] == "compact_multiscale_shrink" and rec["hit_target"] == 3
 
 
 def test_urna2_contract_is_recognised_from_the_registry():

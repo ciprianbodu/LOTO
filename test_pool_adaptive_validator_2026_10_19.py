@@ -25,7 +25,7 @@ def synthetic_complete_report(tmp_path):
     import hashlib
     import json
     import pandas as pd
-    from loto_enterprise.benchmark.methods import call_method
+    from scripts.analysis.legacy_methods_2026_11_20 import call_method
     from scripts.analysis.pool_combination_eval_2026_10_19 import evaluate_scores
     from scripts.analysis.pool_adaptive_649_2026_10_19 import (
         all_scores,

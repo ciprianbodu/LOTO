@@ -131,15 +131,25 @@ def test_decode_invalid_payload_is_not_a_pair():
         assert not (isinstance(got, tuple) and len(got) == 2), bad
 
 
-def test_completed_branch_guards_payload():
-    """Ramura LIVE COMPLETED are aceeași gardă ca recovery-ul, ÎNAINTE de mail/WF."""
-    src = open("app_nicegui.py", encoding="utf-8").read()
-    i = src.index('if state == "COMPLETED":')
-    j = src.index("_maybe_send_results_email()", i)
-    head = src[i:j]
-    assert "isinstance(payload, tuple) and len(payload) == 2" in head, (
-        "garda de payload lipsește sau e după trimiterea mailului"
+def test_completed_branch_guards_payload(monkeypatch):
+    """A corrupt completed job is cleared without dispatching any follow-up work."""
+    import app_nicegui as app
+    from scripts.analysis.audit_output import capture_ui
+
+    finalized = []
+    monkeypatch.setitem(app.STATE, "active_job_id", 17)
+    monkeypatch.setattr(app, "_bench_running", lambda: False)
+    monkeypatch.setattr(
+        app, "get_job_status", lambda _job: {"status": "COMPLETED", "result_json": "{}"}
     )
+    monkeypatch.setattr(app, "_mark_job_finalized", finalized.append)
+    for name in ("_start_walk_forward", "_save_report_file", "_mail_snapshot_inputs", "_maybe_send_results_email"):
+        monkeypatch.setattr(app, name, lambda *_a, **_k: pytest.fail("corrupt result dispatched follow-up work"))
+    with capture_ui() as view:
+        app.status_panel.func()
+    assert app.STATE["active_job_id"] is None
+    assert finalized == [17]
+    assert "rezultatul e ilizibil" in view.text()
 
 
 # --------------------------------------------------------------------------
@@ -303,13 +313,18 @@ def test_worker_spawn_has_cooldown():
     assert "now - _WORKER_SPAWN_TS" in src
 
 
-def test_wf_decision_sig_omits_inert_use_blacklist():
-    src = open("loto_enterprise/core/walk_forward_adapter.py", encoding="utf-8").read()
-    i = src.index("def _decision_sig")
-    body = src[i : src.index("def _cache_path", i)]
-    assert "use_blacklist" not in body or "INERT" in body
-    assert "bool(c.get('use_blacklist'" not in body
-    assert "BENCH_HIT_TARGET" in body
+def test_wf_decision_sig_tracks_target_but_omits_inert_use_blacklist(monkeypatch):
+    from loto_enterprise.core import method_selector, walk_forward_adapter
+
+    config = {"scorer": "frequency", "use_blacklist": False}
+    monkeypatch.setattr(method_selector, "recommend_optimal_config", lambda *_a, **_k: config)
+    monkeypatch.setattr(walk_forward_adapter, "current_bench_hit_target", lambda: 3)
+    before = walk_forward_adapter._decision_sig("6/49", 12)
+    assert not before.startswith("nd")
+    config["use_blacklist"] = True
+    assert walk_forward_adapter._decision_sig("6/49", 12) == before
+    monkeypatch.setattr(walk_forward_adapter, "current_bench_hit_target", lambda: 4)
+    assert walk_forward_adapter._decision_sig("6/49", 12) != before
 
 
 def test_leaderboard_excludes_tiebreak_dependent_methods_like_decision():
@@ -497,6 +512,7 @@ def test_freshness_hash_mismatch_with_unchanged_row_count_never_says_use_cache(
         json.dumps(
             {
                 "_meta": {
+                    "engine_signature": freshness.compute_engine_signature(),
                     "csv_signatures": {
                         "loto_6_49": {
                             "csv_path": "x.csv",
@@ -543,7 +559,7 @@ def test_ui_split_binds_private_helpers_on_facade():
     import ui_results
     import ui_runtime
 
-    assert callable(app_ui._active_restrict_base)
+    assert app_ui._game_label_for is ui_runtime._game_label_for
     assert callable(app_ui._int_setting)
     assert callable(app_ui._game_label_for)
     assert "loto_6_49" in app_ui._LABEL_TO_FOLDS_GAME.values()
@@ -558,7 +574,7 @@ def test_ui_split_binds_private_helpers_on_facade():
 def test_method_desc_uses_registry_not_graveyard():
     """Etichetele de lângă scorer vin din METHODS, nu din nume șterse +21.7%."""
     import ui_results
-    from loto_enterprise.benchmark.methods import METHODS
+    from loto_enterprise.benchmark.methods import METHODS, method_meta
 
     overlay = ui_results._METHOD_DESC
     for dead in (
@@ -569,9 +585,9 @@ def test_method_desc_uses_registry_not_graveyard():
     ):
         assert dead not in overlay
     assert "+21.7%" not in str(overlay)
-    desc = ui_results._method_desc("croston_interval")
-    assert desc
-    assert "croston" in desc.lower() or "interval" in desc.lower()
+    active = "compact_renewal_hazard"
+    assert ui_results._method_desc(active) == method_meta(active)["notes"]
+    assert ui_results._method_desc("croston_interval") == ""
     for name in METHODS:
         text = ui_results._method_desc(name)
         assert "21.7%" not in text
@@ -641,12 +657,8 @@ def test_freshness_flags_stale_decision_when_engine_changed(tmp_path, monkeypatc
     assert (r_meth.status, r_meth.recommendation) == ("stale", "full_rebench")
 
 
-def test_freshness_without_stamped_engine_signature_stays_quiet(tmp_path, monkeypatch):
-    """best_methods.json scris înainte de 15.09.2026 n-are semnătura motorului.
-
-    N-avem cu ce compara, deci nu inventăm o nepotrivire: comportamentul rămâne
-    cel vechi, iar semnătura se stampilează la primul bench.
-    """
+def test_freshness_without_engine_signature_requires_rebench(tmp_path, monkeypatch):
+    """Unchanged draws cannot validate an unidentified scoring catalog."""
     import json
 
     from loto_enterprise.benchmark import freshness
@@ -672,7 +684,7 @@ def test_freshness_without_stamped_engine_signature_stays_quiet(tmp_path, monkey
         encoding="utf-8",
     )
     r = freshness.check_freshness(str(bm))["loto_6_49"]
-    assert (r.status, r.recommendation) == ("fresh", "use_cache")
+    assert (r.status, r.recommendation) == ("stale", "full_rebench")
 
 
 def test_full_system_one_ticket_short_is_not_reported_as_100():

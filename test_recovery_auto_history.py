@@ -27,7 +27,7 @@ def test_recovery_loads_only_cached_data_even_for_new_job(recovered, monkeypatch
     monkeypatch.setattr(wf, "run_honest_walk_forward", lambda **kw: (calls.append(kw) or rows, meta))
     monkeypatch.setattr(app, "_mark_job_finalized", marks.append)
     monkeypatch.setattr(app, "_start_walk_forward", lambda **kw: pytest.fail("new walk-forward on startup"))
-    monkeypatch.setattr(app, "_maybe_send_results_email", lambda: pytest.fail("mail on startup"))
+    monkeypatch.setattr(app, "_maybe_send_results_email", lambda *args, **kwargs: pytest.fail("mail on startup"))
     monkeypatch.setattr(app, "_finalize_pipeline", lambda: pytest.fail("shutdown on startup"))
     app._recover_completed_job(allow_finalize=allow_finalize)
     assert app.STATE["active_job_id"] is None
@@ -118,7 +118,7 @@ def test_running_job_reattached_at_start_finishes_with_normal_actions(recovered,
     monkeypatch.setattr(app, "decode_queue_result", lambda _: payload)
     monkeypatch.setattr(app, "_result_sources_from_job", lambda _: {"history.csv": frame})
     monkeypatch.setattr(app, "_mark_job_finalized", lambda _: events.append("claimed"))
-    monkeypatch.setattr(app, "_maybe_send_results_email", lambda: events.append("mail"))
+    monkeypatch.setattr(app, "_maybe_send_results_email", lambda *args, **kwargs: events.append("mail"))
     monkeypatch.setattr(app, "_start_walk_forward", lambda **_: events.append("wf"))
     monkeypatch.setattr(app, "_shutdown_banner", lambda: None)
     with capture_ui():

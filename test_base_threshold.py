@@ -174,133 +174,50 @@ def test_table_needs_a_history_long_enough_to_split():
         interval_table(np.array([[1, 2, 3, 4, 5, 6]]), 49, pool_size=10, draw_n=6)
 
 
-def test_ui_submenu_renders_one_table_per_game_with_its_control_column():
-    """Submeniul din sidebar arata cifrele, dar niciodata singure.
+def test_interval_table_carries_the_uniform_control_for_joker():
+    draws = _draws("_ISTORIC/joker.csv", [f"n{i}" for i in range(1, 6)], 5, 45)
+    pool = 10
+    rows = interval_table(draws, 45, pool_size=pool, draw_n=5)
+    assert [row.width for row in rows] == list(range(pool, 46))
+    reference = theoretical_rate(45, pool, 5)
+    assert rows[-1].whole == pytest.approx(reference)
+    assert rows[-1].control == pytest.approx(reference)
+    assert all(row.control_hi - row.control_lo + 1 == row.width for row in rows)
 
-    Fiecare joc primeste tabelul lui, fiindca geometria difera, iar fiecare tabel
-    trebuie sa poarte coloana de control si referinta teoretica. Fara ele, un
-    varf de 10.31% ar arata ca o descoperire.
-    """
-    from scripts.analysis.audit_output import capture_ui
 
-    import app_nicegui as app
+def test_exact_diagnostic_table_uses_the_requested_pool_size(monkeypatch, capsys):
+    from scripts.analysis import bench_base_threshold as study
 
-    render = getattr(app._render_base_interval_tables, "func", None)
-    assert render is not None, "refreshable-ul trebuie sa expuna functia interna"
-    app._BASE_TABLE_MEMO.clear()
-    app._BASE_TABLE_OPENED["value"] = True
-    with capture_ui() as ui:
-        render()
-    tables = [n for n in ui.walk() if n["kind"] == "table"]
-    assert len(tables) == 3, "cate un tabel pentru 6/49, 5/40 si Joker Urna 1"
-
-    text = ui.text()
-    for label in ("6/49", "5/40", "Joker — Urna 1 (5/45)"):
-        assert label in text
-    assert "Referință teoretică" in text
-    assert "coloana uniformă" in text
-    # Niciun indemn: submeniul nu recomanda si nu seteaza un interval.
-    for word in ("recomand", "joacă", "cel mai bun interval", "optim"):
-        assert word not in text.lower()
-
-    for table in tables:
-        rows = table["kwargs"]["rows"]
-        assert [r["w"] for r in rows] == sorted(r["w"] for r in rows)
-        assert {"w", "span", "whole", "h1", "h2", "ctrl", "full"} == set(rows[0])
-        # Ultimul rand e jocul nerestrans: real si control cad pe aceeasi rata,
-        # comparata ca numar (substring-ul ar fi lasat "9.03%" sa treaca in "19.03%").
-        assert float(rows[-1]["whole"].rstrip("%")) == pytest.approx(
-            float(rows[-1]["ctrl"].rsplit("·", 1)[1].strip().rstrip("%"))
+    draws = synthetic_draws(60, draw_n=6, max_num=40, seed=77)
+    for pool in (8, 16, 19):
+        monkeypatch.setattr(study, "K", pool)
+        study.exact_table("5/40", draws, 40)
+        text = capsys.readouterr().out
+        assert f"pool K={pool}" in text
+        assert f"{pool:>5}" == next(
+            line[:5] for line in text.splitlines() if line.strip().startswith(f"{pool} ")
         )
+        baseline = next(line for line in text.splitlines() if line.strip().startswith("40 "))
+        expected = f"{theoretical_rate(40, pool, 6, study.TARGET):.2f}%"
+        assert baseline.split() == ["40", expected, expected, expected]
 
 
-def test_ui_submenu_follows_the_pool_size_setting(monkeypatch):
-    """Procentele depind de K, deci tabelul trebuie sa porneasca de la K."""
-    from scripts.analysis.audit_output import capture_ui
-
-    import app_nicegui as app
-
-    render = app._render_base_interval_tables.func
-    app._BASE_TABLE_OPENED["value"] = True
-    for pool in (6, 16):
-        for key in app._POOL_KEYS.values():
-            monkeypatch.setitem(app.SETTINGS, key, pool)
-        app._BASE_TABLE_MEMO.clear()
-        with capture_ui() as ui:
-            render()
-        for table in (n for n in ui.walk() if n["kind"] == "table"):
-            assert min(r["w"] for r in table["kwargs"]["rows"]) == pool
-    # Pool 19 este acum accesibil la toate cele trei jocuri; tabelul trebuie
-    # să citească alegerea fiecăruia. Ordinea: 6/49, 5/40, Joker.
-    for key in app._POOL_KEYS.values():
-        monkeypatch.setitem(app.SETTINGS, key, 19)
-    with capture_ui() as ui:
-        render()
-    mins = [
-        min(r["w"] for r in t["kwargs"]["rows"]) for t in ui.walk() if t["kind"] == "table"
-    ]
-    assert mins == [19, 19, 19]
-    assert "pool 19, ținta 4+" in ui.text()
+@pytest.mark.parametrize("pool", [0, 46])
+def test_interval_table_rejects_an_impossible_study_pool(pool):
+    draws = synthetic_draws(60, draw_n=5, max_num=45, seed=4)
+    with pytest.raises(ValueError, match="pool"):
+        interval_table(draws, 45, pool_size=pool, draw_n=5)
 
 
-def test_submenu_is_lazy_and_survives_a_pool_value_below_the_allowed_minimum():
-    """Inchis nu calculeaza nimic; un pool tastat sub minim nu strica tabelul.
+def test_diagnostic_study_reads_every_number_drawn_at_540():
+    from scripts.analysis import bench_base_threshold as study
 
-    `ui.number` isi aplica min/max abia la blur, deci in timpul tastarii ajung
-    aici valori ca 0 sau 1. Inainte de plafonare, geometria devenea invalida si
-    submeniul raporta „istoric indisponibil" pentru un istoric perfect valid.
-    """
-    from scripts.analysis.audit_output import capture_ui
-
-    import app_nicegui as app
-
-    render = app._render_base_interval_tables.func
-    app._BASE_TABLE_OPENED["value"] = False
-    app._BASE_TABLE_MEMO.clear()
-    with capture_ui() as ui:
-        render()
-    assert not [n for n in ui.walk() if n["kind"] == "table"]
-    assert "Deschide submeniul" in ui.text()
-    assert not app._BASE_TABLE_MEMO, "inchis nu are voie sa calculeze nimic"
-
-    app._BASE_TABLE_OPENED["value"] = True
-    saved = {key: app.SETTINGS.get(key) for key in app._POOL_KEYS.values()}
-    for bad_pool in (0, 1, 99):
-        for key in app._POOL_KEYS.values():
-            app.SETTINGS[key] = bad_pool
-        with capture_ui() as ui:
-            render()
-        assert "istoric indisponibil" not in ui.text()
-        assert len([n for n in ui.walk() if n["kind"] == "table"]) == 3
-    app.SETTINGS.update(saved)
-
-
-def test_memo_survives_a_walk_over_every_pool_size():
-    """Plafonul memo-ului trebuie sa incapa toate combinatiile joc x pool.
-
-    Cu un plafon prea mic, memo-ul se golea inainte sa fie folosit si fiecare
-    schimbare de pool platea din nou calculul complet.
-    """
-    import app_nicegui as app
-
-    app._BASE_TABLE_MEMO.clear()
-    app._BASE_TABLE_OPENED["value"] = True
-    # Pool 6..16 la 6/49 și Joker, 6..19 la Loto 5/40 (`Lottery.max_pool`).
-    walk = [
-        (csv_name, draw_n, max_num, pool, target)
-        for target in (3, 4)  # ținta jocului: 3+ sau 4+
-        for _label, csv_name, draw_n, max_num in app._BASE_TABLE_GAMES
-        for pool in range(6, app._game_spec_for(csv_name).max_pool + 1)
-    ]
-    for args in walk:
-        assert app._base_interval_rows(*args) is not None
-    filled = len(app._BASE_TABLE_MEMO)
-    assert filled == app._BASE_TABLE_MEMO_MAX
-    # A doua trecere peste aceleasi valori nu mai are voie sa evacueze nimic.
-    snapshot = dict(app._BASE_TABLE_MEMO)
-    for args in walk:
-        app._base_interval_rows(*args)
-    assert app._BASE_TABLE_MEMO == snapshot
+    path, columns, draw_n, max_num = study.GAMES["5/40"]
+    assert columns == ["n1", "n2", "n3", "n4", "n5", "n6"]
+    assert (draw_n, max_num) == (6, 40)
+    draws = _draws(path, columns, draw_n, max_num)
+    encoded = study._as_bool_matrix(draws, max_num)
+    assert (encoded.sum(axis=1) == 6).all()
 
 
 def test_diagnostic_script_still_imports_and_uses_the_shared_module():

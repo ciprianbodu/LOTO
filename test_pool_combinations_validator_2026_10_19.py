@@ -217,8 +217,7 @@ def test_statistics_keep_day_clusters_and_known_family_correction():
 
 
 def test_independent_formula_oracle_matches_every_fixed_bank_formula():
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-    from loto_enterprise.benchmark.methods import METHODS
+    from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS
     from scripts.analysis.pool_combinations_2026_10_19 import (
         candidate_specs,
         iter_candidates,
@@ -227,7 +226,7 @@ def test_independent_formula_oracle_matches_every_fixed_bank_formula():
         formula_from_descriptor,
     )
 
-    names = sorted(set(METHODS) - EXCLUDED_FROM_PRODUCTION)
+    names = list(OCTOBER_19_EXPERTS)
     rng = np.random.default_rng(2026101902)
     scores = rng.integers(0, 11, size=(3, len(names), 49)).astype(float)
     # Includes a mathematically flat equal-weight anti-ranking combination.
@@ -243,10 +242,7 @@ def test_independent_formula_oracle_matches_every_fixed_bank_formula():
             np.testing.assert_array_equal(generated[row], expected)
             assert bool(audit[name][row]) == flat
             checked += 1
-    # 2026-10-31: toate metodele foste excluse sunt din nou eligibile în
-    # producție (liste goale), deci `names` = tot registry-ul (53) — bancul de
-    # formule a crescut de la 208 la 232 spec-uri.
-    assert checked == 232 * 3
+    assert checked == 208 * len(scores)
 
 
 @pytest.fixture
@@ -254,8 +250,7 @@ def synthetic_complete_report(tmp_path):
     import hashlib
     import json
     import pandas as pd
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
-    from loto_enterprise.benchmark.methods import METHODS, call_method
+    from scripts.analysis.legacy_methods_2026_11_20 import OCTOBER_19_EXPERTS, call_method
     from scripts.analysis.pool_combination_eval_2026_10_19 import evaluate_scores
     from scripts.analysis.pool_combinations_2026_10_19 import (
         candidate_specs,
@@ -285,7 +280,7 @@ def synthetic_complete_report(tmp_path):
     for path in paths.values():
         frame.to_csv(path, index=False)
     (root / "source_stub.py").write_bytes(b"# synthetic source\r\n")
-    names = sorted(set(METHODS) - EXCLUDED_FROM_PRODUCTION)
+    names = list(OCTOBER_19_EXPERTS)
     chosen_names = {
         "combo_rank_m025__frequency",
         "combo_rank_m050__frequency",

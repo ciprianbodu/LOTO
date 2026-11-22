@@ -85,7 +85,7 @@ def test_latest_draw_invalid_dates_are_not_reported_as_latest(monkeypatch):
 def _leaderboard_frame():
     rows = []
     for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
-        for method, rate in (("random", 0.085), ("frequency", 0.11), ("markov_pairs", 0.10)):
+        for method, rate in (("random", 0.085), ("frequency", 0.11), ("compact_transition_prior", 0.10)):
             rows.append(dict(game="joker_urna1", method=method, percentile=pct, n_eval=n, n_test=n, blocks=n, runtime_sec=0.01, is_random=False, failed=False, k11=1.5, rate_3plus_k11=rate, rate_4plus_k11=0.01, tiebreak_k11=0.1))
     return pd.DataFrame(rows)
 
@@ -114,11 +114,11 @@ def test_leaderboard_method_with_only_extra_window_is_visible_and_excluded(monke
     monkeypatch.setattr(decision, "BENCH_HIT_TARGET", 3)
     monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None})
     frame = _leaderboard_frame()
-    extra = {**frame.iloc[1].to_dict(), "method": "hawkes_cross", "percentile": 25, "rate_3plus_k11": 1.0}
+    extra = {**frame.iloc[1].to_dict(), "method": "compact_renewal_hazard", "percentile": 25, "rate_3plus_k11": 1.0}
     with capture_ui() as capture:
         ui_bench._render_bench_leaderboard_slice(pd.concat([frame, pd.DataFrame([extra])], ignore_index=True), "joker_urna1", 11, "Joker", 20)
-    assert "hawkes_cross" in capture.text()
-    assert "hawkes_cross" not in capture.ranking()
+    assert "compact_renewal_hazard" in capture.text()
+    assert "compact_renewal_hazard" not in capture.ranking()
     assert "date indisponibile" in capture.text()
     assert "ferestre lipsă: 10%, 30%, 60%, 100%" in capture.text()
 

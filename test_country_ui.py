@@ -40,7 +40,6 @@ def ui_state(monkeypatch):
     app._sync_ui_namespace()
     app.SETTINGS["country_val"] = "RO"
     app.SETTINGS["games_val"] = []
-    app.SETTINGS["restrict_base_enabled_val"] = False
     yield state
     app._sync_ui_namespace()
 
@@ -146,18 +145,12 @@ def test_foreign_submission_carries_identity_and_only_its_games(ui_state):
     assert [ds["fname"] for ds in cfg["datasets"]] == ["austria_lotto_6aus45.csv"]
     task = cfg["datasets"][0]["tasks"][0]
     assert (task["game_label"], task["country"]) == ("at_lotto", "AT")
-    # Restrângerea străină intră în hash numai activă, cu cheia jocului.
-    free = cfg["input_hash"]
-    app.SETTINGS["restrict_base_min_at_lotto_val"] = 5
-    app.SETTINGS["restrict_base_max_at_lotto_val"] = 40
-    assert json.loads(app._build_config_json())["input_hash"] == free
-    app.SETTINGS["restrict_base_enabled_val"] = True
-    on = json.loads(app._build_config_json())
-    assert on["input_hash"] != free
-    t = on["datasets"][0]["tasks"][0]
-    assert (t["restrict_base_min"], t["restrict_base_max"]) == (5, 40)
-    # Pragul românesc de aceeași geometrie nu atinge jocul străin.
-    assert app._active_restrict_base("de_lotto") == (0, 0)
+    assert (task["restrict_base_min"], task["restrict_base_max"]) == (0, 0)
+    app.SETTINGS.update(restrict_base_enabled_val=True,
+                        restrict_base_min_at_lotto_val=5,
+                        restrict_base_max_at_lotto_val=40)
+    # Salvările vechi nu schimbă generarea sau cheia cache-ului.
+    assert json.loads(app._build_config_json()) == cfg
 
 
 def test_registry_loader_rejects_an_invalid_history(ui_state, tmp_path, monkeypatch):
@@ -171,13 +164,14 @@ def test_registry_loader_rejects_an_invalid_history(ui_state, tmp_path, monkeypa
     assert ui_state["datasets"] == []
 
 
-def test_restrict_rows_and_base_tables_follow_the_country(ui_state):
-    assert app._restrict_games_for("RO") == app._RESTRICT_BASE_GAMES
-    assert app._restrict_games_for("AT") == (("at_lotto", "at_lotto", 45),)
-    assert app._base_table_games("RO") == app._BASE_TABLE_GAMES
-    assert app._base_table_games("DE") == (
-        ("Germania · Lotto 6aus49", "externe/germania_lotto_6aus49.csv", 6, 49),
-    )
+
+def test_selected_games_follow_country_and_romanian_selection(ui_state):
+    app.SETTINGS.update(country_val="RO", games_val=["joker", "de_lotto"])
+    assert [game.game_id for game in app._selected_games()] == ["joker"]
+    app.SETTINGS.update(country_val="AT", games_val=["joker"])
+    assert app._selected_games() == (AT,)
+    app.SETTINGS.update(country_val="DE", games_val=[])
+    assert app._selected_games() == (DE,)
 
 
 def test_bench_texts_name_the_country(ui_state, tmp_path, monkeypatch):
@@ -233,16 +227,29 @@ def test_mail_names_method_and_rating_for_the_pool(monkeypatch):
     spec = lottery_by_id("6/49")
     # Intrarea deciziei pentru metoda rezultatului: ratingul se dă numai cât
     # decizia de acum alege aceeași metodă (`scorer`).
-    entry = {"scorer": "dmd_forecast",
-             "rationale": "dmd_forecast: rată 3+ @ k12 = 0.162 (Wilson_lb=0.151), beat random (hipergeometric 0.1480) in 3/4 windows on the same 3+ target (lift +0.0100)",
+    entry = {"scorer": "markov_lag2",
+             "rationale": "markov_lag2: rată 3+ @ k12 = 0.162 (Wilson_lb=0.151), beat random (hipergeometric 0.1480) in 3/4 windows on the same 3+ target (lift +0.0100)",
              "baseline_rate": 0.1480, "target_label": "3+"}
     monkeypatch.setattr(app, "_decision_entry", lambda k, pool: entry)
-    data = {"pool_size": 12, "audit": {"bench_winner": {"loto_6_49": {"method": "dmd_forecast"}}}}
+    exact_calls = []
+
+    def exact_rating(key, pool, method, saved_entry):
+        # Formatting consumes measured scalars, not rounded rationale text.
+        assert (key, pool, method) == ("loto_6_49", 12, "markov_lag2")
+        assert saved_entry == entry
+        exact_calls.append((key, pool, method))
+        return {"rate": 0.162, "wilson": 0.151, "baseline": 0.1480,
+                "beat": 3, "windows": 4, "target": 3, "label": "3+", "pool": 12}
+
+    monkeypatch.setattr(app, "_mail_exact_rating", exact_rating)
+    data = {"pool_size": 12, "audit": {"bench_winner": {"loto_6_49": {"method": "markov_lag2"}}}}
     lines = app._mail_method_lines(spec, data)
-    assert lines[0] == "METODĂ: dmd_forecast (câștigătoarea bench-ului la pool 12)"
-    assert "16.2%" in lines[1] and "14.80%" in lines[1] and "3/4" in lines[1]
+    assert lines[0] == "METODĂ: markov_lag2 (câștigătoarea bench-ului la pool 12)"
+    assert "rată 3+ în pool 16.20%" in lines[1] and "14.80%" in lines[1] and "3/4" in lines[1]
+    assert "Wilson (z=1) 15.10%" in lines[1]
     data["audit"]["bench_winner"]["loto_6_49"]["fallback"] = True
     assert "fără bench" in app._mail_method_lines(spec, data)[0]
+    assert exact_calls == [("loto_6_49", 12, "markov_lag2")]
 
 
 def test_mail_names_last_draw_with_the_best_pool_result():

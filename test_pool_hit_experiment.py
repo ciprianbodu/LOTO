@@ -88,20 +88,7 @@ def test_code_parameters_are_the_registered_ones():
     assert phe.ALPHA == REG["alpha"]
     assert list(phe.CANDIDATES) == REG["candidates"]
     assert [[c, k, t] for c, _s, k, t in phe.TEST_CELLS] == REG["cells"]
-    # 2026-10-31: la cererea explicită a utilizatorului („nu mai excluzi nimic")
-    # TOATE metodele foste excluse sunt din nou eligibile în producție — diferența
-    # față de lista preregistrată e exact cele șase metode foste excluse.
-    reenabled = {
-        "random",
-        "neighbor_adjacent",
-        "repeat_last_draw",
-        "rwr_last_draw",
-        "haar_multiscale",
-        "interval_extrema_k16",
-    }
-    expected_methods = sorted(set(REG["methods"]) | reenabled)
-    assert phe.production_methods() == expected_methods
-    assert set(phe.production_methods()) ^ set(REG["methods"]) == reenabled
+    assert phe.production_methods() == sorted(REG["methods"])
 
 
 def test_hypergeometric_baselines():
@@ -142,7 +129,7 @@ def test_ranking_keeps_canonical_ties_for_usable_scores():
 
 @pytest.mark.parametrize("raises", [False, True])
 def test_dataset_counts_fallback_and_excludes_same_day(monkeypatch, raises):
-    from loto_enterprise.benchmark.methods import METHODS
+    from scripts.analysis.legacy_methods_2026_11_20 import METHODS
 
     dates = np.array(
         ["2000-01-01", "2000-01-02", "2000-01-02", "2000-01-03"],
@@ -179,8 +166,14 @@ def test_checkpoint_identity_tracks_code_registry_and_registration(
 ):
     monkeypatch.setattr(phe, "ROOT", tmp_path)
     monkeypatch.setattr(phe, "production_methods", lambda: ["frequency"])
-    source = tmp_path / "loto_enterprise" / "benchmark" / "methods_example.py"
-    source.parent.mkdir(parents=True)
+    registry = tmp_path / "scripts" / "analysis" / "legacy_methods_2026_11_20.py"
+    registry.parent.mkdir(parents=True)
+    registry.write_text("# archived registry", encoding="utf-8")
+    markov = tmp_path / "loto_enterprise" / "benchmark" / "methods_markov.py"
+    markov.parent.mkdir(parents=True)
+    markov.write_text("# shared Markov implementation", encoding="utf-8")
+    source = registry.parent / "legacy_scoring" / "methods_example.py"
+    source.parent.mkdir()
     source.write_bytes(b"def score():\n    return 1\n")
     reg = {"methods": ["frequency"], "datasets": {"fixture": {"prefix_sha256": "abc"}}}
     original = phe.checkpoint_identity(reg)

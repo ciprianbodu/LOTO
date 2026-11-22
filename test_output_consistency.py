@@ -38,7 +38,7 @@ def _folds():
     for pct, n in ((10, 100), (30, 300), (60, 600), (100, 1000)):
         for method, rate, ties in (
             ("frequency", 0.10, 0.1),
-            ("markov_pairs", 0.15, 0.7),
+            ("compact_transition_prior", 0.15, 0.7),
             ("random", 0.085, 0.9),
         ):
             rows.append(
@@ -70,25 +70,22 @@ def test_rendered_ranking_obeys_structural_gate_without_disqualifying_baseline(
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(_folds(), "joker_urna1", 11, "Joker", 20)
     assert ui.ranking()[0] == "frequency"
-    assert "markov_pairs" not in ui.ranking()
+    assert "compact_transition_prior" not in ui.ranking()
     assert "70.0%" in ui.text()
-    # Din 2026-10-31 `random` nu mai e exclusă: apare în clasament ca orice
-    # candidată (aici necalificată, nu ⛔ — per_game nu o include în decizie).
     assert "1 excluse structural" in ui.text()
-    assert "random" in ui.ranking()
+    assert "random" in ui.text()
+    assert "random" not in ui.ranking()
 
 
 def test_no_eligible_method_still_renders_exclusion_reasons(monkeypatch):
     monkeypatch.setattr(ui_bench, "_BENCH_FOLDS_CACHE", {"signature": None, "df": None})
     monkeypatch.setattr(app_ui, "_BENCH_FOLDS_CACHE", ui_bench._BENCH_FOLDS_CACHE)
-    # Din 2026-10-31 `random` e și ea candidată în listă, deci ramura „Nicio
-    # metodă eligibilă" se testează fără rândul random (altfel rămâne un
-    # competitor vizibil, marcat necalificată).
+    # Singurul candidat rămas nu trece poarta structurală.
     df = _folds().query("method not in ('frequency', 'random')")
     with capture_ui() as ui:
         app_ui._render_bench_leaderboard_slice(df, "joker_urna1", 11, "Joker", 20)
     assert "Nicio metodă eligibilă" in ui.text()
-    assert "markov_pairs" in ui.text()
+    assert "compact_transition_prior" in ui.text()
     assert not ui.ranking()
 
 
@@ -149,7 +146,8 @@ def test_wf_output_distinguishes_pool_hits_from_incomplete_tickets():
     with capture_ui() as ui:
         app_ui._render_hits_4plus(flat, "6/49", {"pool_size": 11})
     table = next(n for n in ui.walk() if n["kind"] == "table")
-    four, _five = table["kwargs"]["rows"]
+    four, five, six = table["kwargs"]["rows"]
+    assert five["pool"] == six["pool"] == "0 (0.00%)"
     assert four["pool"] == "1 (100.00%)"
     assert four["tick"] == "0 (0.00%)"
 

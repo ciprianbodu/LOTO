@@ -1,16 +1,14 @@
 """Regresii UI 2026-11-01:
 
-1. Secțiunea „📜 Istoric hits 4+ (walk-forward)” trebuie să apară în
+1. Secțiunea „📜 Istoricul variantelor (walk-forward)” trebuie să apară în
    „Analiză & Clasament” ȘI când walk-forward a fost sărit (ex. pool peste 19
    fără plafon de variante) — deschisă, cu motivul înăuntru; până acum apărea
    doar o notă separată și secțiunea dispărea complet.
-2. Eticheta câmpului de pool „(6–45)” putea fi citită ca geometrie „6/45” la
-   Joker (urna 1 e 5/45); acum spune explicit „(6–45 numere)”.
+2. Glisorul Joker afișează numărul ales, codul LR și costul.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import app_nicegui as app
@@ -41,7 +39,7 @@ def _hits_expansions(ui):
     return [
         n
         for n in ui.walk()
-        if n["kind"] == "expansion" and "Istoric hits" in str(n["args"][0])
+        if n["kind"] == "expansion" and "Istoricul variantelor" in str(n["args"][0])
     ]
 
 
@@ -61,7 +59,7 @@ def test_hits_section_appears_even_when_wf_skipped_large_pool(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_game_analysis("loto_6_49.csv", "6/49", _game_data())
     exps = _hits_expansions(ui)
-    assert exps, "secțiunea 📜 Istoric hits lipsește când WF e sărit"
+    assert exps, "secțiunea 📜 Istoricul variantelor lipsește când WF e sărit"
     assert exps[0]["kwargs"].get("value") is True, "secțiunea trebuie deschisă"
     text = ui.text()
     assert "Walk-forward necalculat pentru pool-ul mare" in text
@@ -88,13 +86,31 @@ def test_hits_section_with_wf_data_still_renders(monkeypatch):
     with capture_ui() as ui:
         ui_hits._render_game_analysis("loto_6_49.csv", "6/49", _game_data())
     exps = _hits_expansions(ui)
-    assert exps, "secțiunea 📜 Istoric hits lipsește când WF a rulat"
+    assert exps, "secțiunea 📜 Istoricul variantelor lipsește când WF a rulat"
     assert exps[0]["kwargs"].get("value") is True
     assert any(n["kind"] == "table" for n in exps[0]["children"]), "tabelul WF lipsește"
 
 
-def test_pool_input_label_says_numere_not_geometry():
-    """„Pool Joker (Urna 1) (6–45)” era citibil ca „6/45”; acum spune „numere”."""
-    src = Path("app_nicegui.py").read_text(encoding="utf-8")
-    assert 'f"{_ptitle} (6–{_pmax} numere)"' in src
-    assert 'f"{_ptitle} (6–{_pmax})"' not in src
+def test_pool_input_label_says_numere_not_geometry(monkeypatch):
+    """The rendered LR slider names the pool as numbers, with its code and cost."""
+    import ui_runtime
+
+    for module in (app, ui_runtime):
+        monkeypatch.setitem(module.SETTINGS, module._POOL_KEYS["joker"], 10)
+        monkeypatch.setitem(module.SETTINGS, module._LR_CODE_KEYS["joker"], 24)
+    client = app.ui.context.client
+    before = set(client.elements)
+    control = app._render_lr_pool_input("joker", "Pool Joker (Urna 1)")
+    created = set(client.elements) - before
+    try:
+        text = "\n".join(str(getattr(client.elements[i], "text", "")) for i in created)
+        assert "Pool Joker (Urna 1)" in text
+        assert "Cod 24" in text and "10 numere" in text
+        assert "14 variante" in text and "98 lei" in text
+        assert "Garanții condiționate" in text
+        assert "6/45" not in text and "(6–45)" not in text
+        assert str(control._props["label-value"]) == "10"
+    finally:
+        for identifier in sorted(created, reverse=True):
+            if identifier in client.elements:
+                client.elements[identifier].delete()

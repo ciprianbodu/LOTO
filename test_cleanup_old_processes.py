@@ -309,7 +309,9 @@ def test_kill_pid_tree_kills_the_whole_tree(tmp_path):
         assert child_pid_line, "copilul nu și-a raportat PID-ul"
         child_pid = int(child_pid_line)
         child = psutil.Process(child_pid)
-        assert child.ppid() == parent.pid
+        # On Windows the venv launcher may insert the actual interpreter
+        # between the PID returned by Popen and the process it starts.
+        assert child in psutil.Process(parent.pid).children(recursive=True)
         assert child_is_live()
 
         acted = kill_pid_tree(parent.pid)
