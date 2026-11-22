@@ -1,6 +1,7 @@
 """Compare Romanian reduced-scheme tickets within the selected budget."""
 
 import logging
+from collections import Counter
 
 from nicegui import run, ui
 
@@ -8,7 +9,7 @@ from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, MIN_BUDGET_LEI
 from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.ro_text import count
-from ui_lr_portfolio import _codes, _percent, _price
+from ui_lr_portfolio import _percent, _price
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
@@ -105,6 +106,19 @@ def _ticket_details(plan, *, expanded=False):
                 ui.label(f"Urna 2 Joker · {_bench_method(bonus)}").classes("text-caption")
 
 
+def _recommended_codes(tickets):
+    codes = Counter(
+        (area["code"], area["pool_size"])
+        for ticket in tickets
+        for area in ticket
+    )
+    labels = []
+    for (code, pool_size), zones in codes.items():
+        label = f"Cod {code} · {count(pool_size, 'numere')} în pool"
+        labels.append(f"{zones} × {label}" if zones > 1 else label)
+    return " + ".join(labels)
+
+
 def _render_recommendations(records, budget_lei, objective):
     if not records or not records[0]["tickets"]:
         ui.label("Scheme LR indisponibile pentru pool-urile și bugetul ales.").classes("text-warning")
@@ -119,7 +133,7 @@ def _render_recommendations(records, budget_lei, objective):
         ui.label(
             f"{_percent(first['attained'], first['denominator'])} · {_OBJECTIVES[objective]}"
         ).classes("text-h5 text-positive")
-        ui.label(_codes(area["code"] for ticket in first["tickets"] for area in ticket)).classes(
+        ui.label(_recommended_codes(first["tickets"])).classes(
             "text-subtitle2 text-weight-bold"
         )
         ui.label(
@@ -144,7 +158,8 @@ def _render_recommendations(records, budget_lei, objective):
     ui.label(rule).classes("text-caption")
 
     fields = [
-        ("game", "Joc"), ("tickets", "Bilete"), ("variants", "Variante"),
+        ("game", "Joc"), ("codes", "Cod LR și pool"), ("tickets", "Bilete"),
+        ("variants", "Variante"),
         ("price", "Total cu taxă"), ("chance", "Șansă teoretică"),
         ("bound", "Limită superioară"),
     ]
@@ -153,7 +168,9 @@ def _render_recommendations(records, budget_lei, objective):
         upper = plan["upper"]
         playable = bool(plan["tickets"])
         rows.append({
-            "game": plan["game_name"], "tickets": len(plan["tickets"]),
+            "game": plan["game_name"],
+            "codes": _recommended_codes(plan["tickets"]) if playable else "—",
+            "tickets": len(plan["tickets"]),
             "variants": plan["variants"], "price": _price(plan["price_bani"]) if playable else "—",
             "chance": _percent(plan["attained"], plan["denominator"]) if playable else "—",
             "bound": "Maxim demonstrat" if playable and plan["optimal"] else (
