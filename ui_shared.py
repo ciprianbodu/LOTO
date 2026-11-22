@@ -290,13 +290,19 @@ def pack_queue_result(payload: object) -> str:
 
 
 def decode_queue_result(result_json: str) -> object:
-    """La cancel-race worker-ul poate scrie payload gol ('{}'); întoarcem None
-    și apelantul tratează non-tuple ca rezultat invalid."""
+    """Citește rezultate produse de worker în coada locală de încredere.
+
+    Un rezultat încă nescris sau anulat poate avea payload gol ('{}').
+    """
     try:
         data = json.loads(result_json)
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError, RecursionError) as exc:
+        logger.warning(
+            "[JOB] Rezultatul stocat nu este JSON valid (%s).", type(exc).__name__
+        )
         return None
     if not isinstance(data, dict):
+        logger.warning("[JOB] Rezultatul stocat nu este un obiect JSON.")
         return None
     payload = str(data.get("payload", ""))
     if not payload:
@@ -304,7 +310,11 @@ def decode_queue_result(result_json: str) -> object:
     enc = str(data.get("encoding", ENCODING_PICKLE_B64))
     try:
         blob = base64.b64decode(payload)
-    except Exception:  # noqa: BLE001
+    except ValueError as exc:
+        logger.warning(
+            "[JOB] Datele rezultatului nu sunt Base64 valid (%s).",
+            type(exc).__name__,
+        )
         return None
     try:
         if enc == ENCODING_PICKLE_ZSTD_B64:
@@ -312,9 +322,13 @@ def decode_queue_result(result_json: str) -> object:
 
             blob = zstd.decompress(blob)
         elif enc != ENCODING_PICKLE_B64:
+            logger.warning("[JOB] Format necunoscut pentru rezultatul stocat.")
             return None
         return pickle.loads(blob)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — rezultatele istorice pot conține tipuri externe
+        logger.warning(
+            "[JOB] Rezultatul stocat nu poate fi decodat (%s).", type(exc).__name__
+        )
         return None
 
 

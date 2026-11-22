@@ -1,7 +1,8 @@
 """Serializare și scriere atomică pentru cache-urile LOTO.
 
 Cache-urile pickle pe disc sunt comprimate cu Zstandard la scriere; la citire
-acceptăm și fișiere legacy necomprimate (pickle brut).
+acceptăm și fișiere legacy necomprimate (pickle brut). La citire, folosiți numai
+cache-uri create de aplicație într-un director de încredere.
 """
 
 from __future__ import annotations

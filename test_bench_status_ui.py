@@ -15,7 +15,7 @@ import ui_bench
 import ui_hits
 import ui_results
 import ui_runtime
-from loto_enterprise.benchmark import decision, freshness
+from loto_enterprise.benchmark import VALIDATION_PERCENTILES, decision, freshness
 
 
 @pytest.fixture
@@ -51,7 +51,6 @@ def sidebar_context(monkeypatch, tmp_path):
     monkeypatch.setattr(app, "_target_data_ready", lambda: True)
     for name in ("status_panel", "logs_panel", "results_panel"):
         monkeypatch.setattr(app, name, Mock())
-    monkeypatch.setattr(app, "_render_base_interval_tables", Mock())
     monkeypatch.setattr(app, "_refresh_status", Mock())
     monkeypatch.setattr(app, "apply_autopilot_and_generate", Mock())
     monkeypatch.setattr(ui, "timer", Mock())
@@ -130,7 +129,7 @@ def test_actual_sidebar_intro_follows_target_without_reload(
     selector = next(
         element for element in client.elements.values()
         if isinstance(element, ui.select)
-        and element._props.get("label") == "🎯 Țintă Optimizare / Bench"
+        and element._props.get("name") == "bench_hit_target"
     )
     selector.value = 4
     binding._refresh_step()
@@ -252,7 +251,7 @@ def test_target_change_refreshes_notice_even_if_decision_update_fails(
     selector = next(
         element for element in client.elements.values()
         if isinstance(element, ui.select)
-        and element._props.get("label") == "🎯 Țintă Optimizare / Bench"
+        and element._props.get("name") == "bench_hit_target"
     )
     selector.value = 4
     binding._refresh_step()
@@ -281,7 +280,7 @@ def _decision_built_for_3(monkeypatch, root, *, complete=True):
 
     import pandas as pd
 
-    pcts = (10, 30, 60, 100)
+    pcts = VALIDATION_PERCENTILES
     rows = [
         {
             "game": "loto_6_49",
@@ -425,9 +424,18 @@ def test_startup_defers_the_rebuild_while_a_bench_runs(
 def test_matching_decision_keeps_the_fresh_banner(
     sidebar_context, monkeypatch, tmp_path
 ):
+    from loto_enterprise.benchmark.hit_target import BENCH_TARGET_REVISION
+    import json
+
     client, _settings, _state = sidebar_context
     bm = _decision_built_for_3(monkeypatch, tmp_path)
     before = bm.read_bytes()
+    saved_settings = tmp_path / "startup-settings.json"
+    saved_settings.write_text(
+        json.dumps({"bench_hit_target": 3, "bench_target_revision": BENCH_TARGET_REVISION}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ui_runtime, "UI_STATE_FILE", saved_settings)
     _startup_without_queue(monkeypatch)
     app._startup()
     assert bm.read_bytes() == before

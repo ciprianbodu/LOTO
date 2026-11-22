@@ -5,12 +5,12 @@ import pandas as pd
 import pytest
 from loto_engine import LotoEngine
 from loto_enterprise.benchmark import runner, methods
-from loto_enterprise.benchmark.methods_experimental import score_interval_extrema_k16
+from loto_enterprise.benchmark.methods_compact import score_compact_multiscale_shrink
 from loto_enterprise.core import backtesting, method_selector, wf_sig
 from loto_enterprise.core.history import training_cutoffs
 from loto_enterprise.core.ranking import rank_by_score
 
-METHOD = "interval_extrema_k16"
+METHOD = "compact_multiscale_shrink"
 
 def _history():
     rng = np.random.default_rng(2)
@@ -20,7 +20,7 @@ def _history():
     frame.loc[10, "n1"] = 0
     return frame
 
-def _choose(monkeypatch, fn=score_interval_extrema_k16):
+def _choose(monkeypatch, fn=score_compact_multiscale_shrink):
     monkeypatch.setattr(method_selector, "has_decision", lambda *a,**k: True)
     monkeypatch.setattr(method_selector, "get_ensemble_for_game", lambda *a,**k: [(METHOD, fn, 1.)])
     monkeypatch.setattr(method_selector, "rejected_decision_scorer", lambda *a,**k: None)
@@ -73,8 +73,8 @@ def test_cutoffs_recomputed_after_lookback_and_invalid_draw(monkeypatch):
 
 def test_semantics_is_selective_and_additive():
     assert wf_sig.scorer_semantics({"scorer":"frequency"}) == ""
-    assert "|interval-days1" in wf_sig.scorer_semantics({"scorer":METHOD})
-    both=wf_sig.scorer_semantics({"scorer":"dmd_forecast", "ensemble":[{"method":METHOD}]})
+    assert "|interval-days1" in wf_sig.scorer_semantics({"scorer": "interval_extrema_k16"})
+    both=wf_sig.scorer_semantics({"scorer":"dmd_forecast", "ensemble":[{"method": "interval_extrema_k16"}]})
     assert "|dmd-svd-ties1" in both and "|interval-days1" in both
 
 def test_worker_pipeline_cache_version_is_incremented():

@@ -66,13 +66,31 @@ def _result(method: str, *, pool: int = 16, requested: int | None = None) -> dic
 # --------------------------------------------------------------------------- #
 
 
+def _stub_exact_rating(monkeypatch, *, urna2: bool = False) -> None:
+    # Test the mail renderer with exact benchmark values supplied independently
+    # of the rounded decision rationale.
+    key, pool = ("joker_urna2", 1) if urna2 else ("loto_6_49", 16)
+    target, label = (1, "top-1") if urna2 else (4, "4+")
+    rate, wilson, baseline = (0.071, 0.062, 0.05) if urna2 else (0.091, 0.085, 0.0796)
+    exact = dict(target=target, label=label, rate=rate, wilson=wilson,
+                 baseline=baseline, beat=3, windows=4)
+
+    def find_rating(folds_game_key, pool_size, method, entry):
+        if (folds_game_key, pool_size, method) == (key, pool, "markov_lag2"):
+            return exact
+        return None
+
+    monkeypatch.setattr(app, "_mail_exact_rating", find_rating)
+
+
 def test_mail_rating_says_when_holm_does_not_confirm_the_advantage(monkeypatch):
+    _stub_exact_rating(monkeypatch)
     spec = lottery_by_id("6/49")
     entry = _entry("markov_lag2", proven=False, holm_p=0.435)
     monkeypatch.setattr(app, "_decision_entry", lambda key, pool: entry)
     lines = app._mail_method_lines(spec, _result("markov_lag2"))
     assert lines[0] == "METODĂ: markov_lag2 (câștigătoarea bench-ului la pool 16)"
-    assert "rată 4+ 9.1%" in lines[1] and "7.96%" in lines[1] and "Wilson (z=1) 8.5%" in lines[1] and "3/4" in lines[1]
+    assert "rată 4+ în pool 9.10%" in lines[1] and "7.96%" in lines[1] and "scor Wilson (z=1) 8.50%" in lines[1] and "3/4" in lines[1]
     assert len(lines) == 3
     assert "Avantaj nedemonstrat" in lines[2] and "p = 0.43" in lines[2]
     assert lines[2] == app._multiplicity_note(entry)
@@ -104,15 +122,15 @@ def test_mail_rating_says_when_holm_does_not_confirm_the_advantage(monkeypatch):
 
 def test_mail_rating_is_not_another_methods_after_the_decision_changed(monkeypatch):
     """Pool generat la 4+ de markov_lag2; ținta trecută pe 3+ alege acum
-    ridge_pooled_feats. Ratingul și p-ul Holm ale acesteia nu descriu pool-ul."""
+    compact_multiscale_shrink. Ratingul și p-ul Holm ale acesteia nu descriu pool-ul."""
     spec = lottery_by_id("6/49")
-    other = _entry("ridge_pooled_feats", proven=False, holm_p=0.415)
+    other = _entry("compact_multiscale_shrink", proven=False, holm_p=0.415)
     monkeypatch.setattr(app, "_decision_entry", lambda key, pool: other)
     lines = app._mail_method_lines(spec, _result("markov_lag2"))
     assert lines[0].startswith("METODĂ: markov_lag2")
     assert len(lines) == 2
     assert "s-a schimbat după generare" in lines[1]
-    assert "ridge_pooled_feats" in lines[1]
+    assert "compact_multiscale_shrink" in lines[1]
     assert "9.1%" not in lines[1] and "p = 0.41" not in lines[1]
 
 
@@ -154,12 +172,12 @@ def test_panel_note_belongs_to_the_method_that_produced_the_pool(monkeypatch):
     assert "s-a schimbat după generare" not in text
 
     # Decizia de acum alege altă metodă: nici p-ul ei, nici lipsa avertismentului.
-    other = _entry("ridge_pooled_feats", proven=False, holm_p=0.415)
+    other = _entry("compact_multiscale_shrink", proven=False, holm_p=0.415)
     text = _panel_text(monkeypatch, _result("markov_lag2"), other)
     assert "p = 0.41" not in text and "Avantaj nedemonstrat" not in text
-    assert "s-a schimbat după generare" in text and "ridge_pooled_feats" in text
-    proven = _entry("croston_interval", proven=True, holm_p=0.029)
-    text = _panel_text(monkeypatch, _result("markov_self_state", pool=11), proven)
+    assert "s-a schimbat după generare" in text and "compact_multiscale_shrink" in text
+    proven = _entry("compact_renewal_hazard", proven=True, holm_p=0.029)
+    text = _panel_text(monkeypatch, _result("compact_transition_prior", pool=11), proven)
     assert "s-a schimbat după generare" in text
 
     # Rezerva motorului (frequency) nu e o schimbare a deciziei: fără notă.
@@ -178,12 +196,10 @@ def test_panel_note_uses_the_pool_the_method_was_chosen_for(monkeypatch):
     assert asked == [16]
 
 
-def test_decision_entry_method_resolves_aliases_like_production():
-    renamed = {"scorer": "alternating_parity"}
-    assert app._decision_entry_method(renamed, "loto_6_49") == "season_period2"
-    # Din 2026-10-31 `random` nu mai e exclusă din producție: rezolvă legal.
-    assert app._decision_entry_method({"scorer": "random"}, "loto_6_49") == "random"
-    # Un nume necunoscut tot cade pe None (apoi pe fallback-ul determinist).
+def test_decision_entry_method_uses_the_current_catalog():
+    assert app._decision_entry_method({"scorer": "markov_lag2"}, "loto_6_49") == "markov_lag2"
+    assert app._decision_entry_method({"scorer": "alternating_parity"}, "loto_6_49") is None
+    assert app._decision_entry_method({"scorer": "random"}, "loto_6_49") is None
     assert app._decision_entry_method({"scorer": "omnius"}, "loto_6_49") is None
     assert app._decision_entry_method({}, "loto_6_49") is None
 
@@ -366,8 +382,8 @@ def test_generate_buttons_do_not_suggest_that_one_skips_the_bench_decision():
     labels = _button_labels()
     manual = labels["lambda: submit_generation(pure=False)"]
     auto = labels["apply_autopilot_and_generate"]
-    assert manual == "🚀 Generează (metoda din decizia bench)"
-    assert auto == "⚡ Auto-Pilot (arată metoda pe joc + generează)"
+    assert manual == "🚀 Generează"
+    assert auto == "⚡ Auto-Pilot (arată selecția pe joc și generează)"
     assert "manual" not in manual
     assert not app.apply_autopilot_and_generate.__doc__.startswith("Aplică scorer")
 
@@ -407,23 +423,24 @@ def _joker_result(urna2: dict | None) -> dict:
 
 
 def test_mail_names_the_joker_number_method_with_its_rate_and_wilson(monkeypatch):
+    _stub_exact_rating(monkeypatch, urna2=True)
     spec = lottery_by_id("joker")
     asked = []
 
     def _decision(key, pool):
         asked.append((key, pool))
-        return _urna2_entry("markov_pairs")
+        return _urna2_entry("markov_lag2")
 
     monkeypatch.setattr(app, "_decision_entry", _decision)
-    data = _joker_result({"method": "markov_pairs", "pool_hint": 1, "single_pick": True})
+    data = _joker_result({"method": "markov_lag2", "pool_hint": 1, "single_pick": True})
     lines = app._mail_method_lines(spec, data, urna2=True)
     assert asked == [("joker_urna2", 1)]
     assert lines[0] == (
-        "METODĂ JOKER: markov_pairs (câștigătoarea bench-ului pe Urna 2, top-1)"
+        "METODĂ JOKER: markov_lag2 (câștigătoarea bench-ului pe Urna 2, top-1)"
     )
     assert lines[1] == (
-        "RATING JOKER: rată top-1 7.1% față de 5.00% la întâmplare; "
-        "scor Wilson (z=1) 6.2%; rata observată peste media aleatoare în "
+        "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare; "
+        "scor Wilson (z=1) 6.20%; rata observată peste media aleatoare în "
         "3/4 ferestre suprapuse (comparație descriptivă)"
     )
     assert "Avantaj nedemonstrat" in lines[2] and "48" in lines[2]
@@ -448,15 +465,16 @@ def test_mail_joker_number_on_the_fallback_has_no_rating(monkeypatch):
 
 
 def test_mail_body_carries_the_joker_number_method_only_for_joker(monkeypatch):
+    _stub_exact_rating(monkeypatch, urna2=True)
     entries = {"joker_urna1": _entry("frequency", proven=False, holm_p=0.125)}
-    entries["joker_urna2"] = _urna2_entry("markov_pairs")
+    entries["joker_urna2"] = _urna2_entry("markov_lag2")
     monkeypatch.setattr(app, "_decision_entry", lambda key, pool: entries.get(key, {}))
-    data = _joker_result({"method": "markov_pairs", "pool_hint": 1, "single_pick": True})
+    data = _joker_result({"method": "markov_lag2", "pool_hint": 1, "single_pick": True})
     _mail_state(monkeypatch, "joker.csv", _history(["01-10-2026", "04-10-2026"]), {"joker": data})
     body = app._build_mail_body()
     assert "METODĂ: frequency (câștigătoarea bench-ului la pool 16)" in body
-    assert "METODĂ JOKER: markov_pairs" in body
-    assert "RATING JOKER: rată top-1 7.1% față de 5.00% la întâmplare" in body
+    assert "METODĂ JOKER: markov_lag2" in body
+    assert "RATING JOKER: rată top-1 7.10% față de 5.00% la întâmplare" in body
     assert body.index("POOL:") < body.index("METODĂ JOKER") < body.index("CEL MAI BUN")
 
     _ro_mail_state(monkeypatch, _history(["01-10-2026", "04-10-2026"]))

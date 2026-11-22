@@ -5,7 +5,7 @@ from math import comb
 import numpy as np
 import pytest
 
-from loto_enterprise.benchmark import methods_experimental as experimental
+from scripts.analysis.legacy_scoring import methods_experimental as experimental
 from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 

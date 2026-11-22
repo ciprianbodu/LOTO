@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 
 from loto_engine import LotoEngine
-from loto_enterprise.benchmark.methods_wave2 import _ses_series, score_theta_drift
+from loto_enterprise.benchmark.methods import METHODS
+from scripts.analysis.legacy_scoring.methods_relational import RELATIONAL_METHODS
+from scripts.analysis.legacy_scoring.methods_wave2 import _ses_series, score_theta_drift
 from loto_enterprise.benchmark.runner import GameDef, _evaluate_fold, load_draws
 from loto_enterprise.core.history import chronological_history
 
@@ -61,7 +63,8 @@ def test_theta_drift_is_the_linear_forecast_not_the_mean_rate():
     assert got[1] > got[2]
 
 
-def test_single_pick_cooccurrence_fails_before_the_block_loop():
+def test_single_pick_cooccurrence_fails_before_the_block_loop(monkeypatch):
+    monkeypatch.setitem(METHODS, "cooc_last3", RELATIONAL_METHODS["cooc_last3"])
     game = GameDef(
         "joker_urna2",
         "Joker — Urna 2 (1/20)",
@@ -79,7 +82,8 @@ def test_single_pick_cooccurrence_fails_before_the_block_loop():
     assert fold.blocks == 0
 
 
-def test_cooc_last3_still_scores_a_multi_number_draw():
+def test_cooc_last3_still_scores_a_multi_number_draw(monkeypatch):
+    monkeypatch.setitem(METHODS, "cooc_last3", RELATIONAL_METHODS["cooc_last3"])
     rng = np.random.default_rng(3)
     rows = [
         rng.choice(np.arange(1, 50), size=6, replace=False) for _ in range(40)

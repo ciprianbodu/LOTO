@@ -136,8 +136,12 @@ def _read_config(cfg_path: Path) -> dict:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
         if not isinstance(cfg, dict) or not isinstance(cfg.get("games", {}), dict):
             raise ValueError("config must contain a games object")
-    except Exception as exc:
-        logger.error("[method_selector] failed to parse %s: %s", cfg_path, exc)
+    except (OSError, ValueError, RecursionError) as exc:
+        logger.error(
+            "[method_selector] Decizia %s nu poate fi citită; folosesc frecvența: %s",
+            cfg_path,
+            exc,
+        )
         return {"games": {}}
     mismatch = _country_mismatch(cfg, _expected_country(cfg_path))
     if mismatch:
