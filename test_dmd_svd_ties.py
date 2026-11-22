@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from loto_enterprise.benchmark.methods_common import indicator, vector_to_scores
-from loto_enterprise.benchmark.methods_wave2 import (
+from scripts.analysis.legacy_scoring.methods_wave2 import (
     _svd_rank_including_ties,
     score_dmd_forecast,
 )

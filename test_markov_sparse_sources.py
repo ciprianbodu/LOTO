@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from loto_enterprise.benchmark.methods_common import indicator, vector_to_scores
-from loto_enterprise.benchmark.methods_relational import _markov
+from loto_enterprise.benchmark.methods_markov import _markov
 from loto_enterprise.core.ranking import rank_by_score
 
 

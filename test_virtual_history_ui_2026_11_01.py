@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 import app_nicegui as app
+from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from loto_enterprise.core import walk_forward_adapter as wf
 from scripts.analysis.audit_output import capture_ui
 from test_bench_status_ui import sidebar_context, _finish_ui_updates
@@ -27,7 +28,11 @@ def virtual_setup(monkeypatch):
                 "recent_penalty_factor": 0.35, "restrict_base_min": 0,
                 "restrict_base_max": 0, "max_consecutive_run": 2, "lookback": 0}
         tasks.append({"fname": f"{game}.csv", "df_json": frame.to_json(orient="split"), "tasks": [task]})
-    monkeypatch.setattr(app, "_build_config_json", lambda: json.dumps({"datasets": tasks}))
+    monkeypatch.setitem(app.SETTINGS, "wf_depth_pct", 100)
+    monkeypatch.setattr(
+        app, "_build_config_json",
+        lambda: json.dumps({"datasets": tasks, "wf_depth_pct": app.SETTINGS["wf_depth_pct"]}),
+    )
     monkeypatch.setattr(app, "_bench_running", lambda: False)
     monkeypatch.setattr(app.threading, "Thread", InlineThread)
     # Nu porni I/O oficial în firul executat inline de acest fixture.
@@ -35,7 +40,7 @@ def virtual_setup(monkeypatch):
     monkeypatch.setattr(ui_prizes.PoolPrizeBinding, "request", lambda *_a, **_kw: None)
     monkeypatch.setattr(app.results_panel, "refresh", lambda: None)
     monkeypatch.setattr(app.ui, "notify", lambda *_a, **_kw: None)
-    for key, value in {"virtual_wf_running": False, "virtual_wf_depth": 100,
+    for key, value in {"virtual_wf_running": False,
                        "wf_running": False, "active_job_id": None,
                        "bench_was_running": False, "bench_cancelled": False,
                        "virtual_wf_results": [], "retro": {"old": ["actual"]}}.items():
@@ -163,7 +168,7 @@ def test_target_change_signals_virtual_stop(sidebar_context, monkeypatch):
     monkeypatch.setattr(app, "_rebuild_decision_for_target", lambda *_a, **_kw: None)
     app.main_page()
     selector = next(e for e in client.elements.values() if isinstance(e, ui.select)
-                    and e._props.get("label") == "🎯 Țintă Optimizare / Bench")
+                    and e._props.get("name") == "bench_hit_target")
     selector.value = 4
     binding._refresh_step()
     _finish_ui_updates()
@@ -172,16 +177,16 @@ def test_target_change_signals_virtual_stop(sidebar_context, monkeypatch):
 
 def test_virtual_ui_offers_explicit_depth_and_does_not_autostart(virtual_setup, monkeypatch):
     import ui_hits
-    monkeypatch.setitem(app.STATE, "virtual_wf_depth", 30)
+    monkeypatch.setitem(app.SETTINGS, "wf_depth_pct", 30)
     starts = []
     monkeypatch.setattr(app, "_start_virtual_history", lambda: starts.append(True))
     with capture_ui() as view:
         ui_hits._render_analysis_menu([])
     sections = [n for n in view.walk() if n["kind"] == "expansion" and n["args"][0] == "📊 Analiză & Clasament"]
     assert len(sections) == 1
-    selectors = [n for n in sections[0]["children"] if n["kind"] == "select" and n["kwargs"].get("label") == "Adâncime istoric virtual"]
+    selectors = [n for n in sections[0]["children"] if n["kind"] == "select" and n["kwargs"].get("label") == "Istoric de validare pentru următoarea rulare"]
     assert len(selectors) == 1 and selectors[0]["kwargs"]["value"] == 30
-    assert set(selectors[0]["args"][0]) == {30, 100}
+    assert set(selectors[0]["args"][0]) == set(VALIDATION_PERCENTILES)
     buttons = [n for n in sections[0]["children"] if n["kind"] == "button" and "Calculează istoric virtual" in n["args"][0]]
     assert not buttons
     assert not starts
@@ -271,7 +276,7 @@ def test_virtual_ui_runs_real_backend_without_materializing_tickets(
     if game == "joker": frame["joker"] = [1 + i % 20 for i in range(50)]
     dataset["df_json"] = frame.to_json(orient="split")
     virtual_setup[:] = [dataset]
-    monkeypatch.setitem(app.STATE, "virtual_wf_depth", 30)
+    monkeypatch.setitem(app.SETTINGS, "wf_depth_pct", 30)
     monkeypatch.setattr(wf, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(backtesting, "_WF_PROBE_STEPS", 1)
     monkeypatch.setattr(backtesting, "_WF_SERIAL_MAX_MS", 1e9)

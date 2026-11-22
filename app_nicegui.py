@@ -17,6 +17,7 @@ Rulare:  python app_nicegui.py   (sau: python -m app_nicegui)
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -80,6 +81,15 @@ from ui_runtime import *  # noqa: F403
 from ui_results import *  # noqa: F403
 from ui_bench import *  # noqa: F403
 from ui_hits import *  # noqa: F403
+from ui_history_upload import (
+    MAX_BATCH_BYTES,
+    MAX_FILE_BYTES,
+    MAX_FILES,
+    UPLOAD_LIMITS,
+    LimitHistoryUploadBody,
+    read_history_csv,
+    validate_upload_batch,
+)
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from ui_lr_budget import lr_budget_panel, lr_budget_slider
@@ -4095,47 +4105,49 @@ def main_page() -> None:
             ).classes("w-full")
 
         async def _on_upload(e) -> None:
-            # NiceGUI 3.12: e.file.read() e async. Încărcare DOAR manuală — nu
-            # persistăm/auto-restaurăm nimic; ce alegi tu intră în sesiune.
             try:
-                content = await e.file.read()
-                name = e.file.name
-                df = pd.read_csv(io.BytesIO(content))
-            except Exception as exc:  # noqa: BLE001
-                ui.notify(f"Nu pot citi fișierul: {exc}", type="negative")
+                validate_upload_batch(e.files)
+            except (OSError, ValueError) as exc:
+                ui.notify(str(exc), type="negative")
                 return
-            if _selected_country() != _LOT.RO:
-                from loto_enterprise.core.draw_validation import valid_draw_matrix
 
-                _g = _LOT.require_lottery(_upload_game["id"], _selected_country())
+            selected_game = _upload_game["id"]
+            for file in e.files:
+                name = file.name
+                game_id = _legacy_ro_label(name) if _cc == _LOT.RO else selected_game
                 try:
-                    _cols = [f"n{i}" for i in range(1, _g.draw_n + 1)]
-                    _dr, _mask = valid_draw_matrix(
-                        df, _cols, draw_n=_g.draw_n, max_num=_g.max_n
-                    )
-                    if len(df) == 0 or not bool(_mask.all()):
-                        raise ValueError(f"{int((~_mask).sum())} rânduri invalide")
-                except Exception as exc:  # noqa: BLE001
-                    ui.notify(
-                        f"{name} nu e un istoric valid {_g.display}: {exc}",
-                        type="negative",
-                    )
-                    return
-                STATE.setdefault("dataset_game", {})[name] = _g.game_id
-            else:
-                # România: ghicitul de dinainte, după nume.
-                STATE.setdefault("dataset_game", {}).pop(name, None)
-            STATE["datasets"] = [(f, d) for f, d in STATE["datasets"] if f != name] + [
-                (name, df)
-            ]
-            ui.notify(f"Încărcat {name} ({len(df)} extrageri).", type="positive")
+                    game = _LOT.require_lottery(game_id, _cc)
+                    frame = read_history_csv(await file.read(), game)
+                except (csv.Error, OSError, ValueError) as exc:
+                    ui.notify(f"{name}: {exc}", type="negative")
+                    continue
+                with STATE_LOCK:
+                    bindings = STATE.setdefault("dataset_game", {})
+                    if _cc == _LOT.RO:
+                        bindings.pop(name, None)
+                    else:
+                        bindings[name] = game_id
+                    STATE["datasets"] = [
+                        (f, d) for f, d in STATE["datasets"] if f != name
+                    ] + [(name, frame)]
+                ui.notify(f"Încărcat {name} ({len(frame)} extrageri).", type="positive")
             datasets_label.refresh()
             if refresh_budget is not None:
                 await refresh_budget()
 
-        ui.upload(on_upload=_on_upload, multiple=True, auto_upload=True).props(
-            "accept=.csv"
-        ).classes("w-full")
+        def _upload_rejected() -> None:
+            ui.notify(f"Fișier sau lot respins. {UPLOAD_LIMITS}", type="negative")
+
+        ui.upload(
+            on_multi_upload=_on_upload,
+            on_rejected=_upload_rejected,
+            multiple=True,
+            auto_upload=True,
+            max_file_size=MAX_FILE_BYTES,
+            max_total_size=MAX_BATCH_BYTES,
+            max_files=MAX_FILES,
+            label=UPLOAD_LIMITS,
+        ).props("accept=.csv").classes("w-full")
 
         @ui.refreshable
         def datasets_label() -> None:
@@ -4775,6 +4787,7 @@ def _sync_ui_namespace() -> None:
 
 _sync_ui_namespace()
 
+app.add_middleware(LimitHistoryUploadBody)
 app.on_startup(_startup)
 
 # Copiii ProcessPoolExecutor (spawn, Windows) sunt `__mp_main__`. Nu porni
@@ -4787,6 +4800,7 @@ if __name__ == "__main__":
     # ocupat (citiri loguri OneDrive) → fără timeout generos, WebSocket pica 'connection lost'.
     ui.run(
         title=APP_TITLE,
+        host="127.0.0.1",
         port=_port,
         reload=False,
         show=False,

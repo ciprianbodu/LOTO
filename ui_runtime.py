@@ -234,6 +234,36 @@ def _lr_scheme_for(game, pool_size=None):
     return select_lr_scheme(lot.geometry, size, policy="cost")
 
 
+def _lr_pct(p: float) -> str:
+    """Procent cu două zecimale; sub 0,1% două cifre semnificative."""
+    value = 100.0 * float(p)
+    return f"{value:.2f}%" if value >= 0.1 or value == 0 else f"{value:.2g}%"
+
+
+def _lr_guarantee_text(scheme) -> str:
+    """Ce prinde schema după câte numere ies dintre cele jucate, din profilul exact."""
+    from covering.lr_schemes import scheme_guarantees
+
+    return _lr_guarantees_text(scheme_guarantees(scheme))
+
+
+def _lr_guarantees_text(guarantees: dict) -> str:
+    """Profil exact păstrat în rezultat; acceptă și cheile JSON ale istoricului."""
+    parts = []
+    for k, raw_row in sorted(guarantees.items(), key=lambda item: int(item[0])):
+        row = {int(t): float(v) for t, v in raw_row.items()}
+        top = max(row)
+        sure = max((t for t, v in row.items() if v >= 1.0 - 1e-12), default=None)
+        bits = [f"{sure} sigur"] if sure is not None else []
+        bits += [
+            f"{t}{'' if t == top else '+'} în {_lr_pct(v)}"
+            for t, v in row.items()
+            if (sure is None or t > sure) and v > 0
+        ]
+        parts.append(f"{k} {'ieșite ' if not parts else ''}→ " + (", ".join(bits) or "sub 3"))
+    return "; ".join(parts)
+
+
 def _lr_selection_lines(game) -> tuple[str, str]:
     lot = _game_spec_for(game)
     scheme = _lr_scheme_for(game)

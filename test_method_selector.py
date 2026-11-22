@@ -180,7 +180,7 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
                         "scorer": "frequency",
                         "ensemble": [
                             {"method": "frequency", "weight": 0.6},
-                            {"method": "markov_pairs", "weight": 0.4},
+                            {"method": "markov_lag2", "weight": 0.4},
                         ],
                     }
                 }
@@ -193,18 +193,16 @@ def test_get_ensemble_reads_multi_method_ensemble(temp_config):
     names = {name for name, _fn, _w in result}
     assert "frequency" in names
     assert "random" not in names
-    # markov_pairs e în METHODS: blend real cu 2 membri
+    # markov_lag2 e în METHODS: blend real cu 2 membri
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
-    assert "markov_pairs" in names
+    assert "markov_lag2" in names
     weights = {name: w for name, _fn, w in result}
     assert weights["frequency"] == pytest.approx(0.6)
-    assert weights["markov_pairs"] == pytest.approx(0.4)
+    assert weights["markov_lag2"] == pytest.approx(0.4)
 
 
-def test_ensemble_includes_random_since_2026_10_31(temp_config):
-    """Din 2026-10-31 listele de excludere sunt GOALE (cerere explicită a
-    utilizatorului): `random` intră în blend dacă e listat în JSON — cu prețul
-    unui pool nedeterminist, documentat în AGENTS.md."""
+def test_ensemble_excludes_random_reference(temp_config):
+    """The random reference has no weight in the production ensemble."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -224,7 +222,7 @@ def test_ensemble_includes_random_since_2026_10_31(temp_config):
         "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
     )
     names = {name for name, _fn, _w in result}
-    assert names == {"frequency", "random"}
+    assert names == {"frequency"}
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
     # Cu plafonul implicit (ENSEMBLE_MAX_METHODS = 1) câștigă primul membru valid.
     result1 = ms.get_ensemble_for_game("loto_6_49", pool_size=10, config_path=cfg_path)
@@ -263,9 +261,7 @@ def test_dead_scorer_live_ensemble_aligns_winner(temp_config):
     assert all(e["method"] == "frequency" for e in rec["ensemble"])
 
 
-def test_get_winner_accepts_random_scorer_since_2026_10_31(temp_config):
-    """Din 2026-10-31 `random` nu mai e exclus: un best_methods.json care îl
-    numește scorer este onorat (pool nedeterminist — vezi AGENTS.md)."""
+def test_get_winner_falls_back_from_random_reference(temp_config):
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -280,26 +276,20 @@ def test_get_winner_accepts_random_scorer_since_2026_10_31(temp_config):
     )
     assert (
         ms.get_winner_name("loto_6_49", pool_size=10, config_path=cfg_path)
-        == "random"
+        == "frequency"
     )
 
 
-def test_spatial_last_draw_filters_reach_production_since_2026_10_31(temp_config):
-    """Din 2026-10-31 filtrele last-draw NU mai sunt excluse: un best_methods.json
-    care le numește este onorat (top-K-ul lor e clasă geometrică, nu ranking —
-    consecință asumată de utilizator, vezi AGENTS.md)."""
-    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_PRODUCTION
+def test_retired_spatial_last_draw_scorers_use_frequency_fallback(temp_config):
     from loto_enterprise.benchmark.methods import METHODS
 
-    assert EXCLUDED_FROM_PRODUCTION == frozenset()
     for scorer in (
         "neighbor_adjacent",
         "repeat_last_draw",
         "rwr_last_draw",
         "haar_multiscale",
     ):
-        assert scorer in METHODS
-        assert scorer not in EXCLUDED_FROM_PRODUCTION
+        assert scorer not in METHODS
         cfg_path = temp_config(
             {
                 "loto_5_40": {
@@ -314,12 +304,12 @@ def test_spatial_last_draw_filters_reach_production_since_2026_10_31(temp_config
         )
         assert (
             ms.get_winner_name("loto_5_40", pool_size=11, config_path=cfg_path)
-            == scorer
+            == "frequency"
         )
         rec = ms.recommend_optimal_config("loto_5_40", 11, config_path=cfg_path)
-        assert rec["scorer"] == scorer
+        assert rec["scorer"] == "frequency"
         ens = ms.get_ensemble_for_game("loto_5_40", pool_size=11, config_path=cfg_path)
-        assert any(name == scorer for name, _fn, _w in ens)
+        assert [(name, weight) for name, _fn, weight in ens] == [("frequency", 1.0)]
 
 
 def test_old_class_filters_are_gone_and_never_reach_production(temp_config):
@@ -458,11 +448,11 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
             "joker_urna2": {
                 "auto_pilot_per_pool": {
                     "k1": {
-                        "scorer": "ewma_hl30",
+                        "scorer": "compact_multiscale_shrink",
                         "hit_target": 1,
                         "target_label": "top-1 (1/1)",
                         "ensemble": [
-                            {"method": "ewma_hl30", "weight": 0.7},
+                            {"method": "compact_multiscale_shrink", "weight": 0.7},
                             {"method": "frequency", "weight": 0.3},
                         ],
                     }
@@ -472,20 +462,19 @@ def test_joker_urna2_uses_the_configured_top1_benchmark_ensemble(temp_config):
     )
     assert (
         ms.get_winner_name("joker_urna2", pool_size=1, config_path=cfg_path)
-        == "ewma_hl30"
+        == "compact_multiscale_shrink"
     )
     result = ms.get_ensemble_for_game(
         "joker_urna2", pool_size=1, config_path=cfg_path, max_methods=3
     )
-    assert [name for name, _fn, _weight in result] == ["ewma_hl30", "frequency"]
+    assert [name for name, _fn, _weight in result] == ["compact_multiscale_shrink", "frequency"]
     assert sum(weight for _name, _fn, weight in result) == pytest.approx(1.0)
     cfg = ms.recommend_optimal_config("joker_urna2", 1, config_path=cfg_path)
     assert (cfg["hit_target"], cfg["target_label"]) == (1, "top-1 (1/1)")
 
 
 def test_ensemble_cap_applies_after_sanitization(temp_config):
-    """Ponderile invalide nu consumă locuri din plafon; din 2026-10-31 `random`
-    e valid (listele de excludere goale), deci intră primul dacă e listat."""
+    """Invalid weights and the random reference do not consume the cap."""
     cfg_path = temp_config(
         {
             "loto_6_49": {
@@ -496,8 +485,8 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
                             {"method": "random", "weight": 0.4},
                             {"method": "frequency", "weight": "abc"},
                             {"method": "frequency", "weight": 0.2},
-                            {"method": "ewma_hl30", "weight": 0.2},
-                            {"method": "markov_pairs", "weight": 0.2},
+                            {"method": "compact_multiscale_shrink", "weight": 0.2},
+                            {"method": "markov_lag2", "weight": 0.2},
                         ],
                     }
                 }
@@ -508,7 +497,7 @@ def test_ensemble_cap_applies_after_sanitization(temp_config):
         "loto_6_49", pool_size=10, config_path=cfg_path, max_methods=3
     )
     names = [name for name, _fn, _w in result]
-    assert names == ["random", "frequency", "ewma_hl30"]
+    assert names == ["frequency", "compact_multiscale_shrink", "markov_lag2"]
     assert abs(sum(w for _n, _fn, w in result) - 1.0) < 1e-9
 
 

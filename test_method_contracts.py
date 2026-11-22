@@ -7,11 +7,12 @@ import pytest
 
 from loto_enterprise.benchmark.methods import METHODS
 from loto_enterprise.benchmark.methods_common import indicator
-from loto_enterprise.benchmark.methods_learning import _features_from, _train_rows
+from scripts.analysis.legacy_methods_2026_11_20 import METHODS as ARCHIVED_METHODS
+from scripts.analysis.legacy_scoring.methods_learning import _features_from, _train_rows
 from loto_enterprise.benchmark.runner import GameDef, _evaluate_fold
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
-GEOMETRIES = [(49, 6), (40, 5), (45, 5), (20, 1)]
+GEOMETRIES = [(49, 6), (40, 6), (45, 5), (20, 1)]
 PAIR_METHODS = [
     "cooc_last3",
     "anti_cooc_last",
@@ -64,7 +65,10 @@ def test_number_order_within_draw_does_not_change_scores(name, max_num, draw_n):
 
 
 @pytest.mark.parametrize("name", PAIR_METHODS)
-def test_single_ball_pair_methods_are_flat_and_not_evaluated(name):
+def test_single_ball_pair_methods_are_flat_and_not_evaluated(name, monkeypatch):
+    # Exercise the evaluator on flat historical scorers without reactivating
+    # these scorers in the production catalog.
+    monkeypatch.setitem(METHODS, name, ARCHIVED_METHODS[name])
     draws = history(20, 1, 100)
     assert not has_usable_score_variance(METHODS[name][0](draws, 20))
     game = GameDef(

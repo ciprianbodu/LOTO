@@ -45,8 +45,11 @@ def _default_db_path() -> str:
         try:
             os.makedirs(d, exist_ok=True)
             return os.path.join(d, "loto_jobs.db")
-        except Exception:  # noqa: BLE001
-            continue
+        except OSError as exc:
+            logger.warning(
+                "Directorul pentru coada SQLite %s este indisponibil: %s", d, exc
+            )
+    logger.warning("Folosesc coada SQLite loto_jobs.db din directorul curent.")
     return "loto_jobs.db"
 
 
@@ -106,8 +109,10 @@ def _connect(db_path: str = DB_PATH) -> sqlite3.Connection:
             if conn is not None:
                 try:
                     conn.close()
-                except Exception:  # noqa: BLE001
-                    pass
+                except sqlite3.Error as exc:
+                    logger.debug(
+                        "Închiderea conexiunii SQLite %s a eșuat: %s", p, exc
+                    )
             last_exc = e
             if "disk I/O error" in str(e) or "database is locked" in str(e):
                 time.sleep(0.5 * (attempt + 1))

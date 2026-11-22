@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from loto_enterprise.benchmark import methods_common as common
-from loto_enterprise.benchmark import methods_recency as recency
+from scripts.analysis.legacy_scoring import methods_recency as recency
 
 
 def reference_last_seen(ind: np.ndarray) -> np.ndarray:

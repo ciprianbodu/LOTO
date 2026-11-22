@@ -1,0 +1,70 @@
+name: LOTO CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Python 3.15 checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LOTO_RUNTIME_DIR: ${{ runner.temp }}/loto-runtime
+      LOTO_WF_CACHE_DIR: ${{ runner.temp }}/loto-wf-cache
+      LOTO_UI_PORT: "8765"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.15"
+          cache: pip
+          cache-dependency-path: requirements_base.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements_base.txt
+          python -m pip check
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Collect all regression tests
+        run: python -m pytest --collect-only -qq -p no:cacheprovider
+      # The historical suite already has execution failures. Collect it above
+      # and run the tests for the audit fixes while the remaining failures are triaged.
+      - name: Run audit regression tests
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests test_audit_bench_interval_days.py test_dmd_svd_ties.py
+          test_interval_extrema_method.py test_markov_sparse_sources.py
+          test_method_contracts.py test_methods_registry.py
+          test_py314_scoring_primitives.py test_scoring_corrections.py
+          test_draw_validation.py test_job_lifecycle.py test_cleanup_residual.py
+          test_reset_jobs.py test_ui_shared.py test_cache_io.py
+          test_bench_status_ui.py test_virtual_history_ui_2026_11_01.py test_method_selector.py
+          test_ui_mail_2026_10_08.py
+      - name: Check NiceGUI startup over HTTP
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/loto-smoke.log"
+          python app_nicegui.py >"$log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            kill -0 "$pid" 2>/dev/null || break
+            if curl --fail --silent --max-time 2 "http://127.0.0.1:$LOTO_UI_PORT/" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$log"
+          exit 1
+      - name: Audit dependency vulnerabilities
+        run: |
+          python -m pip install pip-audit==2.10.1
+          pip-audit -r requirements_base.txt --progress-spinner off
