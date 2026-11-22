@@ -46,11 +46,16 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         def apply_budget(plans):
             settings.extend(plans)
 
-        async def calculate(function, amount, objective, game, *, inverse=None, inverse_range=None):
+        async def calculate(function, amount, objective, *args):
             if function is budget.recommend_games:
-                return [(amount, objective, game)]
-            assert function is budget.recommend_playable_games
-            assert settings[-1] == (amount, objective, game)
+                return [(amount, objective, args[0])]
+            if function is budget._compare_games:
+                return [{"game": gid, "ranges": [], "reason": "Test"} for gid in args[0]]
+            assert function is budget._generate_selection
+            assert settings[-1] == (amount, objective, None)
+            selections, _, inverse = args
+            inverse_range = selections["6/49"]
+            assert all(limit == inverse_range for limit in selections.values())
             calls.append((amount, inverse, inverse_range))
             if len(calls) == 1:
                 started.set()
@@ -109,18 +114,21 @@ def test_obsolete_or_closed_plan_does_not_update_benchmark_controls(monkeypatch)
     async def scenario():
         waiting, release = asyncio.Event(), asyncio.Event()
 
-        async def io_bound(function, amount, goal, game, **kwargs):
+        async def io_bound(function, amount, goal, game, *args):
             if function is budget.recommend_games:
                 if amount == 200:
                     waiting.set()
                     await release.wait()
                 return [amount]
+            if function is budget._compare_games:
+                return [{"game": gid, "ranges": [], "reason": "Test"} for gid in game]
             calculated.append(amount)
             return [amount]
 
         monkeypatch.setattr(budget.run, "io_bound", io_bound)
         refresh = budget.lr_budget_panel(slider, lambda game: {}, on_budget_plan=applied.extend)
         panel = view.expansion.return_value
+        button = view.button.return_value
         panel.value = True
         pending = asyncio.create_task(refresh())
         await asyncio.wait_for(waiting.wait(), timeout=2)
@@ -139,7 +147,7 @@ def test_obsolete_or_closed_plan_does_not_update_benchmark_controls(monkeypatch)
         release.set()
         await pending
         assert applied == calculated == [180]
-        view.button.return_value.props.assert_called_with("aria-busy=false", remove="loading")
+        button.props.assert_called_with("aria-busy=false", remove="loading")
 
     asyncio.run(scenario())
 
@@ -183,3 +191,65 @@ def test_unplayable_range_displays_reason_without_zone_numbers(monkeypatch):
     )
     view.label.assert_any_call(reason)
     view.table.assert_not_called()
+
+def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
+    view = _widgets(monkeypatch)
+    assigned = []
+    analysed = []
+    callbacks = {}
+    def display(report, name, choice, on_change, forced, *, expanded):
+        callbacks[report["game"]] = on_change
+    monkeypatch.setattr(budget, "_range_comparison", display)
+    monkeypatch.setattr(budget, "_render_recommendations", lambda *args: None)
+    async def io_bound(fn, amount, goal, games, inputs, inverse):
+        if fn is budget._compare_games:
+            analysed.append(tuple(games))
+            return [
+                {"game": game, "recommended_range": (10, 40) if game == "6/49" else None}
+                for game in games
+            ]
+        assert fn is budget._generate_selection
+        assigned.append(dict(games))
+        return []
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+    async def scenario():
+        refresh = budget.lr_budget_panel(MagicMock(value=200), lambda game: {})
+        view.expansion.return_value.value = True
+        await refresh()
+        assert assigned == [{"6/49": (10, 40), "5/40": None, "joker": None}]
+        callbacks["6/49"]("6/49","Baza completă")
+        callbacks["5/40"]("5/40","10–40")
+        assert len(assigned) == 1
+        confirm = next(c.kwargs["on_click"] for c in view.button.call_args_list if c.args == ("Generează cu baza aleasă",))
+        await confirm()
+        assert len(analysed) == 1
+        assert assigned[-1] == {"6/49": None, "5/40": (10, 40), "joker": None}
+    asyncio.run(scenario())
+
+
+def test_range_evidence_displays_number_and_calendar_gaps(monkeypatch):
+    view = _widgets(monkeypatch)
+    report = {
+        "game": "6/49", "code": 57, "pool_size": 12, "recommended_range": None,
+        "reason": "Date insuficiente pentru o bază restrânsă.", "metric": "4+ pe bilet",
+        "ranges": [{
+            "range": (10, 40), "eligible_now": 25, "feasible_now": True, "evaluated": 100,
+            "pool_3plus": 17, "pool_4plus": 4, "ticket_3plus": 17, "ticket_4plus": 2,
+            "recent_successes": 1, "recent_evaluated": 25, "infeasible": 0,
+            "successes": 9, "objective_evaluated": 98, "objective_missing": 2,
+            "phase": {"phase": "8–14 zile", "sufficient": False, "compared": 4},
+            "chronology": {"window_draws": 100, "occurrences": 1, "last_date": "2026-11-12",
+                           "draws_since": 2, "days_since": 7, "median_gap_draws": None, "median_gap_days": None},
+        }],
+        "first_date": "2025-11-01", "as_of": "2026-11-19", "rows": 100,
+    }
+    budget._range_comparison(report, "Loto 6/49", "auto", lambda *args: None, False, expanded=True)
+    assert list(view.select.call_args.args[0]) == ["auto", "Baza completă", "10–40"]
+    performance, chronology = [c.kwargs["rows"][0] for c in view.table.call_args_list]
+    assert (performance["recent"], performance["ticket"], performance["eligible"]) == ("1 / 25 (4,0%)","17 / 2","25")
+    assert performance["objective"] == "9 / 98 (9,2%) · 2 extrageri fără date complete"
+    assert performance["phase"] == "8–14 zile · 4 comparații, date insuficiente"
+    assert (chronology["events"],chronology["last"],chronology["wait"],chronology["median"]) == (
+        "1 / 100","12.11.2026","2 / 7","N/D / N/D",
+    )
+    assert any("19.11.2026" in call.args[0] for call in view.label.call_args_list)

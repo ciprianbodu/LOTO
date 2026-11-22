@@ -2,11 +2,13 @@
 
 import logging
 from collections import Counter
+from datetime import date
 
 from nicegui import run, ui
 
 from covering.lr_budget import ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, recommend_games
-from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
+from loto_enterprise.core.lr_budget_forecast import playable_plan_order, recommend_playable_games
+from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.ro_text import count
 from ui_lr_portfolio import _percent, _price
@@ -62,14 +64,22 @@ def _ticket_details(plan, *, expanded=False):
                 origin += f" · de la {forecast['expanded_from']} la {len(pool)} numere"
             else:
                 origin += f" · {len(pool)} numere"
-            code = f" · Cod {forecast['code']}" if forecast["code"] is not None else ""
+            code = ""
+            if forecast["code"] is not None:
+                same_code = all(row["code"] == forecast["code"] for row in rows)
+                prefix = "Cod" if same_code else "Cod de evaluare"
+                code = f" · {prefix} {forecast['code']}"
+            limits = forecast.get("number_range") or forecast.get("inverse_range")
             if excluded is not None:
                 ui.label("Pool normal exclus").classes("text-weight-bold")
                 ui.label(", ".join(map(str, excluded))).classes("text-body2")
                 eligible = count(forecast["eligible_count"], "numere eligibile", "număr eligibil")
-                if limits := forecast.get("inverse_range"):
+                if limits:
                     eligible += f" între {limits[0]} și {limits[1]} inclusiv"
                 origin = f"Pool invers · {count(len(pool), 'numere selectate', 'număr selectat')} din {eligible}"
+            elif limits:
+                eligible = count(forecast["eligible_count"], "numere eligibile", "număr eligibil")
+                origin = f"Pool direct · {count(len(pool), 'numere selectate', 'număr selectat')} din {eligible} între {limits[0]} și {limits[1]} inclusiv"
             ui.label(f"{origin}{code}").classes("text-weight-bold")
             ui.label(", ".join(map(str, pool))).classes("text-body2")
             if excluded_jokers := forecast.get("excluded_jokers"):
@@ -197,9 +207,149 @@ def _render_recommendations(records, budget_lei, objective):
         _ticket_details(plan, expanded=bool(plan.get("forecast_error")))
 
 
-def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
+def _range_label(limits):
+    return f"{limits[0]}–{limits[1]}" if limits else "Baza completă"
+
+
+def _date_label(value):
+    if not value:
+        return "N/D"
+    return date.fromisoformat(str(value)[:10]).strftime("%d.%m.%Y")
+
+
+def _number_label(value):
+    return "N/D" if value is None else f"{value:g}".replace(".", ",")
+
+
+def _rate_label(successes, evaluated):
+    if successes is None or not evaluated:
+        return "N/D"
+    rate = f"{100 * successes / evaluated:.1f}".replace(".", ",")
+    return f"{successes} / {evaluated} ({rate}%)"
+
+
+def _pair_label(draws, days):
+    return f"{_number_label(draws)} / {_number_label(days)}"
+
+
+def _analysis_table(fields, rows):
+    table = ui.table(
+        columns=_columns(fields), rows=rows, row_key="base", pagination={"rowsPerPage": 0},
+    ).props("dense flat hide-bottom wrap-cells").classes("w-full lr-range-table")
+    table.add_slot("body-cell", """
+        <q-td :props="props">
+            <span class="lt-sm lr-range-cell-label">{{ props.col.label }}</span>
+            <span>{{ props.value }}</span>
+        </q-td>
+    """)
+
+
+def _range_comparison(report, game_name, selected, select_base, forced, *, expanded):
+    best = _range_label(report.get("recommended_range"))
+    choices = {"auto": f"Automată · {best}"}
+    choices.update({_range_label(limits): _range_label(limits) for limits in RANGES})
+    game = report["game"]
+    with ui.expansion(f"{game_name} · recomandare {best}", value=expanded).classes("w-full"):
+        if report.get("code") is not None:
+            ui.label(f"Cod de evaluare {report['code']} · {count(report['pool_size'], 'numere în pool')}").classes("text-weight-bold")
+        ui.label(report["reason"]).classes("text-body2")
+        historical, timing = [], []
+        for row in report["ranges"]:
+            base = _range_label(row["range"])
+            eligible = row.get("eligible_now")
+            feasible = row.get("feasible_now")
+            choices[base] = base if feasible is not False else f"{base} · insuficiente numere eligibile"
+            evaluated = row.get("evaluated", 0)
+            recent = row.get("recent_evaluated", 0)
+            objective_evaluated = row.get("objective_evaluated", evaluated)
+            objective_score = _rate_label(row.get("successes"), objective_evaluated)
+            if missing := row.get("objective_missing"):
+                objective_score += f" · {count(missing, 'extrageri fără date complete', 'extragere fără date complete')}"
+            phase = row.get("phase") or {}
+            phase_label = "N/D"
+            if row["range"] and phase:
+                band = phase.get("phase") or "Pauză necunoscută"
+                cases = int(phase.get("compared", 0))
+                if phase.get("sufficient"):
+                    phase_label = f"{band} · {phase['wins']} / {phase['losses']} din {cases}"
+                else:
+                    phase_label = f"{band} · {count(cases, 'comparații', 'comparație')}, date insuficiente"
+            historical.append({
+                "base": base, "eligible": _number_label(eligible),
+                "evaluated": evaluated, "infeasible": row.get("infeasible", 0),
+                "ticket": _pair_label(row.get("ticket_3plus"), row.get("ticket_4plus")) if evaluated else "N/D",
+                "pool": _pair_label(row.get("pool_3plus"), row.get("pool_4plus")) if evaluated else "N/D",
+                "objective": objective_score, "recent": _rate_label(row.get("recent_successes"), recent),
+                "phase": phase_label,
+            })
+            chron = row.get("chronology") or {}
+            timing.append({
+                "base": base, "events": f"{chron['occurrences']} / {chron['window_draws']}" if chron.get("window_draws") else "N/D",
+                "last": _date_label(chron.get("last_date")),
+                "wait": _pair_label(chron.get("draws_since"), chron.get("days_since")),
+                "median": _pair_label(chron.get("median_gap_draws"), chron.get("median_gap_days")),
+            })
+        if historical:
+            period = f"{_date_label(report.get('first_date'))} – {_date_label(report.get('as_of'))}"
+            ui.label(f"Comparație pe {count(report['rows'], 'extrageri', 'extragere')} · {period}").classes("text-subtitle2")
+            if metric := report.get("metric"):
+                ui.label(f"Ultimele 25 de extrageri · {metric}").classes("text-caption")
+            _analysis_table([
+                ("base", "Bază"), ("eligible", "Eligibile acum"), ("evaluated", "Evaluate"),
+                ("infeasible", "Pool imposibil"), ("ticket", "Pe bilet 3+ / 4+"), ("pool", "În pool 3+ / 4+"),
+                ("objective", "Obiectiv · reușite / evaluate"), ("recent", "Ultimele 25 · reușite / evaluate"), ("phase", "La pauze similare · victorii / înfrângeri"),
+            ], historical)
+            ui.label("Victoriile și înfrângerile compară intervalul cu baza completă în extrageri cu pauze similare.").classes("text-caption")
+            with ui.expansion("Aparițiile intervalelor și pauzele dintre ele").classes("w-full"):
+                chronology = report["ranges"][0].get("chronology") or {}
+                window = chronology.get("window_draws", 0)
+                as_of = chronology.get("since_as_of") or report.get("as_of")
+                ui.label(
+                    f"Aparițiile și pauza mediană folosesc ultimele {count(window, 'extrageri', 'extragere')}. "
+                    "O apariție înseamnă că toate numerele principale extrase au fost în interval. "
+                    f"Pauza actuală se măsoară de la ultima apariție cunoscută până la {_date_label(as_of)}."
+                ).classes("text-caption")
+                _analysis_table([
+                    ("base", "Bază"), ("events", "Apariții / extrageri"), ("last", "Ultima apariție"),
+                    ("wait", "Pauza actuală · extrageri / zile"), ("median", "Pauza mediană · extrageri / zile"),
+                ], timing)
+            if protocol := report.get("protocol"):
+                ui.label(protocol).classes("text-caption")
+        value = "10–40" if forced else selected
+        picker = ui.select(
+            choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
+            on_change=lambda event: select_base(game, event.value),
+        ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
+        if forced:
+            picker.disable()
+
+
+def _compare_games(amount, goal, games, inputs, inverse):
+    reports = []
+    for game in games:
+        try:
+            reports.append(compare_budget_ranges(amount, goal, game, inverse=inverse, **inputs))
+        except (OSError, ValueError) as exc:
+            reports.append({"game": game, "ranges": [], "reason": f"Comparație indisponibilă. {exc}"})
+    return reports
+
+
+def _generate_selection(amount, goal, selections, inputs, inverse):
+    plans = []
+    for game, limits in selections.items():
+        plans.extend(recommend_playable_games(
+            amount, goal, game, inverse=inverse, number_range=limits, **inputs,
+        ))
+    return sorted(plans, key=playable_plan_order)
+
+
+def initial_budget_amount(value):
     value = value if type(value) is int else DEFAULT_BUDGET_LEI
-    value = max(MIN_BUDGET_LEI, min(_MAX_SLIDER_BUDGET_LEI, value))
+    return max(MIN_BUDGET_LEI, min(_MAX_SLIDER_BUDGET_LEI, value))
+
+
+def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
+    value = initial_budget_amount(value)
     budget_label = ui.label().classes("text-bold mt-2")
     slider = ui.slider(
         min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=value,
@@ -215,6 +365,21 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
 
 
 def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None):
+    ui.add_css("""
+        .lr-range-table .q-table th { white-space: normal; }
+        @media (max-width: 599.98px) {
+            .lr-range-table .q-table, .lr-range-table .q-table tbody,
+            .lr-range-table .q-table tbody tr { display: block; width: 100%; height: auto; }
+            .lr-range-table .q-table thead { display: none; }
+            .lr-range-table .q-table tbody tr { padding: .4rem 0; border-bottom: 1px solid #8886; }
+            .lr-range-table .q-table tbody td {
+                display: flex; align-items: baseline; justify-content: space-between; gap: .6rem;
+                width: 100%; height: auto; padding: .2rem .25rem; border: 0; white-space: normal;
+            }
+            .lr-range-table .lr-range-cell-label { opacity: .78; }
+            .lr-range-table td span:last-child { text-align: right; }
+        }
+    """)
     with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
         generate = ui.button(
             "Generează recomandarea", icon="confirmation_number", color="positive",
@@ -242,74 +407,123 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
         objective = ui.toggle(_OBJECTIVES, value=FOUR_PLUS).props(
             'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
         )
+        comparison = ui.column().classes("w-full gap-2")
         output = ui.column().classes("w-full gap-2")
         revision = 0
         running = False
         applied_budget = None
+        cached_analysis = None
+        displayed = None
+        manual_choices = {}
+        waiting_for_choice = False
 
         def selected_budget():
             return int(slider.value), objective.value, None if game.value == "all" else game.value
 
         def selected_method():
             enabled = bool(inverse.value)
-            return enabled, _INVERSE_RANGE if enabled and range_filter.value else None
+            return enabled, bool(enabled and range_filter.value)
 
-        async def refresh():
-            nonlocal revision, running, applied_budget
+        def change_base(game_id, value):
+            nonlocal revision, waiting_for_choice
+            manual_choices[game_id, bool(inverse.value)] = value
             revision += 1
+            waiting_for_choice = True
+            output.clear()
+            with output:
+                ui.label("Confirmă baza aleasă pentru a genera biletele.").props('role="status"')
+
+        def show_status(message):
+            output.clear()
+            with output:
+                ui.label(message).props('role="status"').classes("text-caption")
+
+        async def calculate():
+            nonlocal revision, running, applied_budget, cached_analysis, displayed, waiting_for_choice
+            revision += 1
+            waiting_for_choice = False
             if output.is_deleted:
                 return
-            output.clear()
             if not panel.value:
                 generate.props("aria-busy=false", remove="loading")
                 return
             generate.props("loading aria-busy=true")
-            with output:
-                inverse_mode, limits = selected_method()
-                mode = " inversă" if inverse_mode else ""
-                interval = f" · interval {limits[0]}–{limits[1]}" if limits else ""
-                ui.label(f"Se calculează recomandarea{mode} pentru {int(slider.value)} lei{interval}…").props(
-                    'role="status"'
-                ).classes("text-caption")
+            show_status(f"Se pregătește recomandarea pentru {int(slider.value)} lei…")
             if running:
                 return
             running = True
             try:
-                while panel.value and not output.is_deleted:
+                while panel.value and not output.is_deleted and not waiting_for_choice:
                     current = revision
-                    budget_settings = selected_budget()
+                    budget_settings, method_settings = selected_budget(), selected_method()
                     amount, goal, game_id = budget_settings
-                    method_settings = selected_method()
-                    inverse_mode, limits = method_settings
+                    inverse_mode, forced = method_settings
+
+                    def obsolete():
+                        return (current != revision or not panel.value or output.is_deleted
+                                or selected_budget() != budget_settings or selected_method() != method_settings)
+
                     try:
                         if on_budget_plan is not None and applied_budget != budget_settings:
                             templates = await run.io_bound(recommend_games, *budget_settings)
-                            if output.is_deleted or not panel.value:
-                                return
-                            if current != revision or selected_budget() != budget_settings:
+                            if obsolete():
                                 continue
                             if templates is None:
                                 raise RuntimeError("Planificarea bugetului a fost întreruptă.")
                             on_budget_plan(templates)
                             applied_budget = budget_settings
-                        plans = await run.io_bound(
-                            recommend_playable_games, amount, goal, game_id,
-                            inverse=inverse_mode, inverse_range=limits, **forecast_inputs(game_id),
-                        )
+                        analysis_key = (budget_settings, inverse_mode)
+                        if cached_analysis is None or cached_analysis[0] != analysis_key:
+                            comparison.clear()
+                            inputs = forecast_inputs(game_id)
+                            games = [game_id] if game_id else [key for key in game_options if key != "all"]
+                            show_status(f"Se compară bazele de selecție pentru {amount} lei…")
+                            reports = await run.io_bound(_compare_games, amount, goal, games, inputs, inverse_mode)
+                            if obsolete():
+                                continue
+                            if reports is None:
+                                raise RuntimeError("Analiza intervalelor a fost întreruptă.")
+                            cached_analysis = (analysis_key, inputs, reports)
+                        _, inputs, reports = cached_analysis
+                        if displayed != (id(reports), forced):
+                            comparison.clear()
+                            with comparison:
+                                ui.label("Analiza bazelor de selecție").classes("text-subtitle1 text-weight-bold")
+                                for report in reports:
+                                    gid = report["game"]
+                                    _range_comparison(
+                                        report, game_options[gid], manual_choices.get((gid, inverse_mode), "auto"),
+                                        change_base, forced, expanded=len(reports) == 1,
+                                    )
+                                if not forced:
+                                    ui.button("Generează cu baza aleasă", icon="confirmation_number", on_click=calculate).props("no-caps")
+                            displayed = (id(reports), forced)
+                        selections = {}
+                        for report in reports:
+                            gid = report["game"]
+                            choice = manual_choices.get((gid, inverse_mode), "auto")
+                            if forced or choice == _range_label(_INVERSE_RANGE):
+                                limits = _INVERSE_RANGE
+                            elif choice == "auto":
+                                limits = report.get("recommended_range")
+                            else:
+                                limits = None
+                            selections[gid] = limits
+                        show_status(f"Se generează biletele pentru {amount} lei…")
+                        plans = await run.io_bound(_generate_selection, amount, goal, selections, inputs, inverse_mode)
+                        if plans is None:
+                            raise RuntimeError("Generarea biletelor a fost întreruptă.")
                     except Exception:
                         logging.getLogger(__name__).exception(
                             "Calcul LR la %d lei pentru %s (%s)", amount, goal, game_id or "all"
                         )
                         plans = None
-                    if output.is_deleted or not panel.value:
-                        return
-                    if (current != revision or selected_budget() != budget_settings
-                            or selected_method() != method_settings):
+                    if obsolete():
                         continue
                     output.clear()
                     with output:
                         if plans is None:
-                            ui.label("Calculul biletelor nu a putut fi finalizat.").classes("text-warning")
+                            ui.label("Calculul recomandării nu a putut fi finalizat.").classes("text-warning")
                         else:
                             _render_recommendations(plans, amount, goal)
                     return
@@ -317,6 +531,11 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
                 running = False
                 if not generate.is_deleted:
                     generate.props("aria-busy=false", remove="loading")
+
+        async def refresh():
+            nonlocal cached_analysis, displayed
+            cached_analysis = displayed = None
+            await calculate()
 
         async def show_recommendation():
             if not panel.value:
@@ -327,7 +546,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
         panel.on_value_change(refresh)
         generate.on_click(show_recommendation)
         inverse.on_value_change(show_recommendation)
-        range_filter.on_value_change(show_recommendation)
+        range_filter.on_value_change(calculate)
         slider.on_value_change(show_recommendation)
         game.on_value_change(refresh)
         objective.on_value_change(refresh)

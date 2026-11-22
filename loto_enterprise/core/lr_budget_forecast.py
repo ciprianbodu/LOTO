@@ -159,41 +159,55 @@ def _balls(values, maximum):
     return balls
 
 
-def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, hit_target, inverse_range):
-    normal = tuple(sorted(normal_pool))
-    blocked = set(normal)
-    if inverse_range is not None:
-        if not isinstance(inverse_range, (list, tuple)) or len(inverse_range) != 2:
-            raise ValueError("Intervalul invers necesită două limite întregi.")
-        low, high = map(_integer, inverse_range)
-        if low > high:
-            raise ValueError("Limita inferioară a intervalului invers depășește limita superioară.")
+def _number_range(limits):
+    if limits is None:
+        return None
+    if not isinstance(limits, (list, tuple)) or len(limits) != 2:
+        raise ValueError("Intervalul numerelor principale necesită două limite întregi.")
+    low, high = map(_integer, limits)
+    if low > high:
+        raise ValueError("Limita inferioară a intervalului depășește limita superioară.")
+    return low, high
+
+
+def _range_exclusions(lot, scheme, number_range, normal_pool=()):
+    """Fixed main-urn exclusions shared by historical ranking and the next draw."""
+    blocked = set(normal_pool)
+    if number_range is None:
+        _check_capacity(lot.name, lot.max_n, scheme.n, blocked)
+    else:
+        low, high = number_range
         blocked.update(n for n in range(1, lot.max_n + 1) if not low <= n <= high)
         eligible = lot.max_n - len(blocked)
         if eligible < scheme.n:
+            detail = " după excluderea pool-ului normal" if normal_pool else ""
             raise ValueError(
-                f"În intervalul {low}–{high} rămân {eligible} numere eligibile după excluderea "
-                f"pool-ului normal. Cod {scheme.code} necesită {scheme.n}."
+                f"În intervalul {low}–{high} rămân {eligible} numere eligibile{detail}. "
+                f"Cod {scheme.code} necesită {scheme.n}."
             )
-        inverse_range = (low, high)
-    else:
-        _check_capacity(lot.name, lot.max_n, scheme.n, normal)
+    return tuple(sorted(blocked))
+
+
+def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, hit_target, number_range):
+    normal = tuple(sorted(normal_pool))
+    blocked = _range_exclusions(lot, scheme, number_range, normal)
     excluded_jokers = tuple(sorted(normal_jokers))
     if lot.bench_key_urna2:
         _check_capacity("Urna 2 Joker", lot.geo.second.max_n, len(normal_jokers), excluded_jokers)
     forecast = _score_pool(
-        lot, engine, scheme, dynamic, len(normal_jokers), excluded=tuple(sorted(blocked)),
+        lot, engine, scheme, dynamic, len(normal_jokers), excluded=blocked,
         excluded_jokers=excluded_jokers, hit_target=hit_target,
     )
-    forecast.update(excluded_pool=list(normal), eligible_count=lot.max_n - len(blocked), inverse_range=inverse_range)
+    forecast.update(excluded_pool=list(normal), eligible_count=lot.max_n - len(blocked), inverse_range=number_range)
     if lot.bench_key_urna2:
         forecast.update(excluded_jokers=excluded_jokers, eligible_joker_count=lot.geo.second.max_n - len(excluded_jokers))
     return forecast
 
 
 def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynamic, joker_size, inverse, hit_target,
-                     inverse_range):
+                     number_range):
     scheme = budget_plan_scheme(plan)
+    number_range = _number_range(number_range)
     filename = source[0] if source else Path(lot.csv).name
     saved = result[1] if result else {}
     previous = _generated_pool(lot, saved) if result else None
@@ -216,7 +230,7 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
     same_scheme = str(code) == str(scheme.code) or (code is None and not dynamic)
     reuse = same_settings and size == scheme.n and same_scheme
     engine = None
-    if not reuse or inverse:
+    if not reuse or inverse or number_range is not None:
         if result and filename != result[0]:
             raise ValueError("Lipsește istoricul folosit la generarea acestui pool.")
         expected_hash = (saved.get("audit") or {}).get("hash")
@@ -232,7 +246,14 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
             if source is None and not (previous["rows"] and previous["date"]):
                 raise ValueError("Istoricul inițial al pool-ului generat este indisponibil. Regenerați pool-ul.")
 
-    if reuse:
+    if not inverse and number_range is not None:
+        blocked = _range_exclusions(lot, scheme, number_range)
+        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target)
+        if reuse and lot.bench_key_urna2:
+            # A restriction on the main urn must preserve the generated Joker choice.
+            forecast.update(jokers=previous["jokers"], joker_selection=previous["joker_selection"])
+        forecast["eligible_count"] = lot.max_n - len(blocked)
+    elif reuse:
         forecast = previous
         filename = result[0]
     else:
@@ -243,21 +264,32 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
     if lot.bench_key_urna2 and not jokers:
         raise ValueError("Pool-ul Urnei 2 Joker este indisponibil.")
     if inverse:
-        forecast = _inverse_forecast(lot, engine, scheme, dynamic, pool, jokers, hit_target, inverse_range)
+        forecast = _inverse_forecast(lot, engine, scheme, dynamic, pool, jokers, hit_target, number_range)
     else:
         forecast.update(pool=pool, jokers=jokers)
+        forecast.setdefault("eligible_count", lot.max_n)
+    forecast["number_range"] = number_range
     if size != scheme.n:
         forecast.update(expanded_from=size, expanded_to_max=required_pool_size(plan) > scheme.n)
     forecast.update(filename=filename, code=scheme.code, pool=sorted(forecast["pool"]), inverse=inverse)
     return forecast
 
 
+def playable_plan_order(item):
+    """Order playable tickets by exact probability, price and game identifier."""
+    return (
+        not item["tickets"], -Fraction(item["attained"], item["denominator"]),
+        item["price_bani"], item["game"],
+    )
+
+
 def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5, inverse=False, hit_target=None,
-    inverse_range=None,
+    inverse_range=None, number_range=None,
 ):
-    """Choose each scoring scheme by budget before ranking the eligible balls."""
+    """Rank the main urn within number_range. Legacy inverse_range applies only in inverse mode."""
+    limits = number_range if number_range is not None or not inverse else inverse_range
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
@@ -267,7 +299,7 @@ def recommend_playable_games(
         try:
             forecast = _budget_forecast(
                 plan, lot, pool_codes.get(lot.game_id), result, source,
-                lookback, dynamic, joker_size, inverse, hit_target, inverse_range,
+                lookback, dynamic, joker_size, inverse, hit_target, limits,
             )
             if not restrict_to_pool(plan, objective, forecast["pool"], forecast["jokers"])["tickets"]:
                 plan["forecast_error"] = f"Niciun cod LR în buget pentru pool-ul de {len(forecast['pool'])} numere."
@@ -280,10 +312,4 @@ def recommend_playable_games(
             plan["forecast_error"] = f"{filename} · Calculul biletelor a eșuat."
         if "forecast" not in plan:
             plan.update(tickets=[], variants=0, price_bani=0, attained=0, upper=None, optimal=False)
-    return sorted(
-        plans,
-        key=lambda item: (
-            not item["tickets"], -Fraction(item["attained"], item["denominator"]),
-            item["price_bani"], item["game"],
-        ),
-    )
+    return sorted(plans, key=playable_plan_order)

@@ -2101,11 +2101,35 @@ evaluați pe variantele schemei oficiale. În modul fix, Re-Bench reevaluează
 metodele pe numerele eligibile în ferestrele istorice obișnuite, în memorie.
 La Joker, excluderea se aplică separat și pool-ului Urnei 2. Dacă numerele
 rămase sunt insuficiente, panoul arată câte sunt disponibile și câte ar trebui.
-Opțiunea „Doar numere principale între 10 și 40” restrânge suplimentar
-complementul pool-ului normal la intervalul inclusiv. Comparația istorică și
-numerele propuse pentru fiecare zonă folosesc aceeași bază eligibilă.
-Filtrul de interval este oprit implicit și se aplică exclusiv urnei principale.
-Pool-ul exclus și numerele de jucat sunt afișate în detaliile biletului.
+Înainte de generarea biletelor, panoul compară baza completă cu numerele între
+10 și 40 inclusiv, separat pentru fiecare joc. Bugetul stabilește
+aceleași scheme reduse pentru toate bazele. În modul invers, fiecare comparație
+folosește complementul pool-ului normal disponibil înainte de extragerea
+respectivă. Intervalul restrânge numai urna principală. În detaliile biletului
+apar pool-ul exclus și numerele de jucat.
+
+Pentru fiecare interval, panoul numără extragerile în care toate numerele
+principale au fost în interval, dintre ultimele 100 de extrageri valide. Arată
+data ultimei apariții cunoscute, pauza până la ultima extragere din istoric și
+distanța mediană între aparițiile din fereastră, în zile și în extrageri.
+La 5/40 sunt luate în calcul toate cele șase numere extrase. Tragerile din
+aceeași zi au aceeași informație disponibilă înainte de evaluare.
+
+Selecția automată evaluează rezultatele pe variantele oficiale în ordine
+cronologică și compară rezultatele fiecărui interval cu baza completă la aceleași
+extrageri. Verifică avantajul intervalului 10–40 la pragul statistic de 5%,
+stabilitatea în ambele jumătăți ale perioadei și rezultatele recente. Verifică
+și cum s-au comparat biletele la pauze similare în trecut, folosind grupe de
+0–7, 8–14, 15–28 și cel puțin 29 de zile. Când lipsesc datele calendaristice,
+folosește pauza în extrageri. Pentru această verificare cere cel puțin opt
+date comparabile și un bilanț cel puțin egal. Dacă dovezile sunt insuficiente,
+recomandă baza completă disponibilă în modul ales. Utilizatorul poate alege
+manual baza completă sau intervalul 10–40, dacă schema încape în baza aleasă. În modul
+fix, comparația estimează efectul filtrului păstrând pentru ambele baze metoda
+Re-Bench aleasă înaintea perioadei evaluate. În modul dinamic, selectorul se
+recalculează pentru fiecare dată. La Joker, pentru obiectivul „Orice premiu”,
+simularea asociază fiecărei zone bila din urna secundară și arată câte rezultate
+au putut fi evaluate cu informațiile disponibile despre acea bilă.
 
 Când configurația cere mai multe numere decât oferă pool-urile disponibile,
 panoul caută în buget completări cu zone care se pot suprapune. Șansa se

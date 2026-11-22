@@ -92,7 +92,7 @@ from ui_history_upload import (
 )
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
-from ui_lr_budget import lr_budget_panel, lr_budget_slider
+from ui_lr_budget import initial_budget_amount, lr_budget_panel, lr_budget_slider
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
@@ -4225,6 +4225,10 @@ def main_page() -> None:
         _pool_inputs = []
         budget_slider = None
         if _cc == _LOT.RO:
+            from covering.lr_budget import FOUR_PLUS, recommend_games
+
+            budget_amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
+            _apply_budget_plan(recommend_games(budget_amount, FOUR_PLUS))
             dynamic_input = _bind_save(
                 ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val",
             )
@@ -4258,10 +4262,7 @@ def main_page() -> None:
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
             ui.separator()
-            from covering.lr_budget import FOUR_PLUS, recommend_games
-
-            budget_slider = lr_budget_slider(SETTINGS.get("lr_budget_lei"))
-            _apply_budget_plan(recommend_games(int(budget_slider.value), FOUR_PLUS))
+            budget_slider = lr_budget_slider(budget_amount)
         else:
             _pool_inputs.append(
                 _bind_save(
