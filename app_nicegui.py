@@ -61,6 +61,7 @@ from ui_shared import (
     ensure_worker_running,
     is_worker_running,
     load_mail_config,
+    mail_pool_alternative_lines,
     read_logs_filtered,
     read_tail_lines,
     render_html_safe,
@@ -92,6 +93,7 @@ from ui_history_upload import (
 )
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
+from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
 from ui_lr_budget import initial_budget_amount, lr_budget_panel, lr_budget_slider
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
@@ -130,6 +132,10 @@ APP_TITLE = (
     if BUILD_TIMESTAMP
     else "Loto Enterprise Wheeling"
 )
+
+
+def _budget_objective():
+    return ANY_PRIZE if SETTINGS.get("lr_budget_objective") == ANY_PRIZE else FOUR_PLUS
 
 
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
@@ -190,6 +196,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             from covering.lr_selection import lr_scheme_signature
 
             scheme = _lr_scheme_for(g_label)
+            task["lr_budget_lei"] = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
+            task["lr_budget_objective"] = _budget_objective()
+            h.update(f"|lr_budget={task['lr_budget_lei']}:{task['lr_budget_objective']}|".encode("ascii"))
             task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
                         max_variants=scheme.size)
             if _spec.bench_key_urna2:
@@ -769,7 +778,10 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
             for dataset in datasets:
                 ds = dict(dataset)
                 ds["tasks"] = [dict(template or task) for task in dataset.get("tasks", [])]
-                for task in ds["tasks"]:
+                for original_task, task in zip(dataset.get("tasks", []), ds["tasks"], strict=True):
+                    for key in ("lr_budget_lei", "lr_budget_objective"):
+                        if key in original_task:
+                            task[key] = original_task[key]
                     task["bench_hit_target"] = _clamped_bench_target()
                 merged.append(ds)
     for dataset in merged:
@@ -1775,6 +1787,14 @@ def _result_sources_from_job(job: dict) -> dict | None:
                 game_id, country = identities.pop()
                 spec = _LOT.require_lottery(game_id, country)
                 frame.attrs.update(game_id=spec.game_id, country=spec.country)
+                if spec.is_romanian and len(dataset["tasks"]) == 1:
+                    task = dataset["tasks"][0]
+                    frame.attrs["lr_mail_settings"] = {
+                        key: task[key] for key in (
+                            "lr_budget_lei", "lr_budget_objective", "bench_hit_target",
+                            "lookback", "dynamic_method", "joker_pool_size",
+                        ) if key in task
+                    }
             sources[fname] = frame
     except (TypeError, ValueError, KeyError, AttributeError) as exc:
         logger.warning("[RESULT] Original job source unavailable: %s", exc)
@@ -2925,7 +2945,7 @@ def status_panel() -> None:
             _mark_job_finalized(int(job_id))
             _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
 
-            # Mail-ul conține doar pool-ul generat (fără stats WF, vezi _build_mail_body) →
+            # Pool-urile normal și invers se calculează din datele jobului, fără statistici WF →
             # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
             # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
             # SMTP (connect + STARTTLS + login, timeout 30s fiecare) NU pe event-loop:
@@ -3174,8 +3194,14 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
     }
     if not snapshot["valid"]:
         return snapshot
-    fields = ("hard_core", "hard_core_joker", "pool_size", "pool_size_requested", "lr_scheme_code", "dynamic_method")
-    audit_fields = ("bench_winner", "recent_penalty", "lookback_pct", "restrict_base", "consecutive_limit")
+    fields = (
+        "hard_core", "hard_core_joker", "joker_pool", "joker_pool_size", "pool_size",
+        "pool_size_requested", "lr_scheme_code", "dynamic_method", "lookback", "total_draws",
+    )
+    audit_fields = (
+        "bench_winner", "recent_penalty", "lookback_pct", "restrict_base", "consecutive_limit",
+        "hash", "dynamic_selection", "lr_scheme",
+    )
     for fname, outs in results[0]:
         if fname not in snapshot["sources"]:
             source = result_sources.get(fname) if result_sources is not None else _result_source(fname)
@@ -3184,6 +3210,8 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
             primary = _primary_pool_data(raw_data)
             spec = _game_spec_for(game, primary)
             data = {key: deepcopy(primary[key]) for key in fields if key in primary}
+            context = primary.get("context") or {}
+            data["context"] = {key: deepcopy(context[key]) for key in ("last_3", "lr_scheme_code") if key in context}
             variants = primary.get("variants")
             if isinstance(variants, (list, tuple)):
                 data["generated_variant_count"] = len(variants)
@@ -3193,8 +3221,37 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
             code = _result_lr_scheme_code(primary)
             if code is not None:
                 data["lr_scheme_code"] = deepcopy(code)
-            snapshot["games"].append({"fname": fname, "game": game, "spec": spec, "data": data})
+            record = {"fname": fname, "game": game, "spec": spec, "data": data}
+            if spec.is_romanian:
+                frame = snapshot["sources"][fname]
+                job = frame.attrs.get("lr_mail_settings", {}) if frame is not None else {}
+                record["lr_mail_settings"] = {
+                    "budget_lei": initial_budget_amount(job.get("lr_budget_lei", SETTINGS.get("lr_budget_lei"))),
+                    "objective": job.get("lr_budget_objective", _budget_objective()),
+                    "hit_target": job.get("bench_hit_target", _clamped_bench_target()),
+                    "dynamic": job.get("dynamic_method", data.get("dynamic_method", False)),
+                    "lookback": job.get("lookback", data.get("lookback", 0)),
+                    "joker_size": job.get("joker_pool_size", data.get("joker_pool_size", 1)),
+                }
+            snapshot["games"].append(record)
     return snapshot
+
+
+def _prepare_mail_alternatives(snapshot: dict) -> None:
+    """Calculate from the completed job's detached inputs, outside the UI lock."""
+    from loto_enterprise.core.lr_mail_forecast import prepare_inverse_mail_pools
+
+    for record in snapshot["games"]:
+        settings = record.get("lr_mail_settings")
+        if settings is None or "pool_alternatives" in record:
+            continue
+        try:
+            record["pool_alternatives"] = prepare_inverse_mail_pools(
+                record, snapshot["sources"].get(record["fname"]), **settings,
+            )
+        except Exception:
+            logger.exception("[MAIL] Pool invers indisponibil pentru %s", record["game"])
+            record["pool_alternatives"] = {"inverse_reduced": {"error": "Calculul pool-ului invers a eșuat."}}
 
 
 def _freeze_mail_ratings(snapshot: dict) -> dict:
@@ -3266,6 +3323,7 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
     snapshot = _capture_mail_snapshot() if snapshot is None else snapshot
     if not snapshot["valid"]:
         return "Nu există rezultate de generare."
+    _prepare_mail_alternatives(snapshot)
 
     def _nums(seq):
         return " ".join(str(int(x)) for x in sorted(seq)) if seq else "—"
@@ -3279,7 +3337,8 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
     ]
     for record in sorted(games, key=lambda item: _GAME_DISPLAY_ORDER.get(item["spec"].geometry, 99)):
         fname, game, spec, primary = (record[key] for key in ("fname", "game", "spec", "data"))
-        joker = sorted(int(x) for x in (primary.get("hard_core_joker") or []))
+        bonus_pool = primary.get("joker_pool") if spec.game_id == "joker" and spec.is_romanian else None
+        joker = sorted(int(x) for x in (bonus_pool or primary.get("hard_core_joker") or []))
         lines.append(f"=== {spec.display} ===")
         if not all_ro:
             lines.append(f"extragere: {_mail_draw_date(snapshot, record)} ({_weekdays_text(spec.draw_weekdays)})")
@@ -3290,7 +3349,11 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
             day, numbers, ball = info
             draw = " ".join(str(x) for x in numbers) + (f" + joker {ball}" if ball is not None else "")
             lines.append(f"ultima extragere CSV: {day or '?'} → {draw}")
-        lines.append("POOL:   " + _nums(primary.get("hard_core") or []) + (f"  | joker: {_nums(joker)}" if joker else ""))
+        pool_line = "POOL:   " + _nums(primary.get("hard_core") or []) + (f"  | joker: {_nums(joker)}" if joker else "")
+        alternatives = record.get("pool_alternatives")
+        if spec.is_romanian and isinstance(alternatives, dict) and "inverse_reduced" in alternatives:
+            pool_line += "  (pool normal)"
+        lines.append(pool_line)
         played_lr = primary.get("lr_scheme_code") is not None
         generated_count = primary.get("generated_variant_count")
         if spec.is_romanian and not played_lr and generated_count is not None:
@@ -3310,6 +3373,8 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
         if joker:
             lines.extend(_mail_method_lines(spec, primary, urna2=True, snapshot=snapshot))
         lines.append(_mail_best_draw_line(spec, snapshot["sources"].get(fname), primary.get("hard_core")))
+        if spec.is_romanian and alternatives:
+            lines.extend(mail_pool_alternative_lines(alternatives, primary, has_joker=bool(spec.bench_key_urna2)))
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -3959,7 +4024,10 @@ def _apply_budget_plan(plans):
     """Use the budget's official scoring schemes for the next generator and Re-Bench job."""
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
 
-    updated = {"lr_budget_lei": plans[0]["budget_bani"] // 100} if plans else {}
+    updated = {
+        "lr_budget_lei": plans[0]["budget_bani"] // 100,
+        "lr_budget_objective": plans[0].get("objective", FOUR_PLUS),
+    } if plans else {}
     for plan in plans:
         if plan["tickets"]:
             scheme = budget_plan_scheme(plan)
@@ -4225,10 +4293,11 @@ def main_page() -> None:
         _pool_inputs = []
         budget_slider = None
         if _cc == _LOT.RO:
-            from covering.lr_budget import FOUR_PLUS, recommend_games
+            from covering.lr_budget import recommend_games
 
             budget_amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
-            _apply_budget_plan(recommend_games(budget_amount, FOUR_PLUS))
+            budget_objective = _budget_objective()
+            _apply_budget_plan(recommend_games(budget_amount, budget_objective))
             dynamic_input = _bind_save(
                 ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val",
             )
@@ -4491,7 +4560,7 @@ def main_page() -> None:
         if budget_slider is not None:
             refresh_budget = lr_budget_panel(
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
-                on_budget_plan=_apply_budget_plan,
+                on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
             )
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(

@@ -2131,6 +2131,15 @@ recalculează pentru fiecare dată. La Joker, pentru obiectivul „Orice premiu�
 simularea asociază fiecărei zone bila din urna secundară și arată câte rezultate
 au putut fi evaluate cu informațiile disponibile despre acea bilă.
 
+În mailul de rezultate, fiecare joc românesc are și o singură alternativă de
+joc, „Pool invers · baza redusă 10–40 inclusiv”. Aceasta exclude exact pool-ul
+normal afișat în același mesaj, inclusiv când bugetul cere o altă schemă pentru
+alternativă. Bugetul, obiectivul și istoricul provin din jobul de generare.
+Mesajul arată numerele selectate, câte au fost eligibile, codurile LR și zonele
+de jucat. La Joker arată separat bilele din urna secundară. Când baza este prea
+mică pentru schemă, mesajul păstrează pool-ul normal și explică de ce alternativa
+respectivă este indisponibilă.
+
 Când configurația cere mai multe numere decât oferă pool-urile disponibile,
 panoul caută în buget completări cu zone care se pot suprapune. Șansa se
 calculează prin reuniunea evenimentelor de câștig, inclusiv pentru Urna 2.

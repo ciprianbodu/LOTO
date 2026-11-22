@@ -205,7 +205,7 @@ def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, 
 
 
 def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynamic, joker_size, inverse, hit_target,
-                     number_range):
+                     number_range, exclude_generated_pool=False):
     scheme = budget_plan_scheme(plan)
     number_range = _number_range(number_range)
     filename = source[0] if source else Path(lot.csv).name
@@ -228,7 +228,11 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
 
     # A dynamic winner is specific to the exact LR layout, even at equal width.
     same_scheme = str(code) == str(scheme.code) or (code is None and not dynamic)
-    reuse = same_settings and size == scheme.n and same_scheme
+    if exclude_generated_pool and (not inverse or previous is None or not size):
+        raise ValueError("Excluderea pool-ului generat necesită un rezultat normal și modul invers.")
+    # An email describes a completed job: its displayed original is the exclusion
+    # even when the budget selects a different scoring scheme for the alternative.
+    reuse = exclude_generated_pool or (same_settings and size == scheme.n and same_scheme)
     engine = None
     if not reuse or inverse or number_range is not None:
         if result and filename != result[0]:
@@ -286,9 +290,9 @@ def playable_plan_order(item):
 def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5, inverse=False, hit_target=None,
-    inverse_range=None, number_range=None,
+    inverse_range=None, number_range=None, exclude_generated_pool=False,
 ):
-    """Rank the main urn within number_range. Legacy inverse_range applies only in inverse mode."""
+    """Rank within the budget; optionally exclude a completed job's exact pool in inverse mode."""
     limits = number_range if number_range is not None or not inverse else inverse_range
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
@@ -299,7 +303,7 @@ def recommend_playable_games(
         try:
             forecast = _budget_forecast(
                 plan, lot, pool_codes.get(lot.game_id), result, source,
-                lookback, dynamic, joker_size, inverse, hit_target, limits,
+                lookback, dynamic, joker_size, inverse, hit_target, limits, exclude_generated_pool,
             )
             if not restrict_to_pool(plan, objective, forecast["pool"], forecast["jokers"])["tickets"]:
                 plan["forecast_error"] = f"Niciun cod LR în buget pentru pool-ul de {len(forecast['pool'])} numere."

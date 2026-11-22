@@ -51,6 +51,7 @@ def recommend_games(budget_lei: int, objective: str, game_id: str | None = None)
         results.append({
             "game": lot.game_id,
             "game_name": lot.name,
+            "objective": objective,
             "budget_bani": budget_bani,
             "price_bani": plan["price_bani"],
             "variants": plan["variants"],

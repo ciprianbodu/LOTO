@@ -115,6 +115,61 @@ def load_mail_config(project_root=PROJECT_ROOT):
     return cfg
 
 
+def mail_pool_alternative_lines(alternatives, normal, *, has_joker):
+    """Render the inverse 10–40 selection belonging to this game's normal pool."""
+    if not isinstance(alternatives, dict) or "inverse_reduced" not in alternatives:
+        return []
+    title = "Pool invers · baza redusă 10–40 inclusiv"
+    item = alternatives["inverse_reduced"]
+    if not isinstance(item, dict):
+        return [title, "  Indisponibil. Datele acestei selecții sunt incomplete."]
+    if error := item.get("error"):
+        return [title, f"  Indisponibil. {error}"]
+
+    from loto_enterprise.core.ro_text import count
+    try:
+        pool = sorted(int(n) for n in item["pool"])
+        code, eligible = int(item["code"]), int(item["eligible_count"])
+        if (not pool or eligible < len(pool) or len(set(pool)) != len(pool)
+                or pool[0] < 10 or pool[-1] > 40
+                or set(pool).intersection(int(n) for n in normal.get("hard_core", ()))):
+            return [title, "  Indisponibil. Numerele principale nu formează un pool invers valid în intervalul 10–40."]
+        lines = [
+            f"{title} · Cod de evaluare {code} · {count(eligible, 'numere eligibile', 'număr eligibil')}",
+            "  Numere principale · " + " ".join(map(str, pool)),
+        ]
+        if has_joker:
+            bonus = [int(n) for n in item["jokers"]]
+            eligible_bonus = int(item["eligible_joker_count"])
+            normal_bonus = normal.get("joker_pool") or normal.get("hard_core_joker") or ()
+            if (not bonus or len(set(bonus)) != len(bonus) or eligible_bonus < len(bonus)
+                    or set(bonus).intersection(int(n) for n in normal_bonus)):
+                return [title, "  Indisponibil. Pool-ul invers al Urnei 2 Joker este incomplet sau invalid."]
+            lines.append(
+                f"  Urna 2 Joker · {' '.join(map(str, bonus))} · "
+                f"{count(eligible_bonus, 'bile eligibile', 'bilă eligibilă')}"
+            )
+        for ticket_no, zones in enumerate(item.get("tickets") or (), 1):
+            for index, zone in enumerate(zones):
+                numbers = sorted(int(n) for n in zone["numbers"])
+                if not numbers or not set(numbers).issubset(pool):
+                    return [title, "  Indisponibil. O zonă conține numere neconfirmate pentru acest pool."]
+                line = f"  Bilet {ticket_no} · zona {chr(ord('A') + index)} · Cod LR {int(zone['code'])}"
+                if numbers != pool:
+                    line += " · " + " ".join(map(str, numbers))
+                if has_joker:
+                    ball = int(zone["joker"])
+                    if ball not in bonus:
+                        return [title, "  Indisponibil. Bila Joker a zonei lipsește din pool-ul Urnei 2."]
+                    line += f" · bila Joker {ball}"
+                lines.append(line)
+        if item.get("budget_lei") is not None:
+            lines.append(f"  Bugetul recomandării · {item['budget_lei']} lei")
+        return lines
+    except (KeyError, TypeError, ValueError):
+        return [title, "  Indisponibil. Datele acestei selecții sunt incomplete."]
+
+
 def send_email(cfg, subject, body, attachments=None):
     """Trimite un e-mail text prin SMTP (STARTTLS). `attachments` = listă de căi de fișier."""
     import smtplib

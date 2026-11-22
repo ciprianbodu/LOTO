@@ -364,7 +364,7 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
     return slider
 
 
-def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None):
+def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None, initial_objective=FOUR_PLUS):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
         @media (max-width: 599.98px) {
@@ -404,7 +404,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
         game = ui.select(game_options, value="all", label="Joc").props(
             'aria-label="Joc pentru bilete LR"'
         ).classes("w-full sm:w-72")
-        objective = ui.toggle(_OBJECTIVES, value=FOUR_PLUS).props(
+        objective = ui.toggle(_OBJECTIVES, value=initial_objective).props(
             'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
         )
         comparison = ui.column().classes("w-full gap-2")
