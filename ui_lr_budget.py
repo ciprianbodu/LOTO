@@ -350,10 +350,10 @@ def initial_budget_amount(value):
 
 def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
     value = initial_budget_amount(value)
-    budget_label = ui.label().classes("text-bold mt-2")
+    budget_label = ui.label().classes("text-bold text-positive mt-2")
     slider = ui.slider(
         min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=value,
-    ).props('aria-label="Buget pentru bilete LR" label').classes("w-full")
+    ).props('aria-label="Buget pentru bilete LR" label color=positive').classes("w-full")
     budget_label.bind_text_from(
         slider, "value", lambda value: f"Buget bilete LR · {int(value)} lei"
     )
