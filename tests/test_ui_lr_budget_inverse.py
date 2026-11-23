@@ -33,6 +33,30 @@ def _widgets(monkeypatch):
     return view
 
 
+def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatch):
+    view = _widgets(monkeypatch)
+    inputs, io_bound = MagicMock(), MagicMock()
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+    budget.lr_budget_panel(MagicMock(value=200), inputs)
+    game, objective = view.select.return_value, view.toggle.return_value
+    inverse = view.switch_by_label["Metoda inversă"]
+    reduced = view.switch_by_label["Doar numere principale între 10 și 40"]
+    panel = view.expansion.return_value
+
+    async def scenario():
+        for control, value in ((game, "6/49"), (objective, budget.ANY_PRIZE), (inverse, True), (reduced, True)):
+            control.value = value
+            await control.on_value_change.call_args.args[0]()
+        assert panel.value is False
+        inputs.assert_not_called()
+        io_bound.assert_not_called()
+        panel.set_value.assert_not_called()
+        await view.button.return_value.on_click.call_args.args[0]()
+        panel.set_value.assert_called_once_with(True)
+
+    asyncio.run(scenario())
+
+
 def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
     view = _widgets(monkeypatch)
     slider = MagicMock(value=180)
@@ -217,11 +241,20 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         view.expansion.return_value.value = True
         await refresh()
         assert assigned == [{"6/49": (10, 40), "5/40": None, "joker": None}]
-        callbacks["6/49"]("6/49","Baza completă")
-        callbacks["5/40"]("5/40","10–40")
+        first_actions = MagicMock(is_deleted=False)
+        latest_actions = MagicMock(is_deleted=False)
+        callbacks["6/49"]("6/49", "Baza completă", first_actions)
+        first_button = view.button.return_value
+        first_actions.__enter__.assert_called_once()
+        callbacks["5/40"]("5/40", "10–40", latest_actions)
+        latest_button = view.button.return_value
+        first_button.delete.assert_called_once()
+        latest_actions.__enter__.assert_called_once()
+        latest_button.delete.assert_not_called()
+        assert "5/40" in view.label.call_args.args[0]
         assert len(assigned) == 1
-        confirm = next(c.kwargs["on_click"] for c in view.button.call_args_list if c.args == ("Generează cu baza aleasă",))
-        await confirm()
+        await view.button.call_args.kwargs["on_click"]()
+        latest_button.delete.assert_called_once()
         assert len(analysed) == 1
         assert assigned[-1] == {"6/49": None, "5/40": (10, 40), "joker": None}
     asyncio.run(scenario())

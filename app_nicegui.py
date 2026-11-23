@@ -3009,7 +3009,7 @@ def status_panel() -> None:
                     "Job nepornit la afișare (0%, fără log) — scos de pe ecran."
                 )
                 ui.label(
-                    "Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot."
+                    "Generator disponibil."
                 ).classes("text-caption")
                 return
             waited = time.time() - float(t0)
@@ -3104,7 +3104,7 @@ def status_panel() -> None:
             )
     else:
         ui.label(
-            "Gata de lucru. Încarcă CSV-uri și apasă Generează / Auto-Pilot."
+            "Generator disponibil."
         ).classes("text-caption")
 
 
@@ -4004,7 +4004,12 @@ def _render_lr_pool_input(game: str, title: str):
     ui.label(title).classes("text-bold mt-2")
     control = ui.slider(min=0, max=len(schemes) - 1, step=1,
                         value=codes.index(selected.code)).classes("w-full")
-    control.props(f"label-always markers label-value={selected.n}")
+    control.props(f'label-always markers aria-label="{title}"')
+
+    def describe(scheme):
+        control.props(f'label-value={scheme.n} aria-valuetext="Cod {scheme.code}, {scheme.n} numere, {scheme.size} variante"')
+
+    describe(selected)
     control.bind_value(SETTINGS, key,
                        forward=lambda index: schemes[max(0, min(len(schemes) - 1, int(index or 0)))].code,
                        backward=lambda code: codes.index(code) if code in codes else codes.index(_lr_scheme_for(game).code))
@@ -4017,7 +4022,7 @@ def _render_lr_pool_input(game: str, title: str):
         scheme = schemes[index]
         SETTINGS[key] = scheme.code
         SETTINGS[_POOL_KEYS[game]] = scheme.n
-        control.props(f"label-value={scheme.n}")
+        describe(scheme)
         transition.set_text(_lr_selection_change_text(game, previous["code"], scheme.code))
         previous["code"] = scheme.code
         _save_settings()
@@ -4050,6 +4055,13 @@ def main_page() -> None:
     ui.dark_mode().enable()
     refresh_budget = None
     budget_result = STATE.get("results")
+
+    def focus_control(control):
+        ui.run_javascript(f"""requestAnimationFrame(() => {{
+            const target = document.getElementById("{control.html_id}");
+            target?.scrollIntoView({{block: "nearest"}});
+            target?.focus({{preventScroll: true}});
+        }})""")
 
     def budget_forecast_inputs(game_id):
         games = {g.game_id for g in _LOT.games_for_country("RO")}
@@ -4099,6 +4111,10 @@ def main_page() -> None:
     ui.add_css("""
         .q-expansion-item__toggle-icon { transform: rotate(180deg) !important; }
         .q-expansion-item__toggle-icon--rotated { transform: rotate(0deg) !important; }
+        @media (max-width: 1023.98px) {
+            .loto-header { min-height: 56px; padding: 8px 12px 8px 64px; }
+            .q-page-sticky.loto-settings-menu { top: 0 !important; transform: none !important; z-index: 2100; }
+        }
         @media (max-width: 599.98px) {
             .loto-main, .loto-main .nicegui-card, .loto-main .nicegui-expansion-content {
                 padding: 4px !important;
@@ -4110,15 +4126,32 @@ def main_page() -> None:
         }
     """)
 
-    with ui.header().classes("items-center justify-between"):
-        ui.label(f"🎰 {APP_TITLE}").classes("text-h5")
-        ui.label("NiceGUI — stare persistentă, fără reload").classes("text-caption")
+    with ui.header().classes("loto-header items-center justify-between"):
+        ui.label("Loto Enterprise Wheeling").classes("text-h6").tooltip(APP_TITLE)
+        if BUILD_TIMESTAMP:
+            ui.label(f"Versiune · {BUILD_TIMESTAMP}").classes("gt-sm text-caption")
 
     # ---- Sidebar (drawer stânga) ----
     with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3") as drawer:
-        ui.label("1. Încărcare Date CSV").classes("text-bold")
         _cc = _selected_country()
         _cc_name = _country_label(_cc)
+        budget_slider = None
+        if _cc == _LOT.RO:
+            from covering.lr_budget import recommend_games
+
+            budget_amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
+            budget_objective = _budget_objective()
+            _apply_budget_plan(recommend_games(budget_amount, budget_objective))
+            budget_slider = lr_budget_slider(budget_amount)
+            def return_to_recommendation():
+                drawer.hide()
+                focus_control(budget_access)
+
+            ui.button("Înapoi la recomandare", icon="arrow_back", on_click=return_to_recommendation).props(
+                "flat no-caps"
+            ).classes("lt-md")
+            ui.separator()
+        ui.label("Jocuri și generare").classes("text-bold")
         # Istoricul țării selectate (implicit România) se încarcă singur, la
         # fiecare deschidere a paginii dacă fișierul s-a schimbat pe disc.
         _auto_loaded, _auto_errors = _autoload_histories(_selected_games())
@@ -4164,6 +4197,18 @@ def main_page() -> None:
                 f"„Doar antrenament”: {_TRAINING_ONLY_NOTE}; bench-ul, walk-forward-ul "
                 "și analizele funcționează."
             ).classes("text-caption text-grey")
+
+        _BTN = "w-full"
+        _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
+        ui.button(
+            "⚡ Auto-Pilot (arată selecția pe joc și generează)",
+            on_click=apply_autopilot_and_generate,
+        ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.button(
+            "🚀 Generează",
+            on_click=lambda: submit_generation(pure=False),
+        ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
+        ui.separator()
 
         async def _load_country_history() -> None:
             loaded, errors = _load_registry_histories(_selected_games())
@@ -4287,7 +4332,7 @@ def main_page() -> None:
         datasets_label()
 
         ui.separator()
-        ui.label("2. Setări Algoritm").classes("text-bold")
+        ui.label("Setări de calcul").classes("text-bold")
 
         def _bind_save(widget, key):
             widget.bind_value(SETTINGS, key)
@@ -4297,13 +4342,7 @@ def main_page() -> None:
         # România: fiecare cod LR oficial are o poziție proprie a sliderului.
         # Alte țări: câmpul numeric comun de dinainte.
         _pool_inputs = []
-        budget_slider = None
         if _cc == _LOT.RO:
-            from covering.lr_budget import recommend_games
-
-            budget_amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
-            budget_objective = _budget_objective()
-            _apply_budget_plan(recommend_games(budget_amount, budget_objective))
             dynamic_input = _bind_save(
                 ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val",
             )
@@ -4312,8 +4351,6 @@ def main_page() -> None:
                 "anterioare cu cel puțin 4 numere pe aceeași variantă a schemei reduse. "
                 "Premiile se verifică pe variantele schemei LR. Debifează pentru metoda fixă din Re-Bench."
             ).classes("text-caption text-grey")
-            ui.separator()
-            budget_slider = lr_budget_slider(budget_amount)
             for _plabel, _ptitle in (
                 ("6/49", "Pool Loto 6/49"),
                 ("5/40", "Pool Loto 5/40"),
@@ -4466,18 +4503,7 @@ def main_page() -> None:
         ).classes("text-caption")
 
         ui.separator()
-        ui.label("3. Control Execuție").classes("text-bold")
-        _BTN = "w-full"
-        _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
-        ui.button(
-            "⚡ Auto-Pilot (arată selecția pe joc și generează)",
-            on_click=apply_autopilot_and_generate,
-        ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.button(
-            "🚀 Generează",
-            on_click=lambda: submit_generation(pure=False),
-        ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.separator()
+        ui.label("Re-Bench și întreținere").classes("text-bold")
         ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
             "color=orange no-caps"
         ).classes(_BTN).style(_BTN_STYLE)
@@ -4552,8 +4578,9 @@ def main_page() -> None:
         ).props("outline no-caps").classes("w-full").style(_BTN_STYLE)
 
     # Sub 1024 px sertarul iese din ecran și toate comenzile odată cu el; butonul
-    # plutitor îl aduce înapoi (antetul rămâne neschimbat).
-    with ui.page_sticky(position="top-left", x_offset=8, y_offset=8).classes("lt-md"):
+    # de meniu rămâne accesibil lângă titlu.
+    with ui.page_sticky(position="top-left", x_offset=8, y_offset=8).classes("lt-md") as settings_menu:
+        settings_menu.classes("loto-settings-menu")
         ui.button(icon="menu", on_click=drawer.toggle).props(
             "round color=primary aria-label=Setări"
         ).tooltip("Setări și comenzi")
@@ -4561,19 +4588,28 @@ def main_page() -> None:
     # ---- Zona principală ----
     with ui.column().classes("w-full p-4 gap-2 loto-main"):
         status_panel()
-        history_windows_panel()
-        nested_wfv_panel(_cc)
         if budget_slider is not None:
+            def show_budget():
+                drawer.show()
+                focus_control(budget_slider)
+
+            budget_access = ui.button(icon="tune", on_click=show_budget).props("outline no-caps color=positive")
+            budget_access.bind_text_from(
+                budget_slider, "value", lambda amount: f"Buget · {int(amount)} lei"
+            )
             refresh_budget = lr_budget_panel(
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
             )
+        results_panel()
+        history_windows_panel()
+        nested_wfv_panel(_cc)
+        if budget_slider is not None:
             lr_portfolio_panel(_lr_scheme_for("6/49").code)
         with ui.expansion("🛠 Consolă DEBUG / Loguri (live)", value=False).classes(
             "w-full"
         ):
             logs_panel()
-        results_panel()
 
     # ---- Polling fără reload. Munca BLOCANTĂ (citiri loguri OneDrive, psutil, pid-uri)
     # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără

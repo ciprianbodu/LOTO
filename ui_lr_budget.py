@@ -54,7 +54,16 @@ def _ticket_details(plan, *, expanded=False):
         for ticket_number, ticket in enumerate(plan["tickets"], start=1)
         for zone, area in enumerate(ticket)
     ]
-    with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full"):
+    with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full min-w-0"):
+        if error := plan.get("forecast_error"):
+            ui.label(error).props('role="alert"').classes("text-warning")
+        if rows:
+            _responsive_table(
+                fields, rows, row_key="id", page_size=12,
+                label=f"Numere de jucat · {plan['game_name']}",
+            ).classes("lr-ticket-table")
+            if plan.get("template_adjusted"):
+                ui.label("Scheme adaptate la pool-urile disponibile.").classes("text-caption")
         if forecast := plan.get("forecast"):
             pool = forecast["pool"]
             excluded = forecast.get("excluded_pool")
@@ -81,7 +90,9 @@ def _ticket_details(plan, *, expanded=False):
                 eligible = count(forecast["eligible_count"], "numere eligibile", "număr eligibil")
                 origin = f"Pool direct · {count(len(pool), 'numere selectate', 'număr selectat')} din {eligible} între {limits[0]} și {limits[1]} inclusiv"
             ui.label(f"{origin}{code}").classes("text-weight-bold")
-            ui.label(", ".join(map(str, pool))).classes("text-body2")
+            pool_text = ", ".join(map(str, pool))
+            if len(rows) != 1 or rows[0]["numbers"] != pool_text:
+                ui.label(pool_text).classes("text-body2")
             if excluded_jokers := forecast.get("excluded_jokers"):
                 eligible = count(forecast["eligible_joker_count"], "numere eligibile", "număr eligibil")
                 ui.label(f"Urna 2 Joker · pool normal exclus · {eligible} după excludere").classes("text-caption")
@@ -91,18 +102,6 @@ def _ticket_details(plan, *, expanded=False):
             date = f" · ultima extragere {forecast['date']}" if forecast["date"] else ""
             history = count(forecast["rows"], "extrageri folosite", "extragere folosită")
             ui.label(f"{forecast['filename']}{date}" + (f" · {history}" if forecast["rows"] else "")).classes("text-caption")
-        if error := plan.get("forecast_error"):
-            ui.label(error).classes("text-warning")
-        if rows:
-            if plan.get("template_adjusted"):
-                ui.label("Scheme adaptate la pool-urile disponibile.").classes("text-caption")
-            table = ui.table(
-                columns=_columns(fields), rows=rows, row_key="id",
-                pagination={"rowsPerPage": 12},
-            ).props("dense flat wrap-cells").classes("w-full")
-            if len(rows) <= 12:
-                table.props("hide-bottom")
-        if forecast:
             selection = forecast["selection"]
             if selection.get("method"):
                 if not forecast["dynamic"]:
@@ -149,22 +148,21 @@ def _render_recommendations(records, budget_lei, objective):
             _ticket_details(plan, expanded=True)
         return
     first = records[0]
-    with ui.card().props("flat bordered").classes("w-full border-l-4 border-primary gap-1"):
-        ui.label(f"Sugestie pentru {budget_lei} lei · {first['game_name']}").classes(
-            "text-subtitle1 text-weight-bold"
-        )
-        ui.label(
-            f"{_percent(first['attained'], first['denominator'])} · {_OBJECTIVES[objective]}"
-        ).classes("text-h5 text-positive")
-        ui.label(_recommended_codes(first["tickets"])).classes(
-            "text-subtitle2 text-weight-bold"
-        )
+    with ui.card().props("flat bordered").classes("w-full border-l-4 border-positive gap-1"):
+        ui.label(f"Sugestie pentru {budget_lei} lei · {first['game_name']}").classes("text-h6 text-weight-bold")
+        ui.label(_recommended_codes(first["tickets"])).classes("text-subtitle2 text-weight-bold")
         ui.label(
             f"{_price(first['price_bani'])} cu taxă · "
             f"{count(len(first['tickets']), 'bilete', 'bilet')} · "
             f"{count(first['variants'], 'variante', 'variantă')}"
         ).classes("text-body2")
+        ui.label(
+            f"Șansă teoretică la o extragere uniformă · {_OBJECTIVES[objective]} · "
+            f"{_percent(first['attained'], first['denominator'])}"
+        ).classes("text-caption")
     _ticket_details(first, expanded=True)
+    for plan in records[1:]:
+        _ticket_details(plan, expanded=bool(plan.get("forecast_error")))
 
     games = {plan["game"] for plan in records}
     if objective == FOUR_PLUS:
@@ -200,11 +198,10 @@ def _render_recommendations(records, budget_lei, objective):
                 _percent(upper, plan["denominator"]) if playable and upper is not None else "—"
             ),
         })
-    ui.table(
-        columns=_columns(fields), rows=rows, row_key="game", pagination={"rowsPerPage": 0},
-    ).props("dense flat hide-bottom wrap-cells").classes("w-full")
-    for plan in records[1:]:
-        _ticket_details(plan, expanded=bool(plan.get("forecast_error")))
+    if len(records) > 1:
+        _responsive_table(fields, rows, row_key="game", label="Compararea jocurilor în buget")
+    elif rows[0]["bound"] != "—":
+        ui.label(f"Limita superioară pentru acest buget · {rows[0]['bound']}").classes("text-caption")
 
 
 def _range_label(limits):
@@ -232,16 +229,21 @@ def _pair_label(draws, days):
     return f"{_number_label(draws)} / {_number_label(days)}"
 
 
-def _analysis_table(fields, rows):
+def _responsive_table(fields, rows, *, row_key="base", page_size=0, label=None):
     table = ui.table(
-        columns=_columns(fields), rows=rows, row_key="base", pagination={"rowsPerPage": 0},
-    ).props("dense flat hide-bottom wrap-cells").classes("w-full lr-range-table")
+        columns=_columns(fields), rows=rows, row_key=row_key, pagination={"rowsPerPage": page_size},
+    ).props("dense flat wrap-cells").classes("w-full min-w-0 lr-range-table")
+    if not page_size or len(rows) <= page_size:
+        table.props("hide-bottom")
+    if label:
+        table.props(f'aria-label="{label}"')
     table.add_slot("body-cell", """
-        <q-td :props="props">
+        <q-td :props="props" :class="{'lr-ticket-numbers': props.col.name === 'numbers'}">
             <span class="lt-sm lr-range-cell-label">{{ props.col.label }}</span>
             <span>{{ props.value }}</span>
         </q-td>
     """)
+    return table
 
 
 def _range_comparison(report, game_name, selected, select_base, forced, *, expanded):
@@ -289,12 +291,20 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
                 "wait": _pair_label(chron.get("draws_since"), chron.get("days_since")),
                 "median": _pair_label(chron.get("median_gap_draws"), chron.get("median_gap_days")),
             })
+        value = "10–40" if forced else selected
+        with ui.row().classes("lr-choice-actions w-full items-center gap-2") as actions:
+            picker = ui.select(
+                choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
+                on_change=lambda event: select_base(game, event.value, actions),
+            ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
+            if forced:
+                picker.disable()
         if historical:
             period = f"{_date_label(report.get('first_date'))} – {_date_label(report.get('as_of'))}"
             ui.label(f"Comparație pe {count(report['rows'], 'extrageri', 'extragere')} · {period}").classes("text-subtitle2")
             if metric := report.get("metric"):
                 ui.label(f"Ultimele 25 de extrageri · {metric}").classes("text-caption")
-            _analysis_table([
+            _responsive_table([
                 ("base", "Bază"), ("eligible", "Eligibile acum"), ("evaluated", "Evaluate"),
                 ("infeasible", "Pool imposibil"), ("ticket", "Pe bilet 3+ / 4+"), ("pool", "În pool 3+ / 4+"),
                 ("objective", "Obiectiv · reușite / evaluate"), ("recent", "Ultimele 25 · reușite / evaluate"), ("phase", "La pauze similare · victorii / înfrângeri"),
@@ -309,19 +319,12 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
                     "O apariție înseamnă că toate numerele principale extrase au fost în interval. "
                     f"Pauza actuală se măsoară de la ultima apariție cunoscută până la {_date_label(as_of)}."
                 ).classes("text-caption")
-                _analysis_table([
+                _responsive_table([
                     ("base", "Bază"), ("events", "Apariții / extrageri"), ("last", "Ultima apariție"),
                     ("wait", "Pauza actuală · extrageri / zile"), ("median", "Pauza mediană · extrageri / zile"),
                 ], timing)
             if protocol := report.get("protocol"):
                 ui.label(protocol).classes("text-caption")
-        value = "10–40" if forced else selected
-        picker = ui.select(
-            choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
-            on_change=lambda event: select_base(game, event.value),
-        ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
-        if forced:
-            picker.disable()
 
 
 def _compare_games(amount, goal, games, inputs, inverse):
@@ -367,6 +370,7 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
 def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None, initial_objective=FOUR_PLUS):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
+        .lr-ticket-table .lr-ticket-numbers { font-weight: 650; font-variant-numeric: tabular-nums; }
         @media (max-width: 599.98px) {
             .lr-range-table .q-table, .lr-range-table .q-table tbody,
             .lr-range-table .q-table tbody tr { display: block; width: 100%; height: auto; }
@@ -378,43 +382,53 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             }
             .lr-range-table .lr-range-cell-label { opacity: .78; }
             .lr-range-table td span:last-child { text-align: right; }
+            .lr-ticket-table .q-table td.lr-ticket-numbers { display: block; }
+            .lr-ticket-table td.lr-ticket-numbers span { display: block; text-align: left; }
+            .loto-main .lr-recommendation-form { padding: 12px !important; }
+            .lr-recommendation-form .q-btn, .lr-choice-actions .q-btn { min-height: 44px; }
+            .lr-ticket-table td.lr-ticket-numbers span:last-child {
+                font-size: 1.05rem; line-height: 1.55; overflow-wrap: anywhere;
+            }
         }
     """)
-    with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
-        generate = ui.button(
-            "Generează recomandarea", icon="confirmation_number", color="positive",
-        ).props("no-caps aria-busy=false").classes("w-full sm:w-auto")
-        inverse = ui.switch("Metoda inversă", value=False).props('aria-label="Metoda inversă"').tooltip(
-            "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
-        )
-        range_filter = ui.switch("Doar numere principale între 10 și 40", value=False).props(
-            'aria-label="Doar numere principale între 10 și 40"'
-        ).classes("max-w-full").tooltip(
-            "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
-        )
-        range_filter.bind_visibility_from(inverse, "value")
-        range_filter.bind_enabled_from(inverse, "value")
-    with ui.expansion("Bilete LR în buget", value=False).classes("w-full") as panel:
-        ui.label(
-            "Șansa teoretică se calculează pentru o extragere uniformă. "
-            "Zonele folosesc pool-ul generatorului sau un pool calculat pentru recomandare. Totalul include taxa de bilet."
-        ).classes("text-body2")
-        game_options = {"all": "Toate jocurile"}
-        game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})
-        game = ui.select(game_options, value="all", label="Joc").props(
-            'aria-label="Joc pentru bilete LR"'
-        ).classes("w-full sm:w-72")
-        objective = ui.toggle(_OBJECTIVES, value=initial_objective).props(
-            'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
-        )
-        comparison = ui.column().classes("w-full gap-2")
-        output = ui.column().classes("w-full gap-2")
+    game_options = {"all": "Toate jocurile"}
+    game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})
+    with ui.card().props("flat bordered").classes("lr-recommendation-form w-full min-w-0 gap-3"):
+        ui.label("Recomandare de bilete LR").classes("text-h6 text-weight-bold")
+        with ui.row().classes("w-full items-end gap-x-6 gap-y-2"):
+            game = ui.select(game_options, value="all", label="Joc").props(
+                'outlined dense aria-label="Joc pentru bilete LR"'
+            ).classes("w-full sm:w-64")
+            with ui.column().classes("gap-1"):
+                ui.label("Obiectiv").classes("text-caption")
+                objective = ui.toggle(_OBJECTIVES, value=initial_objective).props(
+                    'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
+                )
+        with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
+            inverse = ui.switch("Metoda inversă", value=False).props('aria-label="Metoda inversă"').tooltip(
+                "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
+            )
+            range_filter = ui.switch("Doar numere principale între 10 și 40", value=False).props(
+                'aria-label="Doar numere principale între 10 și 40"'
+            ).classes("max-w-full").tooltip(
+                "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
+            )
+            range_filter.bind_visibility_from(inverse, "value")
+            range_filter.bind_enabled_from(inverse, "value")
+            generate = ui.button(
+                "Generează recomandarea", icon="confirmation_number", color="positive",
+            ).props("no-caps aria-busy=false").classes("w-full sm:w-auto sm:ml-auto")
+
+    with ui.expansion("Bilete și analiză", value=False).classes("w-full min-w-0") as panel:
+        output = ui.column().classes("w-full min-w-0 gap-2")
+        comparison = ui.column().classes("w-full min-w-0 gap-2")
         revision = 0
         running = False
         applied_budget = None
         cached_analysis = None
         displayed = None
         manual_choices = {}
+        confirm_button = None
         waiting_for_choice = False
 
         def selected_budget():
@@ -424,14 +438,25 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             enabled = bool(inverse.value)
             return enabled, bool(enabled and range_filter.value)
 
-        def change_base(game_id, value):
-            nonlocal revision, waiting_for_choice
+        def clear_confirmation():
+            nonlocal confirm_button
+            if confirm_button is not None and not confirm_button.is_deleted:
+                confirm_button.delete()
+            confirm_button = None
+
+        def change_base(game_id, value, actions):
+            nonlocal revision, waiting_for_choice, confirm_button
+            if not panel.value or actions.is_deleted:
+                return
             manual_choices[game_id, bool(inverse.value)] = value
             revision += 1
             waiting_for_choice = True
-            output.clear()
-            with output:
-                ui.label("Confirmă baza aleasă pentru a genera biletele.").props('role="status"')
+            clear_confirmation()
+            with actions:
+                confirm_button = ui.button(
+                    "Generează cu baza aleasă", icon="confirmation_number", on_click=calculate,
+                ).props("no-caps").classes("w-full sm:w-auto")
+            show_status(f"Confirmă baza aleasă lângă selectorul {game_options[game_id]} pentru a actualiza biletele.")
 
         def show_status(message):
             output.clear()
@@ -442,6 +467,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             nonlocal revision, running, applied_budget, cached_analysis, displayed, waiting_for_choice
             revision += 1
             waiting_for_choice = False
+            clear_confirmation()
             if output.is_deleted:
                 return
             if not panel.value:
@@ -495,8 +521,6 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
                                         report, game_options[gid], manual_choices.get((gid, inverse_mode), "auto"),
                                         change_base, forced, expanded=len(reports) == 1,
                                     )
-                                if not forced:
-                                    ui.button("Generează cu baza aleasă", icon="confirmation_number", on_click=calculate).props("no-caps")
                             displayed = (id(reports), forced)
                         selections = {}
                         for report in reports:
@@ -523,7 +547,9 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
                     output.clear()
                     with output:
                         if plans is None:
-                            ui.label("Calculul recomandării nu a putut fi finalizat.").classes("text-warning")
+                            ui.label("Calculul recomandării a eșuat. Poți încerca din nou cu butonul verde.").props(
+                                'role="alert"'
+                            ).classes("text-warning")
                         else:
                             _render_recommendations(plans, amount, goal)
                     return
@@ -545,7 +571,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
 
         panel.on_value_change(refresh)
         generate.on_click(show_recommendation)
-        inverse.on_value_change(show_recommendation)
+        inverse.on_value_change(refresh)
         range_filter.on_value_change(calculate)
         slider.on_value_change(show_recommendation)
         game.on_value_change(refresh)
