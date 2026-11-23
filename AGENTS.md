@@ -2083,8 +2083,8 @@ Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de ext
 
 ### Sugestii LR după buget — 2026-11-21
 
-În ecranul României, glisorul de buget se află în bara din stânga, sub
-glisoarele de pool. Bugetul inițial este 200 lei și se reglează între 100 și
+În ecranul României, glisorul de buget se află în bara din stânga, înainte de
+glisoarele schemelor reduse. Bugetul inițial este 200 lei și se reglează între 100 și
 400 lei în pași de 1 leu. La redeschidere se aplică ultima sumă salvată.
 Glisorul de buget și butonul verde „Generează recomandarea” deschid panoul
 „Bilete LR în buget”. Bugetul, jocul și obiectivul aleg codurile oficiale și

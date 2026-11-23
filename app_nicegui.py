@@ -4312,6 +4312,8 @@ def main_page() -> None:
                 "anterioare cu cel puțin 4 numere pe aceeași variantă a schemei reduse. "
                 "Premiile se verifică pe variantele schemei LR. Debifează pentru metoda fixă din Re-Bench."
             ).classes("text-caption text-grey")
+            ui.separator()
+            budget_slider = lr_budget_slider(budget_amount)
             for _plabel, _ptitle in (
                 ("6/49", "Pool Loto 6/49"),
                 ("5/40", "Pool Loto 5/40"),
@@ -4336,8 +4338,6 @@ def main_page() -> None:
                 "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
-            ui.separator()
-            budget_slider = lr_budget_slider(budget_amount)
         else:
             _pool_inputs.append(
                 _bind_save(
