@@ -104,3 +104,41 @@ def test_same_code_layout_change_invalidates_hot_catalog(tmp_path, monkeypatch):
     rows[i], rows[i+1] = rows[i+1], rows[i]
     alternate.write_text("\n".join(rows) + "\n")
     assert signature()[0]["scheme"] != after["scheme"]
+
+
+def test_global_bench_is_bound_to_the_available_prefix_per_urn(monkeypatch):
+    from loto_enterprise.benchmark import freshness
+    from loto_enterprise.core import method_selector
+    from loto_enterprise.core.lr_budget_forecast import _forecast_engine
+    from loto_enterprise.core.lotteries import require_lottery
+    import pandas as pd
+
+    history = pd.DataFrame({
+        "date": ["01-10-2026", "04-10-2026", "08-10-2026"],
+        **{f"n{i}": [i, i + 5, i + 10] for i in range(1, 6)}, "joker": [1, 2, 3],
+    })
+    keys = ("joker_urna1", "joker_urna2")
+    config = {"games": {key: {"overall_winner": "markov_lag2"} for key in keys},
+              "_meta": {"engine_signature": freshness.compute_engine_signature(country="RO"),
+                        "csv_signatures": {}}}
+    for key in keys:
+        fingerprint, rows = freshness._frame_signature(history.iloc[:2], freshness.GAMES_COLS_MAP[key])
+        config["_meta"]["csv_signatures"][key] = {"hash": fingerprint, "rows": rows}
+
+    lot = require_lottery("joker", "RO")
+    load = method_selector._load_config
+    monkeypatch.setattr(method_selector, "_load_config", lambda path=None: load(path) if isinstance(path, dict) else config)
+    current = _forecast_engine(lot, ("test.csv", history), 70)
+    assert set(current._lr_decision_snapshot) == set(keys)
+    assert load(current._lr_decision_snapshot[keys[1]]) is config
+    earlier = _forecast_engine(lot, ("test.csv", history.iloc[:1]), 100)
+    assert not earlier._lr_decision_snapshot
+    score = earlier._get_timesfm_scores(is_joker_drum=True)
+    assert score == earlier._frequency_fallback_scores(is_joker_drum=True)
+    assert earlier.audit["bench_winner"][keys[1]]["fallback"]
+
+    corrected = history.copy()
+    corrected.loc[0, "joker"] = 9
+    assert set(_forecast_engine(lot, ("test.csv", corrected), 100)._lr_decision_snapshot) == {keys[0]}
+    config["_meta"]["engine_signature"] = {}
+    assert not _forecast_engine(lot, ("test.csv", history), 100)._lr_decision_snapshot

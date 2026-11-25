@@ -97,7 +97,7 @@ def _country_mismatch(cfg: dict, expected: str | None) -> str | None:
     return None
 
 
-def _load_config(path: str | None = None) -> dict:
+def _load_config(path: str | dict | None = None) -> dict:
     """Încarcă best_methods.json, cu reîncărcare automată la schimbarea fişierului.
 
     Cache-ul global e invalidat când mtime-ul fişierului se schimbă (ex. după un
@@ -108,6 +108,9 @@ def _load_config(path: str | None = None) -> dict:
     `_meta.country` nu e țara lui e tratat ca LIPSĂ: frequency, nu decizia
     altei țări.
     """
+    # LR generation may pin a config already checked against its own history.
+    if isinstance(path, dict):
+        return path
     global _CONFIG, _CONFIG_MTIME, _CONFIG_PATH_USED
     cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
     try:

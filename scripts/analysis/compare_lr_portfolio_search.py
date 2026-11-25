@@ -9,9 +9,11 @@ from itertools import combinations
 from math import comb
 from pathlib import Path
 from time import perf_counter
+from unittest.mock import patch
 
 import numpy as np
 
+from covering import lr_pool_budget as production
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
 from covering.lr_schemes import lr_schemes
@@ -106,7 +108,105 @@ def exact(row, pool, jokers):
     }
 
 
-def run(old, store):
+def measured_stages(plan, objective, pool, jokers):
+    """Observe real optimizer checkpoints without spending its time on grading."""
+    marks = {}
+
+    class TracedSearch(production._PortfolioSearch):
+        def checkpoint(self, stage):
+            marks[stage] = self, self.best, perf_counter() - start, self.catalogue_optimization
+
+        def optimize(self, incumbent, known_value):
+            selected = super().optimize(incumbent, known_value)
+            if "initial" not in marks:
+                self.checkpoint("initial")
+            return selected
+
+        def search(self, incumbent):
+            self.checkpoint("initial")
+            return super().search(incumbent)
+
+        def grow(self, frontier, candidates, beam_width, slice_end):
+            if "beam" not in marks:
+                phase = "beam"
+            else:
+                # The only grow using the full deadline is a beam pass over
+                # all eligible placements when the MILP branch is skipped.
+                phase = "wide_beam" if slice_end == self.deadline else "lns"
+            try:
+                return super().grow(frontier, candidates, beam_width, slice_end)
+            finally:
+                self.checkpoint(phase)
+
+        def solve(self, candidates):
+            try:
+                return super().solve(candidates)
+            finally:
+                self.checkpoint("milp")
+
+    # Record one normal production call, not independently retimed prefixes.
+    # The incumbent and zone caches stay as in ordinary sequential usage.
+    with patch.object(production, "_PortfolioSearch", TracedSearch):
+        production._refine_cached.cache_clear()
+        start = perf_counter()
+        improved = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
+        elapsed = perf_counter() - start
+
+    observations = {}
+    previous = None
+    for phase in ("initial", "beam", "lns", "milp", "wide_beam"):
+        if phase in marks:
+            search, chosen, seconds, local = marks[phase]
+            zones = tuple(
+                (c.zone.code, c.zone.positions, c.zone.variants, search.slot(i, c))
+                for i, c in enumerate(chosen.choices)
+            )
+            candidate = production._attach(
+                deepcopy(plan), search.lot, zones, tuple(sorted(pool)), jokers,
+                chosen.price, chosen.score, search.upper,
+            )
+            verified = exact(candidate, pool, jokers)
+            status = "observed" if phase != "milp" or local is not None else "no_milp_result"
+            details = {
+                "status": status,
+                "elapsed_seconds": round(seconds, 5),
+                **{key: verified[key] for key in ("attained", "4+", "5+", "6+", "cost_bani", "upper", "gap")},
+                "global_optimal": verified["gap"] == 0,
+                "candidate_milp": local if phase == "milp" else None,
+            }
+            if previous is not None:
+                assert details["attained"] >= previous["attained"]
+                assert details["elapsed_seconds"] >= previous["elapsed_seconds"]
+            previous = details
+        else:
+            if phase == "initial":
+                verified = exact(improved, pool, jokers)
+                details = {
+                    "status": "observed",
+                    "elapsed_seconds": round(elapsed, 5),
+                    **{key: verified[key] for key in ("attained", "4+", "5+", "6+", "cost_bani", "upper", "gap")},
+                    "global_optimal": verified["gap"] == 0,
+                    "candidate_milp": None,
+                }
+                previous = details
+            else:
+                cause = "global_bound" if previous["global_optimal"] else "dispatch_or_time"
+                if phase == "lns" and cause != "global_bound" and marks:
+                    sizes = [len(marks[key][1].choices) for key in ("initial", "beam") if key in marks]
+                    if sizes and max(sizes) < 2:
+                        cause = "fewer_than_two_zones"
+                details = {"status": cause}
+        observations[phase] = details
+    assert previous["attained"] == improved["attained"]
+    initial = observations["initial"]
+    for checkpoint in observations.values():
+        if "attained" in checkpoint:
+            assert checkpoint["cost_bani"] <= initial["cost_bani"]
+            assert all(checkpoint[key] >= initial[key] for key in ("4+", "5+", "6+"))
+    return improved, elapsed, observations
+
+
+def run(old, store, *, ablation=False):
     for game in GAMES:
         lot = require_lottery(game, "RO")
         jokers = JOKERS if lot.geo.second else ()
@@ -130,9 +230,12 @@ def run(old, store):
                 start = perf_counter()
                 reference = old(deepcopy(plan), objective, pool, jokers)
                 previous = perf_counter() - start
-                start = perf_counter()
-                improved = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
-                elapsed = perf_counter() - start
+                if ablation:
+                    improved, elapsed, checkpoints = measured_stages(plan, objective, pool, jokers)
+                else:
+                    start = perf_counter()
+                    improved = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
+                    elapsed = perf_counter() - start
                 a, b = exact(reference, pool, jokers), exact(improved, pool, jokers)
                 assert b["cost_bani"] <= a["cost_bani"]
                 assert all(b[k] >= a[k] for k in ("attained", "4+", "5+", "6+"))
@@ -157,6 +260,10 @@ def run(old, store):
                         for k in ("attained", "4+", "5+", "6+")
                     },
                 }
+                if ablation:
+                    assert checkpoints["initial"]["attained"] == a["attained"]
+                    assert checkpoints["initial"]["cost_bani"] == a["cost_bani"]
+                    item["ablation"] = checkpoints
                 store(item)
                 print(game, objective, label, a["attained"], b["attained"], item["refined_seconds"], flush=True)
 
@@ -165,12 +272,13 @@ def main():
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument("--baseline-source", type=Path)
     cli.add_argument("--out", required=True, type=Path)
+    cli.add_argument("--ablation", action="store_true", help="Recount the portfolio after each executed search stage.")
     args = cli.parse_args()
     rows = []
     def save(item):
         rows.append(item)
         args.out.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    run(old_version(args.baseline_source), save)
+    run(old_version(args.baseline_source), save, ablation=args.ablation)
 
 
 if __name__ == "__main__":

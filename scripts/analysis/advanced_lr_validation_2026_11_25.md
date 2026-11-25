@@ -27,6 +27,33 @@ Simularea martorului generează independent 24 de istorice a câte 450 de zile p
 
 Pe toate cele patru urne, BOCPD a avut în simularea uniformă pierderi mai mari decât martorul. Excesul mediu Brier a fost între 0,0000163 și 0,0000473, iar cel logaritmic între 0,000157 și 0,000207. Eroarea maximă a sumei probabilităților a fost sub 4 × 10⁻¹⁵.
 
+Regula de alarmă, fixată înaintea rulării, cere o probabilitate posterioară de cel puțin 10% ca o nouă perioadă să înceapă în ziua tocmai observată. Numărătoarea începe după cele 128 de zile inițiale. În martorul uniform, orice alarmă este falsă prin construcția simulării.
+
+| Urnă | Zile cu alarmă din 7.728 | Rată pe zi | Replici cu cel puțin o alarmă din 24 | Rată pe replică |
+| --- | ---: | ---: | ---: | ---: |
+| Loto 6/49 | 0 | 0% | 0 | 0% |
+| Loto 5/40 | 0 | 0% | 0 | 0% |
+| Joker, Urna 1 | 2 | 0,02588% | 2 | 8,33% |
+| Joker, Urna 2 | 0 | 0% | 0 | 0% |
+
+Aceste frecvențe descriu simularea și pragul folosit. Cele trei cazuri fără alarme observate au câte 24 de replici.
+
+## Comparație cu selectorul dinamic din aplicație
+
+Am folosit intervalul 13.09.2026–29.10.2026, stabilit înainte de evaluare pentru a include ultima tragere dublă comună din arhivă. Fiecare joc are 14 zile și 15 extrageri evaluate. Cele două extrageri din 13 septembrie au același portofoliu pe zi și două rezultate distincte. Metoda fixată de Re-Bench a folosit numai extragerile până la 10.09.2026 inclusiv. Generatorul dinamic și cele trei metode noi au refăcut portofoliul pe baza întregului istoric anterior fiecărei zile.
+
+Fiecare dintre cele cinci politici a avut zero extrageri cu 4+ sau 5+ potriviri pe aceeași variantă oficială. La 6/49 a avut și zero extrageri cu 6 potriviri. Pragul 6+ este neaplicabil variantelor de cinci numere de la 5/40 și Joker. Toate portofoliile au putut fi evaluate, la același cost în cadrul fiecărui joc. Tabelul redă câte extrageri au adus cel puțin un premiu conform categoriei oficiale, inclusiv premiile sub pragul 4+.
+
+| Joc | Cost portofoliu | Re-Bench fixat | Dinamic | BOCPD | Stacking | Fixed Share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Loto 6/49 | 96,50 lei | 0 | 0 | 1 | 1 | 0 |
+| Loto 5/40 | 90,50 lei | 0 | 0 | 0 | 0 | 0 |
+| Joker | 98,50 lei | 0 | 1 | 1 | 0 | 0 |
+
+Re-Bench fixat a ales pentru urna principală `frequency` la 6/49, `compact_multiscale_shrink` la 5/40 și `compact_transition_prior` la Joker. Selectorul dinamic a ales `markov_lag2` în toate cele 14 zile pentru 6/49 și 5/40. La Joker, a folosit frecvența în toate cele 14 zile. Pentru urna principală, selecția nu a depășit martorul aleator. Pentru Urna 2, aplicația a respins decizia globală incompatibilă cu istoricul disponibil la data prognozei și a folosit frecvența. În celelalte perechi de joc și politică nu s-a raportat nicio selecție de rezervă. Pentru cele două metode numerice, Urna 2 folosește frecvența, iar Fixed Share folosește regula proprie de portofoliu.
+
+Câmpul `selector_replay` din JSON păstrează decizia folosită, motivul selecției de rezervă, costul și amprenta portofoliului pe fiecare zi, distribuția potrivirilor pe cea mai bună variantă și indicatorii 4+, 5+ și 6+. Cele 15 extrageri per joc oferă o probă de reproducere a politicilor, cu prea puține evenimente pentru o concluzie privind avantajul predictiv.
+
 ## Reproducere
 
 Studiul folosește ordinea corectată a celor două trageri Loto 6/49 din 01.12.2019. Recalcularea a schimbat amprenta istoricului 6/49. Martorul aleator, a cărui sămânță numerică depinde de istoricul primit, a trecut de la o extragere cu 4+ la două. Rezultatele metodelor comparate, valorile p și intervalele au rămas identice.
@@ -35,6 +62,7 @@ Rulați din directorul proiectului, cu configurația Python obișnuită și o co
 
 ```powershell
 python -m scripts.analysis.advanced_lr_validation --history _ISTORIC --days 104 --budget 100 --output advanced_lr_validation_reprodus.json
+python -m scripts.analysis.advanced_lr_selector_replay --history _ISTORIC --first-day 2026-09-13 --last-day 2026-10-29 --budget 100 --workers 3 --output selector_replay_reprodus.json
 ```
 
 [Datele agregate și comparațiile statistice](advanced_lr_validation_2026_11_25.json)

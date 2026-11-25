@@ -137,7 +137,11 @@ def _resolve_csv(game_key: str, csv_map: dict | None = None) -> Path | None:
 
 def _content_hash(csv_path: Path, num_cols: list[str] | None = None) -> tuple[str, int]:
     """Hash CSV content using the number columns (or all if not provided)."""
-    df = canonical_history_columns(pd.read_csv(csv_path))
+    return _frame_signature(pd.read_csv(csv_path), num_cols)
+
+
+def _frame_signature(frame, num_cols):
+    df = canonical_history_columns(frame)
     n_rows = len(df)
     if num_cols:
         cols = [c for c in num_cols if c in df.columns]
@@ -196,6 +200,26 @@ def compute_engine_signature(*, country: str | None = None) -> dict[str, str | i
         "methods_hash": digest,
         "n_methods": len(names),
     }
+
+
+def compatible_lr_config(config, frame, game_keys):
+    """Bind an immutable-in-use decision to the exact historical prefix used to fit each urn."""
+    meta = config.get("_meta", {})
+    signatures = meta.get("csv_signatures", {}) if isinstance(meta, dict) else {}
+    result = {}
+    if not isinstance(signatures, dict) or not signatures or meta.get("engine_signature") != compute_engine_signature(country="RO"):
+        return result
+    for key in game_keys:
+        signature = signatures.get(key)
+        if not isinstance(signature, dict):
+            continue
+        count = signature.get("rows")
+        if type(count) is not int or not 0 < count <= len(frame):
+            continue
+        fingerprint, _ = _frame_signature(frame.iloc[:count], GAMES_COLS_MAP[key])
+        if fingerprint == signature.get("hash") and key in config.get("games", {}):
+            result[key] = config
+    return result
 
 
 def compute_csv_signature(

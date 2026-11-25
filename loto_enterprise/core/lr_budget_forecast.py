@@ -73,6 +73,7 @@ def _forecast_engine(lot, source, lookback, expected_hash=None):
         raise ValueError("Istoricul jocului nu conține extrageri valide.")
     if expected_hash and engine.audit["hash"] != expected_hash:
         raise ValueError("Istoricul disponibil diferă de cel al pool-ului generat. Regenerați pool-ul.")
+    engine._bind_lr_decision()
     return _apply_lookback(engine, lookback)
 
 

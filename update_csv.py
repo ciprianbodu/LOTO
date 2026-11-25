@@ -445,6 +445,28 @@ def _merge_rows(csv_path, new_rows, has_joker, num_main, expected, source_rows):
     if not to_add:
         return 0
 
+    # Reorder a day only when this write completes a clearly labelled official pair.
+    # Without both labels, the previous order remains the only available evidence.
+    touched = {_csv_date_to_date(row[0]) for row in to_add}
+    official_roles = {}
+    for rec in source_rows or ():
+        role = rec.get("supplementary")
+        if rec["date"] in touched and isinstance(role, bool):
+            identity = _row_identity(_site_row(rec, has_joker), has_joker, ordered_sixth)
+            official_roles.setdefault(rec["date"], {})[identity] = role
+    paired = {day: roles for day, roles in official_roles.items()
+              if len(roles) == 2 and set(roles.values()) == {False, True}}
+    merged = [row for row in existing if row] + to_add
+    for row in merged:
+        day = _csv_date_to_date(row[0])
+        if day in paired and _row_identity(row, has_joker, ordered_sixth) not in paired[day]:
+            del paired[day]
+
+    def chronological_position(row):
+        day = _csv_date_to_date(row[0])
+        return day, paired[day][_row_identity(row, has_joker, ordered_sixth)] if day in paired else False
+
+    merged.sort(key=chronological_position)
     # Scriere atomică: scrie în tmp, rename
     dir_ = csv_path.parent
     dir_.mkdir(parents=True, exist_ok=True)
@@ -453,8 +475,6 @@ def _merge_rows(csv_path, new_rows, has_joker, num_main, expected, source_rows):
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f, lineterminator="\n")
             writer.writerow(header)
-            merged = [row for row in existing if row] + to_add
-            merged.sort(key=lambda r: _csv_date_to_date(r[0]))
             writer.writerows(merged)
             f.flush()
             os.fsync(f.fileno())
@@ -517,7 +537,8 @@ def _complete_official_archive(game_key, primary, stored, last, rejected, publis
             day = date.fromisoformat(row.draw_date)
             if day > today:
                 raise ValueError(f"extragere oficială în viitor: {day:%d-%m-%Y}")
-            official.append({"date": day, "main": list(row.numbers), "joker": row.joker})
+            official.append({"date": day, "main": list(row.numbers), "joker": row.joker,
+                             "supplementary": getattr(row, "supplementary", None)})
         month = (month.replace(day=28) + timedelta(days=4)).replace(day=1)
     official.sort(key=lambda r: r["date"])
     if official[-1]["date"] < published:
@@ -546,16 +567,18 @@ def _complete_official_archive(game_key, primary, stored, last, rejected, publis
     if game_key == "loto_5_40":
         # În porțiunea preluată de la loto.ro, a șasea bilă stabilește
         # care cinci numere pot câștiga la categoria I.
-        official_sixth = {
-            _row_identity(_site_row(row, False), False): row["main"][-1]
-            for row in official if row["date"] > tip
-        }
+        official_sixth = {}
+        for draw in official:
+            if draw["date"] > tip:
+                identity = _row_identity(_site_row(draw, False), False)
+                official_sixth.setdefault(identity, set()).add(draw["main"][-1])
         for row in stored:
-            sixth = official_sixth.get(_row_identity(row, False))
-            if sixth is not None and int(row[-1]) != sixth:
+            allowed = official_sixth.get(_row_identity(row, False))
+            if allowed and int(row[-1]) not in allowed:
+                shown = " sau ".join(str(ball) for ball in sorted(allowed))
                 raise ValueError(
                     f"Loto 5/40 din {row[0]}: a șasea bilă este {row[-1]} în CSV "
-                    f"și {sixth} la loto.ro"
+                    f"și {shown} la loto.ro"
                 )
     draws = [row for row in primary if row["date"] < tip] + [
         row for row in official if row["date"] >= tip

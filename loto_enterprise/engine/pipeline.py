@@ -132,6 +132,7 @@ class PipelineMixin:
                 raise ValueError("Pool-ul urnei a doua Joker trebuie să fie un întreg între 1 și 20.")
             joker_pool_size = int(joker_pool_size)
             self.audit["joker_pool_size_requested"] = joker_pool_size
+        self._lr_decision_snapshot = None
         self.audit.pop("lr_scheme", None)
         if self.audit.pop("dynamic_selection", None) is not None:
             self.audit.get("bench_winner", {}).pop(self._bench_game_key(), None)
@@ -148,6 +149,7 @@ class PipelineMixin:
             if _pool_analysis_only:
                 raise ValueError("O schemă LR se validează prin variantele sale fizice, nu ca sistem complet virtual")
             lr_scheme_code = scheme.code
+            self._bind_lr_decision()
             max_consecutive_run = playable_lr_limit(
                 int(self.params["max_n"]), scheme.n, restrict_base_min, restrict_base_max, max_consecutive_run,
             )

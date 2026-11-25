@@ -35,7 +35,9 @@ def comparisons(history_dir, rows, budget):
             if "changed" in portfolio:
                 for label in ("pool_choice", "ticket_choice"):
                     recipe = portfolio[label]
-                    score = next(c for c in portfolio["candidates"] if [c["main"], c.get("joker") or ""] == [n or "" for n in recipe])
+                    key = tuple(n or "" for n in recipe)
+                    score = next(c for c in portfolio["candidates"]
+                                 if (c["main"], c.get("joker") or "") == key)
                     record[label + "_score"] = {key: score.get(key, 0) for key in (
                         "n_eval", "infeasible", "hit4", "hit5", "hit6", "any_prize", "cost_bani")}
             elif "error" not in record:

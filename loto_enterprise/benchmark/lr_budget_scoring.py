@@ -32,8 +32,11 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
                             inverse, dynamic, lookback, joker_size, check):
     from loto_enterprise.benchmark.lr_hypotheses import _blocked_by_date, _training
 
+    for urn in urns:
+        if urn.get("error"):
+            return {"error": f"{urn['name']}: {urn['error']}", "n_eval": 0}
     if dates is None or any(not u.get("decision") or not u.get("rows") for u in urns):
-        return {"error": "Istoricul nu permite compararea portofoliilor pe zile complete."}
+        return {"error": "Istoricul nu permite compararea portofoliilor pe zile complete.", "n_eval": 0}
     bounds = game.history_cutoffs
     origins = tuple(dict.fromkeys(b for b in bounds if b >= 80))[-PORTFOLIO_DAYS:]
     if not origins:

@@ -166,8 +166,8 @@ def _draw_block(heading, day, main, joker=None, *, supplementary=False):
 
 
 @pytest.mark.parametrize("game", ["loto_5_40", "joker"])
-@pytest.mark.parametrize("stored_main", [False, True])
-def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, game, stored_main):
+@pytest.mark.parametrize("stored_kind", ["none", "main", "supplement", "both"])
+def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, game, stored_kind):
     heading = "joker" if game == "joker" else "5/40"
     previous, main, supplement = (1, 3, 5, 7, 9, 11), (2, 4, 6, 8, 10, 12), (13, 15, 17, 19, 21, 23)
     if game == "joker":
@@ -175,6 +175,8 @@ def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, ga
         jokers = (5, 17, 17)
     else:
         jokers = (None, None, None)
+        # The last ball determines category I. These are two different official draws.
+        supplement = (*main[:4], main[5], main[4])
 
     def csv_row(day, values, joker):
         return ",".join(map(str, (day, *values, *((joker,) if joker is not None else ()))))
@@ -182,7 +184,11 @@ def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, ga
     prior_row = csv_row("19-11-2026", previous, jokers[0])
     main_row = csv_row("22-11-2026", main, jokers[1])
     supplement_row = csv_row("22-11-2026", supplement, jokers[2])
-    stored = [prior_row, main_row] if stored_main else [prior_row]
+    stored = [prior_row]
+    if stored_kind in ("main", "both"):
+        stored.append(main_row)
+    if stored_kind in ("supplement", "both"):
+        stored.append(supplement_row)
     recent = "2026-11-19 " + " ".join(map(str, previous))
     if jokers[0] is not None:
         recent += f" + {jokers[0]}"
@@ -196,8 +202,37 @@ def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, ga
 
     count, target, _ = run_update(tmp_path, monkeypatch, game, stored, recent, html)
 
-    assert count == (1 if stored_main else 2)
+    assert count == 3 - len(stored)
     assert target.read_text("utf-8").splitlines()[1:] == [prior_row, main_row, supplement_row]
     current = target.read_bytes()
     assert updater.update_all() == 0
     assert target.read_bytes() == current
+
+
+def test_unlabelled_double_draw_keeps_existing_order_when_completing_the_date(tmp_path, monkeypatch):
+    prior, first, second = (1, 3, 5, 7, 9, 11), (2, 4, 6, 8, 10, 12), (2, 4, 6, 8, 12, 10)
+    saved = ["19-11-2026,1,3,5,7,9,11", "22-11-2026,2,4,6,8,12,10"]
+    html = ('<select name="select-year"><option value="2026" selected>2026</option></select>'
+            '<select name="select-month"><option value="11" selected>Noiembrie</option></select>'
+            + _draw_block("5/40", "22.11.2026", first)
+            + _draw_block("5/40", "22.11.2026", second)
+            + _draw_block("5/40", "19.11.2026", prior))
+    count, target, _ = run_update(tmp_path, monkeypatch, "loto_5_40", saved, "2026-11-19 1 3 5 7 9 11", html)
+    assert count == 1
+    assert target.read_text("utf-8").splitlines()[1:] == [*saved, "22-11-2026,2,4,6,8,10,12"]
+
+
+def test_concurrent_supplement_is_recognized_and_only_the_new_day_is_reordered(tmp_path):
+    target = tmp_path / "loto_5_40.csv"
+    rows = ["19-11-2026,2,4,6,8,12,10", "19-11-2026,2,4,6,8,10,12"]
+    target.write_text("\n".join(("date,n1,n2,n3,n4,n5,n6", *rows, "22-11-2026,2,4,6,8,12,10", "")))
+    def pair(day):
+        return [{"date": day, "main": nums, "supplementary": supp}
+                for supp, nums in [(True, (2, 4, 6, 8, 12, 10)), (False, (2, 4, 6, 8, 10, 12))]]
+    current = pair(date(2026, 11, 22))
+    args = dict(expected=[row.split(",") for row in rows], source_rows=[*pair(date(2026, 11, 19)), *current])
+    assert updater._append_rows_atomic(target, current, False, 6, **args) == 1
+    assert target.read_text().splitlines()[1:] == [*rows, "22-11-2026,2,4,6,8,10,12", "22-11-2026,2,4,6,8,12,10"]
+    snapshot = target.read_bytes()
+    assert updater._append_rows_atomic(target, current, False, 6, **args) == 0
+    assert target.read_bytes() == snapshot

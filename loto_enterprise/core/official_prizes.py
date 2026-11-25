@@ -9,7 +9,7 @@ or tax calculations. A REPORT is never exposed as a prize paid to a winner.
 from __future__ import annotations
 
 from contextlib import closing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import hashlib
@@ -77,6 +77,7 @@ class PrizeDraw:
     source_url: str
     currency: str = "lei"
     order_known: bool = True
+    supplementary: bool | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -298,7 +299,7 @@ def parse_month_html(
             raise ArchiveError("Official prize categories are incomplete or duplicated")
         draw = PrizeDraw(
             game, draw_date.isoformat(), tuple(numbers), joker,
-            tuple(categories), ARCHIVE_URLS[game],
+            tuple(categories), ARCHIVE_URLS[game], supplementary=supplementary,
         )
         same_day = by_date.setdefault(draw.draw_date, {})
         key = (_number_key(draw.numbers, game), draw.joker)

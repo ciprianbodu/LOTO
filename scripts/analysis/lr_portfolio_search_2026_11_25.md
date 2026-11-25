@@ -43,6 +43,23 @@ Celulele cu număr arată evenimente favorabile înainte → după. Coloana «Δ
 | joker | Orice premiu | 300 | 295.50 | 7,488 | 42 | 0 | 5,022,660 → 5,101,830 | +0.324000 | +1.5763% | 0.0949 → 0.1216 | 6,512,310 | 1,410,480 |
 | joker | Orice premiu | 400 | 394.50 | 9,427 → 9,496 | 56 | 0 | 5,493,870 → 5,510,070 | +0.066298 | +0.2949% | 0.1675 → 0.1952 | 6,512,310 | 1,002,240 |
 
+## Contribuția fiecărei etape
+
+Am măsurat cumulativ etapele în toate cele 42 de configurații, folosind traseul normal al optimizatorului. La fiecare etapă, am păstrat portofoliul din acel moment și am renumărat separat rezultatele favorabile. Timpii sunt de la intrarea în optimizator până la portofoliul afișat în celulă. Renumărarea separată a etapelor nu intră în acești timpi. Prima coloană de rezultate pornește de la planul anterior, adică șablonul oficial când încape sau soluția greedy pe pool. Celulele fără calificativ consemnează o soluție fezabilă.
+
+| Joc și obiectiv | Buget / cost jucat, lei | Inițial | +Beam | +LNS | +MILP | Beam extins |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5/40, 4+ | 300,00 / 285,50 | 118.807 · 0,06330 s | 118.807 · 0,07248 s | 119.292 · 0,08099 s | Geometrie prea mare | 119.292 · 0,08116 s |
+| 5/40, Orice premiu | 300,00 / 285,50 | 118.807 · 0,02412 s | 118.807 · 0,03285 s | 119.292 · 0,04153 s | Geometrie prea mare | 119.292 · 0,04170 s |
+| Joker, Orice premiu | 300,00 / 295,50 | 5.022.660 · 0,09731 s | 5.052.995 · 0,11141 s | 5.101.830 · 0,12350 s | Geometrie prea mare | 5.101.830 · 0,12407 s |
+| Joker, Orice premiu | 400,00 / 394,50 | 5.493.870 · 0,16922 s | 5.493.870 · 0,18775 s | 5.510.070 · 0,19697 s | Geometrie prea mare | 5.510.070 · 0,19807 s |
+| 6/49, 4+ | 100,00 / 96,50 | 103.404 · 0,00063 s · global | Limita deja atinsă | Limita deja atinsă | Limita deja atinsă | Limita deja atinsă |
+| Joker, 4+ | 105,99 / 77,50 | 1.721 · 0,00039 s | 1.721 · 0,00057 s | 1.721 · 0,00066 s | 1.721 · 0,25797 s · local (9 amplasări) | Etapă nealeasă |
+
+La Joker, cu bugetul de 300 lei și obiectivul «Orice premiu», căutarea beam a adăugat 30.335 de rezultate favorabile. Înlocuirea simultană de zone și refacerea portofoliului prin LNS au mai adăugat 48.835. LNS a produs și celelalte trei creșteri din tabel. La cele patru configurații câștigătoare, geometria depășea pragul MILP din cod. Căutarea beam extinsă a rulat în continuare, cu aceleași totaluri.
+
+Pe întreg lotul, 23 de configurații atingeau deja limita globală din planul inițial. În cele șase configurații analizate de MILP, solverul a confirmat maximul între amplasările evaluate, cu aceleași totaluri. Tabelul include câte un exemplu din fiecare situație. Opțiunea `--ablation` a scriptului exportă toate cele 42 de comparații pe etape, inclusiv costul, pragurile protejate și starea certificării.
+
 ## Limitele taxei pentru al doilea bilet fizic
 
 Am testat suma necesară pentru numărul minim de zone care cere încă un bilet, cu un ban sub limită, exact la limită și cu un ban peste. În aceste 18 comparații, optimizarea a păstrat numărătorii și costurile inițiale.

@@ -79,7 +79,7 @@ Am refăcut 24 de validări cu 100 lei și obiectivul „orice premiu”, folosi
 
 ## Probe de execuție
 
-Generatorul, dependențele de calcul și NiceGUI au rulat pe Python 3.15.2. Toate cele șase importuri obligatorii au trecut și verificarea pachetelor instalate a încheiat fără incompatibilități declarate. Într-o copie a versiunii finale, am compilat sursele Python și am rulat testele din directorul `tests/`. În verificarea de integrare, workerul a încheiat cu starea `COMPLETED` pentru toate cele 13 jocuri. Pagina a răspuns cu HTTP 200. Am verificat 96 de rezultate de scoring, 26 de generări cu și fără plafon, 24 de comparații de buget și 13 acoperiri complete. Amprentele istoricelor și ale fișierelor de stare protejate din copia de probă au rămas identice.
+Generatorul, dependențele de calcul și NiceGUI au rulat pe Python 3.15.2. Toate cele șase importuri obligatorii au trecut și verificarea pachetelor instalate a încheiat fără incompatibilități declarate. Într-o copie izolată, am compilat sursele Python și am rulat testele din directorul `tests/`. În verificarea de integrare, workerul a încheiat cu starea `COMPLETED` pentru toate cele 13 jocuri. Pagina a răspuns cu HTTP 200. Am verificat 96 de rezultate de scoring, 26 de generări cu și fără plafon, 24 de comparații de buget și 13 acoperiri complete. Amprentele istoricelor și ale fișierelor de stare protejate din copia de probă au rămas identice.
 
 **Arhiva privată de teste de pe stație, la începutul auditului** — 8.216 trecute, 104 eșuate, 15 erori, 23 omise. Arhiva a rulat în șapte copii independente, cu materialele locale de cercetare pe care unele teste le importă. Două eșecuri de autentificare Git proveneau din blocarea transportului HTTP în test. Cele patru scenarii de autentificare și eroare au trecut separat, cu serverul temporar de pe 127.0.0.1. Suitele de mai sus se suprapun, deci cifrele nu se adună.
 
@@ -97,21 +97,41 @@ Fiecare portofoliu se evaluează pe variantele complete, incluzând costul tutur
 
 Cele 42 de comparații combinatorice, numărătorii exacți, limitele superioare și cazurile fără îmbunătățire sunt în [raportul căutării pe scheme LR](lr_portfolio_search_2026_11_25.md). Datele pentru metodele predictive sunt retrospective. [Studiul pe portofoliile acelorași zile](advanced_lr_validation_2026_11_25.json)
 
+### Ce testează cele trei metode predictive
+
+Fixed Share actualizează ponderea fiecărui expert din succesul sau ratarea întregului portofoliu oficial. Regula deterministă joacă biletele unui singur expert. Comparația din arhivă folosește Hedge pe scoruri. Stacking-ul nou folosește rangurile previziunilor făcute înaintea zilei, dezacordurile și erorile din trecut pentru a estima probabilități marginale. Martorul Ridge din arhivă folosește caracteristici construite direct pe istoric. Modelul bayesian nou păstrează o distribuție explicită a duratei regimului, cu trunchiere pentru CPU și regularizare spre extragerile uniforme. Arhiva cuprinde și metode cu uitare, stare latentă sau amestec restrâns. Studiul precizează martorul efectiv măsurat pentru fiecare candidat. [Agregarea Fixed Share](https://mwarmuth.bitbucket.io/pubs/J39.pdf) · [Stacked generalization](https://doi.org/10.1016/S0893-6080%2805%2980023-1) · [Detectarea bayesiană a schimbărilor](https://arxiv.org/abs/0710.3742)
+
+Separat, între 13 septembrie și 29 octombrie 2026, am reluat pe aceleași 14 zile metoda fixată înainte de test, selectorul dinamic disponibil în aplicație și fiecare dintre cele trei metode noi. Toate au produs bilete pentru toate cele 15 extrageri ale fiecărui joc, la preț identic. Niciuna nu a avut 4+ pe o variantă. La 6/49 și la Joker au existat câștiguri în categoriile inferioare pentru unele metode. Raportul păstrează ponderile, variantele, suma plătită și motivele de rezervă. [Comparația pe zile comune](advanced_lr_validation_2026_11_25.md) · [Reproducerea celor cinci politici](advanced_lr_selector_replay.py)
+
+Cele două extensii opționale, modelul pentru mulțimi de cardinalitate fixă și boosting-ul pe reziduuri, au rămas propuneri. Comparațiile celor trei candidați prioritari pe bilete nu au furnizat un câștig predictiv care să justifice încă un nivel de modelare. [Calibrare, rezultate pe bilete și alarme pe extrageri uniforme](advanced_lr_validation_2026_11_25.md)
+
+### Cât de des se schimbă metoda când sunt punctate biletele
+
+La 200 lei am comparat 24 de configurații pe câte 180 de extrageri de intrare. Pentru fiecare joc am combinat ambele baze, ambele moduri și obiectivele 4+ și „orice premiu”. Fereastra de selecție cuprinde 60 de zile și 61 de extrageri. Alegerea pe toate variantele a diferit de alegerea pe pool în 12 din 22 de configurații evaluabile (54,5%). Acestea sunt rezultate în fereastra folosită la alegere. Configurațiile împart aceleași extrageri.
+
+| Joc | Configurații evaluate | Alegere schimbată | Exemplu în fereastra de selecție |
+|---|---:|---:|---|
+| 6/49 | 8 din 8 | 2 | În modul invers cu 10–40, extragerile cu 4+ pe o variantă au trecut de la 1 la 3 din 61. |
+| 5/40 | 6 din 8 | 6 | Cu baza completă în modul normal, 4+ a trecut de la 1 la 5 din 61. În ambele probe inverse 10–40, schema 37 cerea 16 numere și mai erau eligibile doar 15. |
+| Joker | 8 din 8 | 4 | În modul normal complet, numărul extragerilor cu orice premiu a trecut de la 13 la 18 din 61. În cele două probe inverse 10–40, portofoliul a putut fi jucat la 37 de extrageri din 61. Datele detaliate păstrează toate cele 24 de cazuri nejucabile pentru fiecare dintre cele două probe. |
+
+Prețul în bani și numărul extragerilor punctate sunt identice în fiecare pereche de rețete luată în comparație. [Rezultatele celor 24 de configurații](lr_selection_2026_11_25.json) · [Scriptul de reproducere](compare_lr_selection.py)
+
 ### Timp și memorie pe aceleași intrări
 
 Am folosit câte 110 extrageri din aceleași CSV-uri corectate pentru versiunea de referință și versiunea modificată. Bugetul a fost 100 lei, obiectivul 4+ și selectorul fix, iar reluarea a folosit ultimele 10% dintre rânduri. Fiecare pereche de valori arată prima execuție și repetarea în același proces. Procesul fiecărei versiuni a pornit cu un director de cache separat. Memoria este maximul observat al procesului Python la eșantionare de 10 ms. În paralel au rulat teste, astfel că timpii sunt orientativi, fără concluzie de accelerare.
 
 | Joc și bază | Operație | Înainte, secunde | După, secunde | Memorie maximă înainte / după, MiB |
 |---|---|---:|---:|---:|
-| 6/49, normal complet | Generare | 0.009 / 0.008 | 0.091 / 0.083 | 86.4 / 137.2 |
-| 6/49, normal complet | Re-Bench | 1.503 / 0.240 | 1.205 / 1.030 | 135.4 / 141.2 |
-| 6/49, normal complet | Validare | 0.231 / 0.225 | 0.954 / 0.973 | 135.5 / 141.2 |
-| 5/40, normal 10–40 | Generare | 0.700 / 0.004 | 0.478 / 0.105 | 134.6 / 137.4 |
-| 5/40, normal 10–40 | Re-Bench | 0.119 / 0.111 | 1.163 / 1.265 | 134.8 / 140.7 |
-| 5/40, normal 10–40 | Validare | 0.101 / 0.098 | 0.996 / 0.939 | 134.9 / 140.8 |
-| Joker, invers complet | Generare | 0.798 / 0.007 | 0.686 / 0.142 | 134.4 / 138.0 |
-| Joker, invers complet | Re-Bench | 0.162 / 0.168 | 1.769 / 1.648 | 134.8 / 141.7 |
-| Joker, invers complet | Validare | 0.278 / 0.282 | 2.591 / 2.541 | 134.9 / 141.7 |
+| 6/49, normal complet | Generare | 0.004 / 0.003 | 0.175 / 0.094 | 85.8 / 136.2 |
+| 6/49, normal complet | Re-Bench | 0.594 / 0.086 | 1.181 / 0.922 | 135.8 / 141.2 |
+| 6/49, normal complet | Validare | 0.076 / 0.076 | 0.812 / 0.860 | 135.9 / 141.2 |
+| 5/40, normal 10–40 | Generare | 0.620 / 0.004 | 0.452 / 0.108 | 134.5 / 138.6 |
+| 5/40, normal 10–40 | Re-Bench | 0.101 / 0.101 | 1.224 / 0.875 | 134.8 / 142.7 |
+| 5/40, normal 10–40 | Validare | 0.087 / 0.085 | 0.878 / 0.661 | 134.9 / 142.8 |
+| Joker, invers complet | Generare | 0.585 / 0.006 | 0.465 / 0.068 | 134.3 / 137.9 |
+| Joker, invers complet | Re-Bench | 0.130 / 0.133 | 1.123 / 1.022 | 134.6 / 141.9 |
+| Joker, invers complet | Validare | 0.222 / 0.224 | 1.551 / 1.443 | 134.7 / 142.0 |
 În aceste trei comparații la 100 lei, criteriul pe variante și criteriul anterior au ales aceeași rețetă în toate cele trei cazuri. Pe cele 11 extrageri de test pentru fiecare joc au fost zero rezultate 4+. Eșantionul este prea mic pentru o concluzie predictivă. Creșterea timpului pentru anumite scenarii include evaluarea variantelor și a metodelor suplimentare.
 
 Pentru reproducere, rulează într-o copie separată, cu `LOTO_RUNTIME_DIR`, `LOTO_JOBS_DB` și `LOTO_WF_CACHE_DIR` locale distincte. Comparația folosește Python 3.15.2 pe Windows. Parametrii exacți se găsesc în [scriptul de măsurare](measure_lr_pipeline.py). Comenzile de mai jos presupun o copie completă a repository-ului.
@@ -121,6 +141,7 @@ python -m pip check
 python -m compileall -q .
 python -m pytest -q -p no:cacheprovider
 python -m scripts.analysis.measure_lr_pipeline . _ISTORIC/loto_6_49.csv rezultat.json --game 6/49
+python -m scripts.analysis.compare_lr_selection _ISTORIC selectie.json --rows 180 --budget 200
 python -m scripts.analysis.compare_lr_portfolio_search --help
 python -m scripts.analysis.advanced_lr_validation --help
 ```
@@ -142,7 +163,17 @@ python -m scripts.analysis.advanced_lr_validation --help
 | `loto_enterprise/benchmark/lr_provenance.py`, `lr_budget_scoring.py` | Identificarea formulelor și planurilor compatibile și punctarea rețetelor pe toate biletele plătite. |
 | `loto_enterprise/benchmark/methods_online.py`, `loto_enterprise/core/lr_ticket_experts.py` | Calibrare temporală, distribuția duratei regimului și alegerea expertului după portofoliile zilelor anterioare. |
 | `loto_enterprise/core/lr_played_portfolio.py`, `lr_prospective.py` | Expandarea și punctarea biletelor. Păstrarea predicției inițiale și înregistrarea separată a rezultatului publicat. |
-| `scripts/analysis/advanced_lr_validation.py`, `compare_lr_portfolio_search.py`, `measure_lr_pipeline.py` | Reproducerea experimentelor predictive, a comparațiilor de acoperire la același cost și a măsurătorilor de timp și memorie. |
+| `scripts/analysis/advanced_lr_validation.py`, `compare_lr_portfolio_search.py`, `measure_lr_pipeline.py` | Reproducerea experimentelor predictive, a comparațiilor de acoperire la același cost și a măsurătorilor de timp și memorie. Compararea selecției pe pool cu selecția pe bilete este în `scripts/analysis/compare_lr_selection.py`. |
+
+### Verificarea deciziilor și a tragerilor speciale
+
+Înainte de calculul unui pool LR, workerul, recomandarea pe buget și reluarea zilnică verifică pentru fiecare urnă că istoricul din decizia generală de benchmark este un prefix al datelor disponibile și că versiunea motorului corespunde. Scorurile folosesc aceeași decizie pe durata generării. O decizie generală incompatibilă permite folosirea rezervei calculate pe trecutul disponibil. Profilurile Re-Bench specifice metodei și bazei au propria verificare a formulelor, catalogului, geometriei, bugetului și rezultatului direct exclus de metoda inversă. Am verificat cazul în care corectarea unei bile Joker afectează numai decizia urnei a doua.
+
+Într-o copie de test, publicarea principalei după ce CSV-ul stocase suplimentara a refăcut ordinea oficială a celor două. Două extrageri 5/40 cu aceleași șase numere și cu bila a șasea diferită au rămas distincte. O a doua actualizare a produs un fișier identic. Pentru etichete oficiale ambigue se păstrează ordinea existentă.
+
+### Verificări complete pe două sisteme
+
+La revizia `54da387`, pe Windows au trecut 6.821 de teste și 20 au fost omise. Am confruntat fiecare caz din colecția completă de 6.841 cu rezultatele execuției, în șase copii izolate. Pe Linux au trecut 6.826 și 15 au fost omise. În verificarea separată a lansatoarelor și proceselor Windows de pe GitHub au trecut 187 de teste și 17 au fost omise. Verificările dependențelor, compilarea și pornirea NiceGUI au trecut. Actualizările ulterioare sunt verificate de același flux la fiecare publicare pe `main`. [Rularea verificată](https://github.com/ciprianbodu/LOTO/actions/runs/45656307769) · [Rulările pentru versiunea publicată](https://github.com/ciprianbodu/LOTO/actions/workflows/loto-ci.yml?query=branch%3Amain)
 
 ## Inventarul modulelor
 

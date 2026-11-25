@@ -94,3 +94,13 @@ def test_joker_paid_scoring_requires_one_bonus_in_the_prefix_and_reports_hit6_un
     assert candidate["cost_bani"] == layout["price_bani"]
     assert candidate["paid_variants"] == layout["variants"]
     assert candidate["hit6"] is None
+
+
+def test_budget_reports_why_inverse_pool_is_impossible():
+    from loto_enterprise.benchmark.lr_budget_scoring import evaluate_budget_recipes
+
+    urns = [{"name": "Urna principală", "error": "Rămân 15 numere eligibile. Sunt necesare 16."}]
+    result = evaluate_budget_recipes({}, None, None, None, None, None, None, urns,
+                                     restricted=True, inverse=True, dynamic=False,
+                                     lookback=100, joker_size=3, check=lambda: None)
+    assert result == {"error": "Urna principală: Rămân 15 numere eligibile. Sunt necesare 16.", "n_eval": 0}

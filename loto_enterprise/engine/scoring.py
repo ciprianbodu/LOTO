@@ -14,6 +14,16 @@ from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
 class ScoringMixin:
+    def _bind_lr_decision(self):
+        from loto_enterprise.benchmark.freshness import compatible_lr_config
+        from loto_enterprise.core.method_selector import _load_config
+
+        keys = [self._bench_game_key()]
+        if self.game_type == "joker":
+            keys.append(self._bench_game_key(True))
+        config = _load_config(self._decision_config_path())
+        self._lr_decision_snapshot = compatible_lr_config(config, self.data, keys)
+
     def _scores_via_bench_winner(self, is_joker_drum: bool = False) -> dict[int, float]:
         """Route scoring through the benchmark-winning method for this game/pool.
 
@@ -71,7 +81,11 @@ class ScoringMixin:
         # intrarea jocului; altă țară fără Re-Bench sau cu un fișier care nu îi
         # aparține): frequency, marcat explicit ca fallback în audit — nu ca un
         # câștigător de bench. Pool-ul e același: aceeași funcție de frecvență.
-        config_path = self._decision_config_path()
+        snapshot = getattr(self, "_lr_decision_snapshot", None)
+        if snapshot is not None and game_key not in snapshot:
+            self._bench_winner_missing_reason = "Decizia globală nu corespunde istoricului disponibil și catalogului LR."
+            return {}
+        config_path = self._decision_config_path() if snapshot is None else snapshot[game_key]
         if not has_decision(game_key, config_path):
             _lot = getattr(self, "lottery", None)
             self._bench_winner_missing_reason = (

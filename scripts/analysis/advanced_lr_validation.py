@@ -45,6 +45,7 @@ UNIFORM_SEED = 1872026
 UNIFORM_REPLICATES = 24
 UNIFORM_DAYS = 450
 UNIFORM_WARMUP = 128
+UNIFORM_ALARM_THRESHOLD = 0.10
 
 
 def _input(history, lot):
@@ -117,9 +118,12 @@ def evaluate_uniform_bocpd():
         losses = defaultdict(list)
         fair = np.full(maximum, width / maximum)
         mass_error = 0.0
+        alarm_days = replicates_with_alarm = 0
+        max_reset_posterior = 0.0
         for _ in range(UNIFORM_REPLICATES):
             model = RunLengthPosterior(width / maximum, maximum)
             trajectory = defaultdict(list)
+            replicate_alarms = 0
             for day in range(UNIFORM_DAYS):
                 probabilities = model.predict()
                 drawn = rng.choice(maximum, size=width, replace=False) + 1
@@ -131,10 +135,24 @@ def evaluate_uniform_bocpd():
                         trajectory[key].append(value - uniform[key])
                         losses[key].append(value)
                 model.observe(np.isin(np.arange(1, maximum + 1), drawn).astype(np.int64), 1)
+                if day >= UNIFORM_WARMUP:
+                    # A run of length one starts at the date just observed.
+                    reset_posterior = float(model.weights[0])
+                    max_reset_posterior = max(max_reset_posterior, reset_posterior)
+                    replicate_alarms += reset_posterior >= UNIFORM_ALARM_THRESHOLD
+            alarm_days += replicate_alarms
+            replicates_with_alarm += replicate_alarms > 0
             for key, path in trajectory.items():
                 relative[key].append(float(np.mean(path)))
+        evaluated_days = UNIFORM_REPLICATES * (UNIFORM_DAYS - UNIFORM_WARMUP)
         reports.append({
             "urn": name, "universe": maximum, "draw_size": width, "max_inclusion_mass_error": mass_error,
+            "false_alarms": {
+                "days_observed": evaluated_days, "alarm_days": alarm_days, "rate_per_day": alarm_days / evaluated_days,
+                "replicates_observed": UNIFORM_REPLICATES, "replicates_with_alarm": replicates_with_alarm,
+                "rate_per_replicate": replicates_with_alarm / UNIFORM_REPLICATES,
+                "max_reset_posterior": max_reset_posterior,
+            },
             "losses": {key: {"bocpd": float(np.mean(values)), "uniform": baseline,
                              "mean_excess": float(np.mean(relative[key])),
                              "replicate_sd": float(np.std(relative[key], ddof=1))}
@@ -143,7 +161,10 @@ def evaluate_uniform_bocpd():
         })
     return {"seed": UNIFORM_SEED, "replicates_per_urn": UNIFORM_REPLICATES, "days_per_replicate": UNIFORM_DAYS,
             "warmup_days": UNIFORM_WARMUP, "scored_per_urn": UNIFORM_REPLICATES*(UNIFORM_DAYS - UNIFORM_WARMUP),
-            "hazard": HAZARD, "max_run_length": RUN_LIMIT, "prior_pseudodraws": PRIOR_DRAWS, "results": reports}
+            "hazard": HAZARD, "max_run_length": RUN_LIMIT, "prior_pseudodraws": PRIOR_DRAWS,
+            "alarm_rule": {"posterior": "P(run_length=1 | draws through current day)", "comparison": ">=",
+                           "threshold": UNIFORM_ALARM_THRESHOLD},
+            "results": reports}
 
 
 def _calibration(rows):
