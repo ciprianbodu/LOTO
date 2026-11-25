@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, time
 import json
+import os
 import sqlite3
 from unittest.mock import Mock
 
@@ -132,6 +133,7 @@ def test_registration_and_official_same_day_evaluations_survive_restart(monkeypa
     assert ledger.append_official_draws([first, second], archive_sha256=ARCHIVE_HASH) == 0
     assert _read(local, "predictions") == [original]
     one, two = _read(local, "evaluations")
+    assert original["evaluation_contract_version"] == one["evaluation_contract_version"] == 2
     assert one["grade"]["hit6"] and not two["grade"]["hit6"]
     assert one["official_archive_sha256"] == ARCHIVE_HASH
     assert one["date"] == two["date"] == original["target_day"]
@@ -161,7 +163,19 @@ def test_two_simultaneous_generations_keep_one_snapshot(monkeypatch, local):
     assert len(_read(local, "predictions")) == 1
 
 
-def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, local):
+@pytest.mark.parametrize("legacy", [False, True])
+def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, local, legacy):
+    if legacy:
+        current_snapshot = ledger._snapshot
+
+        def old_snapshot(*args, **kwargs):
+            entry = current_snapshot(*args, **kwargs)
+            entry.pop("evaluation_contract_version")
+            original = {k: v for k, v in entry.items() if k not in ("id", "captured_at")}
+            entry["id"] = ledger._hash(original)
+            return entry
+
+        monkeypatch.setattr(ledger, "_snapshot", old_snapshot)
     clock = [_moment()]
     monkeypatch.setattr(ledger, "_clock", lambda: clock[0])
     plan = _plan("5/40")
@@ -182,6 +196,7 @@ def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, lo
         [replace(draw, numbers=(*numbers[:4], extra, numbers[-1]))], archive_sha256=ARCHIVE_HASH,
     ) == 1
     first, second = _read(local, "evaluations")
+    assert first["evaluation_contract_version"] == second["evaluation_contract_version"] == (1 if legacy else 2)
     assert first["grade"]["prize_counts"]["I"] >= 1
     assert "I" not in second["grade"]["prize_counts"]
     assert second["grade"]["prize_counts"]["II"] >= 1
@@ -228,6 +243,12 @@ def test_build_copies_get_source_fingerprint_without_git(monkeypatch, tmp_path):
     assert all(len(row["source_sha256"]) == 64 and row["git_sha"] is None for row in (before, after))
     assert before != after
 
+    metadata = tables.stat()
+    tables.write_text("table 2", encoding="utf-8")
+    os.utime(tables, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+    assert tables.stat().st_mtime_ns == metadata.st_mtime_ns
+    assert ledger._build_identity()["source_sha256"] != after["source_sha256"]
+
 
 def test_unrelated_invalid_draw_does_not_block_official_target(monkeypatch, local):
     clock = [_moment()]
@@ -260,3 +281,14 @@ def test_unrelated_invalid_draw_does_not_block_official_target(monkeypatch, loca
     monkeypatch.setattr(official_prizes, "_fetch_month_html", lambda *_: official)
     assert ledger.refresh_official_evaluations() == (1, [])
     assert _read(local, "evaluations")[0]["numbers"] == [1, 4, 6, 23, 27, 28]
+
+
+@pytest.mark.parametrize("delayed_at", ["write", "commit"])
+def test_expired_prediction_cannot_be_written_or_committed(monkeypatch, local, delayed_at):
+    early = _moment(hour=15, minute=29)
+    late = _moment(hour=20)
+    readings = iter((early, late) if delayed_at == "write" else (early, early, late))
+    monkeypatch.setattr(ledger, "_clock", lambda: next(readings))
+    entries, errors = ledger.register_lr_recommendations([_plan()])
+    assert not entries and "Ora-limită a trecut" in errors["6/49"]
+    assert not _read(local, "predictions")

@@ -12,9 +12,7 @@ import pandas as pd
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
-from covering.lr_schemes import scheme_tickets
 from covering.lr_selection import resolve_lr_scheme
-from covering.probability import subset_hit_table
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.decision import MIN_CONSISTENCY_WINDOWS, game_hit_target
 from loto_enterprise.benchmark.lr_hypotheses import _cancellation, _training, benchmark_lr_hypotheses
@@ -29,6 +27,7 @@ from loto_enterprise.core.ranking import rank_by_score
 
 
 _RANGE = (10, 40)
+_SELECTION_ROLES = ("selected_method", "joker_selection", "direct_selection", "direct_joker_selection")
 
 
 def _bench_windows(rows):
@@ -78,28 +77,9 @@ def _fit(game, training, lot, *, inverse, cancel_path, **options):
 
 def _rank(profile, matrix, bounds, origin, lookback, maximum, count, excluded, *, main_urn=False):
     past, cutoffs = _training(matrix, bounds, origin, lookback)
-    scores, _ = _profile_scores((profile, "members"), past, cutoffs, maximum, excluded, count)
-    return rank_lr_pool(scores, count) if main_urn else rank_by_score(scores, count)
-
-
-def _ticket_layout(plan, objective, scheme, joker_count):
-    positions = tuple(range(1, scheme.n + 1))
-    jokers = tuple(range(1, joker_count + 1))
-    layout = restrict_to_pool(deepcopy(plan), objective, positions, jokers)
-    masks = set()
-    bonus_touches = [0] * joker_count
-    for ticket in layout["tickets"]:
-        for zone in ticket:
-            official = resolve_lr_scheme(plan["game"], zone["code"])
-            for variant in scheme_tickets(official, zone["numbers"]):
-                mask = sum(1 << (p - 1) for p in variant)
-                masks.add(mask)
-                if joker_count:
-                    bonus_touches[zone["joker"] - 1] |= mask
-    if not masks:
-        raise ValueError("Bugetul nu produce bilete oficiale pe pool-ul selectat.")
-    best_hits = subset_hit_table(scheme.n, tuple(sorted(masks)))[1]
-    return layout, best_hits, bonus_touches
+    scores, selection = _profile_scores((profile, "members"), past, cutoffs, maximum, excluded, count)
+    ranking = rank_lr_pool(scores, count) if main_urn else rank_by_score(scores, count)
+    return ranking, {"method": selection["method"], "fallback": selection["fallback"], "source": profile["source"]}
 
 
 def _day_forecast(
@@ -109,15 +89,16 @@ def _day_forecast(
     direct, tested = methods["direct"], methods["tested"]
     blocked = set(outside)
     excluded_pool = []
+    selections = {}
     if inverse:
-        normal = _rank(
+        normal, selections["direct_selection"] = _rank(
             direct[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
         )
         excluded_pool = sorted(normal)
         blocked.update(normal)
-    pool = sorted(_rank(
+    pool, selections["selected_method"] = _rank(
         tested[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
-    ))
+    )
 
     jokers, excluded_jokers = [], []
     if key := lot.bench_key_urna2:
@@ -125,46 +106,41 @@ def _day_forecast(
             raise ValueError("Urna 2 Joker nu are extrageri valide înaintea acestei zile.")
         maximum = lot.geo.second.max_n
         if inverse:
-            excluded_jokers = sorted(_rank(
+            direct_bonus, selections["direct_joker_selection"] = _rank(
                 direct[key], bonus_matrix, bonus_bounds, bonus_origin, lookback, maximum, joker_size, (),
-            ))
+            )
+            excluded_jokers = sorted(direct_bonus)
         # Joker ordering is meaningful: the generator assigns each rank to a zone.
-        jokers = _rank(
+        jokers, selections["joker_selection"] = _rank(
             tested[key], bonus_matrix, bonus_bounds, bonus_origin, lookback, maximum, joker_size, excluded_jokers,
         )
-    return pool, excluded_pool, len(blocked), jokers, excluded_jokers
-
-
-def _outcome(numbers, pool, joker, jokers, best_hits, bonus_touches, game, objective):
-    actual = set(numbers)
-    mask = sum(1 << index for index, number in enumerate(pool) if number in actual)
-    ticket_hits = int(best_hits[mask])
-    joker_hit = ticket_joker_hit = None
-    if joker is not None:
-        joker_hit = joker in jokers
-        ticket_joker_hit = joker_hit and bool(mask & bonus_touches[jokers.index(joker)])
-    threshold = 3 if objective == ANY_PRIZE and game != "5/40" else 4
-    objective_hit = ticket_hits >= threshold
-    if not objective_hit and game == "joker" and objective == ANY_PRIZE and ticket_hits > 0:
-        objective_hit = ticket_joker_hit
-    return {
-        "pool_hits": mask.bit_count(), "ticket_hits": ticket_hits,
-        "joker_hit": joker_hit, "ticket_joker_hit": ticket_joker_hit, "objective_hit": objective_hit,
-    }
+    return {"pool": sorted(pool), "excluded_pool": excluded_pool, "eligible_count": lot.max_n - len(blocked),
+            "jokers": jokers, "excluded_jokers": excluded_jokers, **selections}
 
 
 def _summary(draws, days, start):
     scored = [draw for draw in draws if draw["pool_hits"] is not None]
     low, high = _RANGE
+    fallbacks = [{role for role in _SELECTION_ROLES if (draw.get(role) or {}).get("fallback")} for draw in scored]
     return {
         "rows": len(draws), "days": days, "evaluated": len(scored), "infeasible": len(draws) - len(scored),
         "first_date": draws[0]["date"], "last_date": draws[-1]["date"], "training_rows": start,
         "all_main_in_10_40": sum(all(low <= n <= high for n in draw["numbers"]) for draw in draws),
         **{f"pool_{k}plus": sum(draw["pool_hits"] >= k for draw in scored) for k in range(3, 7)},
         **{f"ticket_{k}plus": sum(draw["ticket_hits"] >= k for draw in scored) for k in range(3, 7)},
-        "paid_winning_variants": sum(d.get("winning_variants", 0) for d in scored),
+        "paid_winning_variants": sum(d["winning_variants"] for d in scored)
+        if all(d["winning_variants"] is not None for d in scored) else None,
+        "paid_winning_variants_min": sum(d.get("winning_variants_min", d["winning_variants"]) for d in scored),
+        "paid_winning_variants_max": sum(d.get("winning_variants_max", d["winning_variants"]) for d in scored),
+        "any_prize_hits": sum(d["any_prize"] is True for d in scored),
+        "any_prize_evaluated": sum(d["any_prize"] is not None for d in scored),
+        "total_cost_bani": sum(d["price_bani"] for d in scored),
+        "paid_variants": sum(d["paid_variants"] for d in scored),
+        "distinct_variants": sum(d["distinct_variants"] for d in scored),
+        "duplicate_variants": sum(d["duplicates"] for d in scored),
         "draws_with_duplicates": sum(bool(d.get("duplicates")) for d in scored),
-        "fallback_draws": sum(bool((d.get("selected_method") or {}).get("fallback")) for d in scored),
+        "fallback_draws": sum(bool(roles) for roles in fallbacks),
+        "fallback_by_role": {role: sum(role in roles for roles in fallbacks) for role in _SELECTION_ROLES},
         "objective_hits": sum(draw["objective_hit"] is True for draw in scored),
         "objective_evaluated": sum(draw["objective_hit"] is not None for draw in scored),
         "joker_hits": sum(draw["joker_hit"] is True for draw in scored),
@@ -215,6 +191,7 @@ def validate_lr_walk_forward(
         comparison = compare_budget_ranges(
             budget_lei, objective, game_id, {game_id: training}, dynamic=dynamic, inverse=inverse,
             lookback=lookback, hit_target=hit_target, joker_size=joker_size,
+            **({"selection_policy": selection_policy} if selection_policy else {}),
         )
         restricted = comparison["recommended_range"] == _RANGE
         auto_reason = comparison["reason"]
@@ -256,7 +233,7 @@ def validate_lr_walk_forward(
         if not len(valid_bonus_rows) or valid_bonus_rows[0] >= bounds[-1]:
             raise ValueError("Urna 2 Joker nu are extrageri valide înaintea niciunei zile de test.")
 
-    layout, best_hits, bonus_touches = _ticket_layout(plan, objective, scheme, bonus_count)
+    layout = restrict_to_pool(deepcopy(plan), objective, list(range(1, scheme.n + 1)), list(range(1, bonus_count + 1)))
     options = {
         "scheme": scheme.code, "restricted": bool(restricted), "dynamic": dynamic,
         "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
@@ -281,6 +258,18 @@ def validate_lr_walk_forward(
         methods = {"direct": direct, "tested": tested}
 
     days = tuple(dict.fromkeys(bounds[start:]))
+    paid_by_scope = {}
+    if daily and selection_policy is None:
+        from loto_enterprise.benchmark.lr_budget_scoring import MIN_PORTFOLIO_DAYS, _MIN_TRAINING_ROWS, replay_budget_portfolios
+
+        origins = [origin for origin in days if origin >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS]
+        scopes = (False, True) if requested_restricted is None else (restricted,)
+        paid_by_scope = {
+            base: replay_budget_portfolios(
+                plan, lot, scheme, matrix, frame, origins, inverse=inverse, dynamic=dynamic, lookback=lookback,
+                joker_size=joker_size, number_range=_RANGE if base else None, check=check,
+            ) for base in scopes
+        }
     draws = []
     for origin, end in zip(days, (*days[1:], len(matrix)), strict=True):
         check()
@@ -293,7 +282,8 @@ def validate_lr_walk_forward(
                 if requested_restricted is None:
                     ranges = compare_budget_ranges(budget_lei, objective, game_id, prefix, dynamic=dynamic,
                                                    inverse=inverse, lookback=lookback, hit_target=hit_target,
-                                                   joker_size=joker_size)
+                                                   joker_size=joker_size,
+                                                   **({"selection_policy": selection_policy} if selection_policy else {}))
                     daily_restricted = ranges["recommended_range"] == _RANGE
                 if selection_policy == "online_ticket_experts":
                     from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
@@ -302,10 +292,12 @@ def validate_lr_walk_forward(
                         number_range=_RANGE if daily_restricted else None, lookback=lookback,
                         joker_size=joker_size, objective=objective, cancelled=check)
                 else:
+                    snapshot = paid_by_scope.get(daily_restricted, {}).get(origin)
+                    options = {"paid_snapshot": {game_id: snapshot}} if snapshot is not None else {}
                     daily_plan, = recommend_playable_games(
                         budget_lei, objective, game_id, prefix, pool_codes={game_id: scheme.code},
                         lookback=lookback, dynamic=dynamic, joker_size=joker_size, inverse=inverse,
-                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None)
+                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None, **options)
                 forecast = daily_plan.get("forecast")
                 if not forecast or not daily_plan["tickets"]:
                     raise ValueError(daily_plan.get("forecast_error", "Bugetul nu produce bilete LR."))
@@ -313,18 +305,16 @@ def validate_lr_walk_forward(
                 played = {"pool": pool, "jokers": jokers, "eligible_count": forecast["eligible_count"],
                           "excluded_pool": list(forecast.get("excluded_pool", ())),
                           "excluded_jokers": list(forecast.get("excluded_jokers", ())),
-                          "selected_method": forecast["selection"], "restricted": daily_restricted}
+                          "selected_method": forecast["selection"], "restricted": daily_restricted,
+                          **{role: forecast[role] for role in _SELECTION_ROLES[1:] if forecast.get(role)}}
             else:
-                pool, excluded, blocked_count, jokers, excluded_jokers = _day_forecast(
+                played = _day_forecast(
                     lot, matrix, bounds, origin, lookback, scheme, outside, inverse, methods,
                     bonus_matrix, bonus_bounds, bonus_origin, joker_size,
                 )
+                pool, jokers = played["pool"], played["jokers"]
                 daily_plan = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
                 daily_plan["forecast_pool"] = pool
-                played = {
-                    "pool": pool, "excluded_pool": excluded, "eligible_count": lot.max_n - blocked_count,
-                    "jokers": jokers, "excluded_jokers": excluded_jokers,
-                }
             expanded = expand_plan(daily_plan)
             played["layout_id"] = layout_identity(daily_plan)
             played["tickets"] = daily_plan["tickets"]
@@ -339,19 +329,15 @@ def validate_lr_walk_forward(
             if "error" in played:
                 outcome = dict.fromkeys(("pool_hits", "ticket_hits", "joker_hit", "ticket_joker_hit", "objective_hit"))
             else:
-                # Missing official Joker still allows measurement of the main-urn hits.
-                outcome = _outcome(numbers, pool, joker, jokers, best_hits, bonus_touches, game_id, objective)
-                if game_id != "joker" or joker is not None:
-                    grade = grade_draw(expanded, numbers, joker, draw_date=day_labels[i])
-                    outcome.update(grade, ticket_hits=grade["max_hits"],
-                                   objective_hit=grade["any_prize" if objective == ANY_PRIZE else "hit4"])
-                    if game_id == "joker":
-                        outcome["ticket_joker_hit"] = any(
-                            bonus == joker and set(variant).intersection(numbers) for variant, bonus, _ in expanded.variants)
-                else:
-                    maximum = max(len(set(v).intersection(numbers)) for v, _, _ in expanded.variants)
-                    outcome.update(ticket_hits=maximum, objective_hit=(maximum >= 4 if objective != ANY_PRIZE else
-                                   True if maximum >= 3 else None if maximum else False))
+                grade = grade_draw(expanded, numbers, joker, draw_date=day_labels[i])
+                outcome = dict(grade, ticket_hits=grade["max_hits"],
+                               objective_hit=grade["any_prize" if objective == ANY_PRIZE else "hit4"],
+                               joker_hit=None, ticket_joker_hit=None)
+                if joker is not None:
+                    outcome["joker_hit"] = joker in jokers
+                    outcome["ticket_joker_hit"] = any(
+                        bonus == joker and set(variant).intersection(numbers)
+                        for variant, bonus, _ in expanded.variants)
             draws.append({
                 "date": day_labels[i], "numbers": numbers, "joker_drawn": joker, "training_rows": origin,
                 **played, **outcome,

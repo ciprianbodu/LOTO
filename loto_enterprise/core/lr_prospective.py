@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from covering.lr_schemes import LR_DIR
 from loto_enterprise.core.lotteries import require_lottery
-from loto_enterprise.core.lr_played_portfolio import PlayedPortfolio, expand_plan, grade_draw
+from loto_enterprise.core.lr_played_portfolio import CONTRACT_VERSION, PlayedPortfolio, expand_plan, grade_draw
 from loto_enterprise.core.official_prizes import normalize_game
 from runtime_paths import PROJECT_ROOT, RUNTIME_ROOT
 
@@ -110,8 +110,13 @@ def _build_identity():
     source.update((PROJECT_ROOT / "covering").rglob("*.py"))
     source.update((PROJECT_ROOT / "loto_enterprise").rglob("*.py"))
     source.update(path for path in LR_DIR.rglob("*") if path.is_file())
-    files = tuple((p, p.stat().st_mtime_ns) for p in sorted(source) if p.is_file())
-    return {"git_sha": _git_identity(), "source_sha256": _source_identity(files)}
+    digest = sha256()
+    for path in sorted(source):
+        if path.is_file():
+            relative = path.relative_to(PROJECT_ROOT).as_posix()
+            digest.update(relative.encode("utf-8") + b"\0")
+            digest.update(sha256(path.read_bytes()).digest())
+    return {"git_sha": _git_identity(), "source_sha256": digest.hexdigest()}
 
 
 @lru_cache(maxsize=1)
@@ -129,16 +134,6 @@ def _git_identity():
         pass
 
     return code_sha
-
-
-@lru_cache(maxsize=2)
-def _source_identity(files):
-    digest = sha256()
-    for path, _ in files:
-        relative = path.relative_to(PROJECT_ROOT).as_posix()
-        digest.update(relative.encode("utf-8") + b"\0")
-        digest.update(sha256(path.read_bytes()).digest())
-    return digest.hexdigest()
 
 
 @contextmanager
@@ -185,7 +180,7 @@ def _connect(path):
         db.close()
 
 
-def _snapshot(plan, settings, captured, known_days, target_day=None, schedule=None):
+def _snapshot(plan, settings, captured, known_days, build, target_day=None, schedule=None):
     forecast = plan.get("forecast") or {}
     history_hash = forecast.get("history_hash")
     if not isinstance(history_hash, str) or not (_ENGINE_HASH.fullmatch(history_hash) or _HASH.fullmatch(history_hash)):
@@ -201,10 +196,11 @@ def _snapshot(plan, settings, captured, known_days, target_day=None, schedule=No
     expanded = expand_plan(plan)
     support = {
         "schema": _SCHEMA,
+        "evaluation_contract_version": CONTRACT_VERSION,
         "game": plan["game"],
         "target_day": selected.isoformat(),
         "target_close": close.isoformat(),
-        "build": _build_identity(),
+        "build": build,
         "history": {
             "engine_hash": history_hash,
             "sha256": full_hash,
@@ -241,11 +237,14 @@ def register_lr_recommendations(plans, *, settings=None, known_days=None, target
     """Store each successful explicit generation. Return registered records and errors by game."""
     captured = _clock().astimezone(_TIME_ZONE)
     records, errors = [], {}
+    build = None
     for plan in plans:
         if not plan.get("tickets") or not plan.get("forecast"):
             continue
         try:
-            entry = _snapshot(plan, settings or {}, captured, known_days or {}, target_day, schedule)
+            if build is None:
+                build = _build_identity()
+            entry = _snapshot(plan, settings or {}, captured, known_days or {}, build, target_day, schedule)
         except (OSError, TypeError, ValueError) as exc:
             errors[plan["game"]] = str(exc)
             continue
@@ -253,20 +252,36 @@ def register_lr_recommendations(plans, *, settings=None, known_days=None, target
     if not records:
         return [], errors
 
-    result = []
+    expired = "Ora-limită a trecut înainte de salvarea predicției."
+    result, inserted = [], {}
     with _connect(_location(registry_path)) as db:
         db.execute("BEGIN IMMEDIATE")
+        writable_at = _clock()
         for entry in records:
             previous = db.execute("SELECT payload FROM predictions WHERE id=?", (entry["id"],)).fetchone()
             if previous is None:
+                closes = datetime.fromisoformat(entry["target_close"])
+                if not captured <= writable_at < closes:
+                    errors[entry["game"]] = expired
+                    continue
                 db.execute(
                     "INSERT INTO predictions VALUES (?, ?, ?, ?)",
                     (entry["id"], entry["game"], entry["target_day"], _canonical(entry)),
                 )
+                inserted[entry["id"]] = closes
             else:
                 entry = json.loads(previous["payload"])
             result.append({k: entry[k] for k in ("id", "game", "target_day", "captured_at")})
-        db.commit()
+        # Building the evidence or waiting for another writer may run past
+        # closing time. A receipt is valid only if its first write can commit.
+        if inserted and not captured <= _clock() < min(inserted.values()):
+            db.rollback()
+            for entry in result:
+                if entry["id"] in inserted:
+                    errors[entry["game"]] = expired
+            result = [entry for entry in result if entry["id"] not in inserted]
+        else:
+            db.commit()
     return result, errors
 
 
@@ -324,7 +339,12 @@ def append_official_draws(draws, *, archive_sha256, registry_path=None):
                     tuple((tuple(main), joker, count) for main, joker, count in registered["variants"]),
                     registered["price_bani"], registered["paid_variants"],
                 )
+                # Both contracts agree for complete official results verified above.
+                rule = registered.get("evaluation_contract_version", 1)
+                if rule not in (1, CONTRACT_VERSION):
+                    raise ValueError("Versiune necunoscută a regulii de evaluare înregistrate.")
                 actual = {
+                    "evaluation_contract_version": rule,
                     "game": game,
                     "date": day.isoformat(),
                     "numbers": draw.numbers,

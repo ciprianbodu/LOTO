@@ -51,7 +51,7 @@ def _draw_table(draws, inverse, joker):
         fields.extend([("joker_drawn", "Bila Joker extrasă"), ("jokers", "Pool Urna 2")])
         if inverse:
             fields.append(("excluded_jokers", "Bile Joker excluse"))
-        fields.extend([("joker_hit", "Bila în pool"), ("ticket_joker_hit", "Bila pe bilet")])
+        fields.extend([("joker_hit", "Bila în pool"), ("ticket_joker_hit", "Joker și cel puțin un număr pe aceeași variantă")])
     fields.append(("objective_hit", "Obiectiv atins"))
     if any(draw.get("selected_method") for draw in draws):
         fields.append(("selected_method", "Metodă folosită"))
@@ -144,13 +144,33 @@ def _game_result(entry):
         if summary["infeasible"]:
             ui.label(f"Extrageri fără bilet evaluabil · {summary['infeasible']}.").classes("text-warning")
         pool_counts = [f"{k}+ · {summary[f'pool_{k}plus']}" for k in range(3, lot.draw_n + 1)]
-        ticket_counts = [f"{k}+ · {summary[f'ticket_{k}plus']}" for k in range(3, lot.pick_n + 1)]
+        n_played = summary["evaluated"]
+        ticket_counts = []
+        for threshold in range(3, lot.pick_n + 1):
+            hits = summary[f"ticket_{threshold}plus"]
+            ratio = f" ({100 * hits / n_played:.2f}%)".replace(".", ",") if n_played else ""
+            ticket_counts.append(f"{threshold}+ · {hits}/{n_played}{ratio}")
         ui.label("Extrageri cu potriviri în pool · " + " / ".join(pool_counts)).classes("text-body2")
         ui.label("Extrageri cu potriviri pe aceeași variantă LR · " + " / ".join(ticket_counts)).classes("text-body2")
+        if "any_prize_evaluated" in summary:
+            unknown = n_played - summary["any_prize_evaluated"]
+            status = f" · {unknown} rezultate nedeterminate" if unknown else ""
+            ui.label(f"Orice premiu · {summary['any_prize_hits']} din {summary['any_prize_evaluated']} "
+                     f"extrageri evaluabile{status}.").classes("text-body2")
+            wins = summary["paid_winning_variants"]
+            if wins is None:
+                wins = f"{summary['paid_winning_variants_min']}–{summary['paid_winning_variants_max']}"
+            cost = f"{summary['total_cost_bani'] / 100:.2f}".replace(".", ",")
+            ui.label(f"Variante câștigătoare · {wins}. Cost în perioada testată · {cost} lei. "
+                     f"Variante plătite · {summary['paid_variants']}, dintre care "
+                     f"{summary['duplicate_variants']} repetări în aceeași extragere.").classes("text-body2")
+        if summary.get("fallback_by_role") is not None:
+            ui.label(f"Metodă de rezervă în selecția biletului sau a pool-ului direct exclus · "
+                     f"{summary['fallback_draws']} din {n_played} extrageri jucate.").classes("text-body2")
         if lot.bench_key_urna2:
             if summary.get("ticket_joker_evaluated") is not None:
                 ui.label(f"Urna 2 · bila extrasă în pool la {summary['joker_hits']} din {summary['joker_evaluated']} "
-                         f"extrageri, pe bilet la {summary['ticket_joker_hits']} din "
+                         f"extrageri, pe aceeași variantă cu cel puțin un număr principal corect la {summary['ticket_joker_hits']} din "
                          f"{summary['ticket_joker_evaluated']}.").classes("text-body2")
             else:
                 ui.label(f"Urna 2 · bila extrasă în pool la {summary['joker_hits']} din "

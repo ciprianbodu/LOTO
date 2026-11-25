@@ -94,6 +94,65 @@ worker.main()
             p.communicate(timeout=10)
 
 
+def test_worker_releases_ownership_after_all_failed_writes_and_restart_recovers(tmp_path):
+    import sqlite3
+    import job_queue as q
+
+    db = str(tmp_path / "queue.db")
+    jid = q.submit_job("unknown", "{}", db_path=db)
+    ready, locked, attempts = tmp_path / "ready", tmp_path / "locked", tmp_path / "attempts"
+    env = {"LOTO_JOBS_DB": db, "LOTO_RUNTIME_DIR": str(tmp_path),
+           "LOTO_WF_CACHE_DIR": str(tmp_path / "wf")}
+    script = """import pathlib, sys, time
+import job_queue as q, worker
+
+connect = q._connect
+def short_timeout(*args):
+    conn = connect(*args)
+    conn.execute("PRAGMA busy_timeout=40")
+    return conn
+q._connect = short_timeout
+worker._COMPLETE_BACKOFF_SEC = .01
+fail_job = worker.fail_job
+def record_failure(*args, **kwargs):
+    with pathlib.Path(sys.argv[3]).open("a") as log:
+        log.write("x")
+    return fail_job(*args, **kwargs)
+worker.fail_job = record_failure
+
+def work(job):
+    pathlib.Path(sys.argv[1]).touch()
+    for _ in range(400):
+        if pathlib.Path(sys.argv[2]).exists():
+            raise RuntimeError("simulated job failure")
+        time.sleep(.025)
+    raise AssertionError("The test failed to lock SQLite")
+worker._process_one_job = work
+worker.main()
+"""
+    owner = child(script, ready, locked, attempts, env=env)
+    restart = None
+    try:
+        until(ready.exists, owner)
+        with sqlite3.connect(db) as blocker:
+            blocker.execute("BEGIN IMMEDIATE")
+            locked.touch()
+            output, _ = owner.communicate(timeout=25)
+            assert owner.returncode == 0, output
+            assert attempts.read_text() == "xxxx"
+            assert q.get_job_status(jid, db)["status"] == q.JOB_RUNNING
+        restart = child("import worker; worker.main()", env=env)
+        until(lambda: q.get_job_status(jid, db)["status"] == q.JOB_FAILED, restart)
+        row = q.get_job_status(jid, db)
+        assert "Unsupported task type" in row["result_json"]
+        assert row["log_tail"].count("reprogramat automat") == 1
+    finally:
+        for proc in (owner, restart):
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+                proc.communicate(timeout=10)
+
+
 def test_two_ui_processes_share_one_durable_claim(tmp_path):
     import job_queue as q
 

@@ -107,17 +107,17 @@ Cele două extensii opționale, modelul pentru mulțimi de cardinalitate fixă �
 
 ### Cât de des se schimbă metoda când sunt punctate biletele
 
-La 200 lei am comparat 24 de configurații pe câte 180 de extrageri de intrare. Pentru fiecare joc am combinat ambele baze, ambele moduri și obiectivele 4+ și „orice premiu”. Fereastra de selecție cuprinde 60 de zile și 61 de extrageri. Alegerea pe toate variantele a diferit de alegerea pe pool în 12 din 22 de configurații evaluabile (54,5%). Acestea sunt rezultate în fereastra folosită la alegere. Configurațiile împart aceleași extrageri.
+La 200 lei am comparat 24 de configurații pe câte 180 de extrageri de intrare. Pentru fiecare joc am combinat ambele baze, ambele moduri și obiectivele 4+ și „orice premiu”. Fereastra de selecție cuprinde 60 de zile și 61 de extrageri. Alegerea pe toate variantele a diferit de alegerea pe pool în 10 din 22 de configurații evaluabile (45,5%). Acestea sunt rezultate în fereastra folosită la alegere. Configurațiile împart aceleași extrageri.
 
 | Joc | Configurații evaluate | Alegere schimbată | Exemplu în fereastra de selecție |
 |---|---:|---:|---|
-| 6/49 | 8 din 8 | 2 | În modul invers cu 10–40, extragerile cu 4+ pe o variantă au trecut de la 1 la 3 din 61. |
-| 5/40 | 6 din 8 | 6 | Cu baza completă în modul normal, 4+ a trecut de la 1 la 5 din 61. În ambele probe inverse 10–40, schema 37 cerea 16 numere și mai erau eligibile doar 15. |
-| Joker | 8 din 8 | 4 | În modul normal complet, numărul extragerilor cu orice premiu a trecut de la 13 la 18 din 61. În cele două probe inverse 10–40, portofoliul a putut fi jucat la 37 de extrageri din 61. Datele detaliate păstrează toate cele 24 de cazuri nejucabile pentru fiecare dintre cele două probe. |
+| 6/49 | 8 din 8 | 3 | În modul invers cu 10–40, alegerea după bilete a trecut de la 0 la 2 extrageri cu 4+ din 61. Numărul extragerilor cu orice premiu a scăzut de la 13 la 9. |
+| 5/40 | 6 din 8 | 4 | Cu baza completă în modul normal, 4+ a trecut de la 1 la 5 din 61. În ambele probe inverse 10–40, schema 37 cerea 16 numere și mai erau eligibile doar 15. |
+| Joker | 8 din 8 | 3 | În modul normal complet, numărul extragerilor cu orice premiu a trecut de la 13 la 18 din 61. În modul invers cu 10–40, configurațiile celor două obiective au putut produce bilete la 11 din 61 de extrageri pentru 4+, respectiv 50 din 61 pentru orice premiu. Celelalte 50, respectiv 11 extrageri figurează drept nejucabile. |
 
 Prețul în bani și numărul extragerilor punctate sunt identice în fiecare pereche de rețete luată în comparație. [Rezultatele celor 24 de configurații](lr_selection_2026_11_25.json) · [Scriptul de reproducere](compare_lr_selection.py)
 
-### Timp și memorie pe aceleași intrări
+### Timp și memorie la trecerea de la versiunea de referință
 
 Am folosit câte 110 extrageri din aceleași CSV-uri corectate pentru versiunea de referință și versiunea modificată. Bugetul a fost 100 lei, obiectivul 4+ și selectorul fix, iar reluarea a folosit ultimele 10% dintre rânduri. Fiecare pereche de valori arată prima execuție și repetarea în același proces. Procesul fiecărei versiuni a pornit cu un director de cache separat. Memoria este maximul observat al procesului Python la eșantionare de 10 ms. În paralel au rulat teste, astfel că timpii sunt orientativi, fără concluzie de accelerare.
 
@@ -146,6 +146,37 @@ python -m scripts.analysis.compare_lr_portfolio_search --help
 python -m scripts.analysis.advanced_lr_validation --help
 ```
 
+### Recomandarea, Re-Bench și validarea după verificarea versiunii `2367d96`
+
+- **Generatorul fără profil salvat.** La versiunea verificată, metoda putea câștiga pe pool sau pe o singură schemă reprezentativă a unui plan cu mai multe zone. Generatorul compară acum toate zonele cumpărate, toate bilele Joker atașate și taxa. În fiecare zi compară rețetele la cost egal, pe aceleași extrageri evaluabile. Folosește până la 32 de zile pentru regula dinamică și 60 pentru cea fixă, cu 80 de extrageri anterioare și cel puțin 12 zile punctate înainte de alegerea unui câștigător. Dacă probele sunt insuficiente, interfața indică motivul rezervei. O recomandare inversă exclude pool-ul direct și bilele Joker estimate la termenul respectiv.
+- **Baza automată.** Comparația dintre baza completă și 10–40 și reluarea zilnică folosesc generatorul pe fiecare dintre cele două baze, inclusiv pentru metoda inversă și pentru Fixed Share. La 6/49, codul 49, cu 171 lei buget, baza completă a obținut 4+ la 3 dintre ultimele 100 de extrageri și baza 10–40 la 2, atât cu selecția normală, cât și cu cea inversă. Auto a ales baza completă. Probabilitatea teoretică a extragerii tuturor celor șase numere în interval este 5,27% în ambele moduri.
+- **Cost și premii.** Contractul de evaluare v2 raportează costul, variantele repetate și câștigătoare, toate pragurile aplicabile și numărul rezultatelor cu premiu determinabil. Pentru o bilă Joker lipsă în istoricul de lucru, un rezultat sigur poate fi punctat. Dacă premiul depinde de bila lipsă, rezultatul rămâne nedeterminat. De exemplu, pentru trei extrageri de probă s-au putut stabili două verdicte, dintre care un premiu. Intervalul de 3–9 variante câștigătoare a păstrat costul tuturor celor trei participări. Pentru registrul prospectiv este necesar rezultatul oficial complet. Același rezultat complet se evaluează conform regulii înregistrate și pentru predicțiile din versiunea anterioară.
+- **Fixed Share.** Trei perechi de parametri concurează exclusiv pe pierderea înregistrată înainte de ziua curentă. Modelul păstrează deciziile și ponderile într-un checkpoint semnat și reconstruiește starea dacă fișierul este incomplet. Cele 312 alegeri din cele trei jocuri au păstrat perechea inițială pe toate cele 104 zile. Scorul la 4+ a rămas egal cu cel al frecvenței. [Rezultate și parametri](advanced_lr_validation_2026_11_25.md)
+- **Verificarea înscrierii și reluării.** Dacă aplicația așteaptă accesul la baza de date peste ora-limită, predicția expiră înainte de înscriere. Identitatea surselor oficiale de scheme este verificată și când un fișier modificat păstrează aceeași dată. O probă cu baza joburilor blocată a produs patru încercări de marcare a erorii. Următorul proces a recuperat jobul o singură dată. În testul din browser, workerul a finalizat jobul și rezultatul a reapărut după restart. Trimiterea e-mailului și oprirea sistemului au fost simulate.
+- **Căutarea pe scheme.** Instalarea unui control pentru anulare păstrează același buget implicit de timp. Reverificarea celor 42 de configurații a reprodus costurile, numărătorii și limitele din raportul combinatoric. [Rezultate pe fiecare configurație](lr_portfolio_search_2026_11_25.md)
+
+Pe cele 2.210 rânduri ale arhivei Joker, Auto a păstrat baza completă în toate cele patru probe la 171 lei buget. Pe ultimele 100 de extrageri din 96 de zile, modul normal a produs câte un rezultat 4+ pe ambele baze. Pentru orice premiu a avut 32/100 pe baza completă și 26/100 în 10–40. În modul invers au fost 0/100 și 0/82 la 4+, respectiv 14/100 și 7/53 la orice premiu. Cele 18 și 47 de cazuri fără bilet rămân în raport. Fiecare participare a costat 169 lei pentru 24 de variante pe două bilete. Cu un proces nou pe probă, comparațiile au durat 1,95–4,02 s la prima rulare și 0,027–0,068 s la repetarea în același proces. Rapoartele înainte și după refolosirea cache-ului au coincis.
+
+Am verificat în același proces modificarea formulei numerice, a catalogului și a solverului MILP. Intrările identice păstrează rezultatul în cache până la schimbarea implementării. În registrul prospectiv se păstrează separat versiunea regulii de punctare. Validarea istorică înregistrează și folosirea unei metode de rezervă numai la urna Joker de referință, inclusiv când aceeași zi are două extrageri.
+
+#### Timp și memorie după alinierea selecției
+
+Măsurătoarea compară versiunea `2367d96` cu selecția actualizată, pe același Windows cu Python 3.15.2 și aceleași 110 rânduri de istoric pentru fiecare joc. Bugetul este de 100 lei. Coloanele în secunde cuprind prima rulare cu director de cache nou și repetarea imediată în același proces. Memoria maximă observată include procesul Python și bibliotecile încărcate. Pe mașină au rulat concomitent și alte verificări.
+
+| Joc și bază | Operație | Înainte, s | După, s | RSS înainte / după, MiB |
+|---|---|---:|---:|---:|
+| 6/49, normal complet | Generare | 0.008 / 0.005 | 0.137 / 0.006 | 135.0 / 137.4 |
+| 6/49, normal complet | Re-Bench | 0.538 / 0.445 | 0.530 / 0.448 | 140.2 / 143.0 |
+| 6/49, normal complet | Validare | 0.314 / 0.303 | 0.310 / 0.313 | 140.2 / 143.0 |
+| 5/40, normal 10–40 | Generare | 0.268 / 0.006 | 0.146 / 0.007 | 137.0 / 136.9 |
+| 5/40, normal 10–40 | Re-Bench | 0.507 / 0.434 | 0.571 / 0.474 | 140.2 / 142.2 |
+| 5/40, normal 10–40 | Validare | 0.295 / 0.292 | 0.333 / 0.324 | 140.2 / 142.2 |
+| Joker, invers complet | Generare | 0.435 / 0.013 | 0.448 / 0.007 | 137.7 / 140.7 |
+| Joker, invers complet | Re-Bench | 1.200 / 1.124 | 1.295 / 1.194 | 141.3 / 145.7 |
+| Joker, invers complet | Validare | 1.473 / 1.480 | 1.593 / 1.654 | 141.3 / 145.8 |
+
+Înainte și după actualizare, cele 11 extrageri de test din fiecare joc au avut zero rezultate 4+ pe o variantă. La 6/49, cele 12 variante au costat 96,50 lei pe extragere și au produs în total două variante câștigătoare la o extragere. La 5/40, cele 18 variante au costat 90,50 lei, iar la Joker cele 14 variante au costat 98,50 lei. Niciunul dintre aceste două jocuri nu a produs un premiu în cele 11 extrageri.
+
 ### Cele trei regresii de la versiunea de referință
 
 | Test | Cauza și verificarea |
@@ -173,7 +204,7 @@ python -m scripts.analysis.advanced_lr_validation --help
 
 ### Verificări complete pe două sisteme
 
-La revizia `54da387`, pe Windows au trecut 6.821 de teste și 20 au fost omise. Am confruntat fiecare caz din colecția completă de 6.841 cu rezultatele execuției, în șase copii izolate. Pe Linux au trecut 6.826 și 15 au fost omise. În verificarea separată a lansatoarelor și proceselor Windows de pe GitHub au trecut 187 de teste și 17 au fost omise. Verificările dependențelor, compilarea și pornirea NiceGUI au trecut. Actualizările ulterioare sunt verificate de același flux la fiecare publicare pe `main`. [Rularea verificată](https://github.com/ciprianbodu/LOTO/actions/runs/45656307769) · [Rulările pentru versiunea publicată](https://github.com/ciprianbodu/LOTO/actions/workflows/loto-ci.yml?query=branch%3Amain)
+La revizia `54da387`, pe Windows au trecut 6.821 de teste și 20 au fost omise. Am confruntat fiecare caz din colecția completă de 6.841 cu rezultatele execuției, în șase copii izolate. Pe Linux au trecut 6.826 și 15 au fost omise. În verificarea separată a lansatoarelor și proceselor Windows de pe GitHub au trecut 187 de teste și 17 au fost omise. Verificările dependențelor, compilarea și pornirea NiceGUI au trecut. La `2367d96`, pe Windows au trecut 6.829 cu 20 omise, iar pe Linux 6.834 cu 15 omise. Actualizările ulterioare sunt verificate de același flux la fiecare publicare pe `main`. [Rularea verificată](https://github.com/ciprianbodu/LOTO/actions/runs/45656307769) · [Verificările versiunii 2367d96](https://github.com/ciprianbodu/LOTO/actions/runs/45660172590) · [Rulările pentru versiunea publicată](https://github.com/ciprianbodu/LOTO/actions/workflows/loto-ci.yml?query=branch%3Amain)
 
 ## Inventarul modulelor
 

@@ -66,31 +66,42 @@ def test_dynamic_replay_matches_production_pool_for_every_treatment(lookback):
             assert pool(eligible).tolist() == sorted(rank_lr_pool(expected, scheme.n))
 
 
+@pytest.mark.parametrize("inverse", [False, True])
 @pytest.mark.parametrize("dynamic", [False, True])
-def test_inverse_replay_excludes_the_direct_pool_of_each_base_before_the_draw_day(monkeypatch, dynamic):
-    frame, matrix = _frame(253)
+def test_ranges_grade_exact_paid_tickets_with_the_same_policy_on_both_bases(monkeypatch, inverse, dynamic):
+    from copy import deepcopy
+    from covering.lr_pool_budget import restrict_to_pool
+    from loto_enterprise.benchmark import lr_budget_scoring
+    from loto_enterprise.core.lr_played_portfolio import grade_plan
+
+    frame, _ = _frame(253)
     frame.loc[251, "date"] = frame.loc[250, "date"]
-    matrix[250:] = [range(22, 28), range(23, 29), range(24, 30)]
-    scheme = resolve_lr_scheme("6/49", 57)
-    calls = []
+    calls, expected = [], {}
+    def selections(plan, lot, scheme, matrix, full_frame, origins, **settings):
+        limits = settings["number_range"]
+        calls.append((tuple(origins), limits, settings["inverse"], settings["dynamic"]))
+        base = list(analysis._eligible(lot.max_n, limits))
+        ranked = sorted(rank_lr_pool(dict.fromkeys(base, 1.), scheme.n))
+        if settings["inverse"]:
+            ranked = sorted(rank_lr_pool(dict.fromkeys(set(base) - set(ranked), 1.), scheme.n))
+        paid = restrict_to_pool(deepcopy(plan), plan["objective"], ranked, ())
+        dates = history_dates(frame)
+        expected[limits] = [grade_plan(paid, numbers, draw_date=dates.iloc[i].date().isoformat())
+                            for i, numbers in enumerate(matrix) if i >= 250]
+        return {origin: {"pool": ranked, "jokers": ()} for origin in origins}
 
-    def prepare(origin):
-        def predict(eligible):
-            calls.append((origin, eligible))
-            return np.asarray(eligible[:scheme.n])
-        return predict
-
-    monkeypatch.setattr(analysis, "_dynamic_predictor", lambda *args: prepare)
-    monkeypatch.setattr(analysis, "_fixed_predictor", lambda *args: (prepare, "frequency"))
+    monkeypatch.setattr(lr_budget_scoring, "replay_budget_portfolios", selections)
     analysis._replay.cache_clear()
-    start, days, results, method, _ = analysis._replay(
-        matrix.astype(np.int32).tobytes(), training_cutoffs(frame), "6/49", 57, (0b111111,),
-        80, dynamic, True, 4, b"", (),
+    result = analysis.compare_budget_ranges(
+        171, ANY_PRIZE, "6/49", {"6/49": ("fixture.csv", frame)}, inverse=inverse, dynamic=dynamic,
     )
-    assert (start, days, method) == (250, 2, None if dynamic else "frequency")
-    expected_bases = [range(1, 50), range(13, 50), range(10, 41), range(22, 41)]
-    assert calls == [(origin, tuple(numbers)) for origin in (250, 252) for numbers in expected_bases]
-    assert results[:, :, 0].tolist() == [[3, 2, 1], [6, 6, 6]]
+    assert calls == [((250, 252, 253), limits, inverse, dynamic) for limits in analysis.RANGES]
+    for row in result["ranges"]:
+        grades = expected[row["range"]]
+        assert row["evaluated"] == 3
+        assert row["successes"] == sum(g["any_prize"] for g in grades)
+        assert row["ticket_3plus"] == sum(g["max_hits"] >= 3 for g in grades)
+        assert row["pool_4plus"] == sum(g["pool_hits"] >= 4 for g in grades)
 
 
 @pytest.mark.parametrize(("amount", "restricted_evaluated"), [(200, 3), (400, 0)])
@@ -112,22 +123,26 @@ def test_only_last_100_scored_and_whole_day_excluded_from_first_forecast(monkeyp
     frame, matrix = _frame(400)
     # The scored segment starts on row 300, on the same date as the unscored row 299.
     frame.loc[300, "date"] = frame.loc[299, "date"]
+    from loto_enterprise.benchmark import lr_budget_scoring
     seen = []
-    def frozen(history, bounds, game, size, excluded, target, *, strict_lr):
-        assert strict_lr
-        seen.append((len(history), history[-1].tolist()))
-        return {}, {"method": "frequency"}
-    monkeypatch.setattr(analysis, "restricted_bench_scores", frozen)
+    def selection(plan, lot, scheme, draws, full_frame, origins, **settings):
+        assert not settings["dynamic"]
+        start = origins[0]
+        seen.append((start, draws[start - 1].tolist()))
+        low = 10 if settings["number_range"] else 1
+        pool = [low + i + i // 2 for i in range(scheme.n)]
+        return {day: {"pool": pool, "jokers": ()} for day in origins}
+    monkeypatch.setattr(lr_budget_scoring, "replay_budget_portfolios", selection)
     analysis._replay.cache_clear()
     report = analysis.compare_budget_ranges(
         200, FOUR_PLUS, "6/49", {"6/49": ("data.csv", frame)}, dynamic=False,
     )
-    assert seen == [(299, matrix[298].tolist())]
+    assert seen == [(299, matrix[298].tolist())] * 2
     assert report["rows"] == 100 and report["days"] == 100
     assert report["first_date"] == history_dates(frame).iloc[299].date().isoformat()
     assert all(row["evaluated"] == 100 for row in report["ranges"])
     assert all(row["recent_evaluated"] == 25 for row in report["ranges"])
-    assert "Estimare" in report["protocol"]
+    assert "Selectorul fix" in report["protocol"]
 
 
 def test_six_main_balls_and_real_multiple_lr_zones_at_540():
@@ -164,7 +179,7 @@ def test_undated_range_replay_reports_file_order_and_draw_based_timing():
     assert result["first_date"] is result["as_of"] is None
     assert all(row["chronology"]["phase_basis"] == "draws" for row in result["ranges"])
     assert "Se păstrează ordinea rândurilor din fișier" in result["protocol"]
-    assert "înaintea fiecărei extrageri" in result["protocol"]
+    assert "date calendaristice" in result["reason"]
 
 
 def test_joker_range_comparison_handles_bonus_feasibility_and_distinguishes_objectives():
@@ -184,12 +199,12 @@ def test_joker_range_comparison_handles_bonus_feasibility_and_distinguishes_obje
 def test_only_consistent_feasible_temporally_supported_advantage_can_narrow():
     matrix = np.tile(np.arange(11, 17), (100, 1))
     dates = pd.date_range("2022-01-01", periods=100)
-    reference = np.zeros((100, 2), dtype=int)
+    reference = np.zeros((100, 3), dtype=int)
     candidate = reference.copy()
-    candidate[::2] = (4, 4)
-    full = analysis._summarize(reference, reference, 4, range_timing(matrix, dates, (1, 49)), 0, None,
+    candidate[::2] = (4, 4, 1)
+    full = analysis._summarize(reference, reference, range_timing(matrix, dates, (1, 49)), 0, None,
                                49, 12)
-    good = analysis._summarize(candidate, reference, 4, range_timing(matrix, dates, (10, 40)), 0, (10, 40),
+    good = analysis._summarize(candidate, reference, range_timing(matrix, dates, (10, 40)), 0, (10, 40),
                                31, 12)
     assert good["adjusted_p"] < .05 and good["stable"] and good["phase"]["supports"]
     assert analysis._decision([full, good])[0] == (10, 40)
@@ -199,75 +214,45 @@ def test_only_consistent_feasible_temporally_supported_advantage_can_narrow():
     assert analysis._decision([{**full, "objective_evaluated": 0}, good])[0] is None
 
 
-def test_joker_prizes_require_main_and_bonus_on_same_zone_and_hide_missing_bonus():
-    # The first bonus belongs to positions 0 and 1, the second to positions 2 and 3.
-    matches = analysis._matched_bonus(np.array([1, 1, 4, 2, 1, 0]), np.array([2, 6, 6, 0, 11, 2]),
-                                      [2, 6], (0b0011, 0b1100))
-    assert matches.tolist() == [1, 0, 1, -1, 0, 0]
-    data = np.column_stack(([1, 1, 1, 2, 3, 0], [1, 1, 1, 2, 3, 0], matches))
-    timing = range_timing(np.tile(np.arange(11, 16), (6, 1)), None, (10, 40))
-    row = analysis._summarize(data, data, 3, timing, 0, (10, 40), 31, 10, True)
-    assert row["successes"] == 3 and row["ticket_3plus"] == 1
-    assert row["objective_evaluated"] == 5 and row["objective_missing"] == 1
-
-
-
 def test_joker_missing_bonus_only_hides_uncertain_prizes_and_does_not_favor_candidate():
     # Known wins and misses are included even when the bonus is unknown.
     # An unknown baseline outcome can still be a prize, limiting the evidence.
-    reference = np.asarray([[0, 0, -1], [3, 3, -1], [2, 2, -1], [0, 0, -1]])
-    candidate = np.asarray([[3, 3, -1], [0, 0, -1], [3, 3, -1], [2, 2, -1]])
+    reference = np.asarray([[0, 0, 0], [3, 3, 1], [2, 2, -1], [0, 0, 0]])
+    candidate = np.asarray([[3, 3, 1], [0, 0, 0], [3, 3, 1], [2, 2, -1]])
     timing = range_timing(np.tile(np.arange(11, 16), (4, 1)), None, (10, 40))
-    row = analysis._summarize(candidate, reference, 3, timing, 0, (10, 40), 31, 10, True)
+    row = analysis._summarize(candidate, reference, timing, 0, (10, 40), 31, 10)
     assert (row["successes"], row["objective_evaluated"], row["objective_missing"]) == (2, 3, 1)
     assert (row["paired_evaluated"], row["paired_wins"], row["paired_losses"]) == (2, 1, 1)
     assert row["adjusted_p"] == 1.0
 
 
 def test_repeated_draws_on_a_day_contribute_one_evidence_factor():
-    reference = np.zeros((12, 2), dtype=int)
-    candidate = np.full((12, 2), 4, dtype=int)
+    reference = np.zeros((12, 3), dtype=int)
+    candidate = np.tile([4, 4, 1], (12, 1))
     dates = pd.DatetimeIndex(["2026-05-01"] * len(candidate))
     timing = range_timing(np.tile(np.arange(11, 17), (12, 1)), dates, (10, 40))
-    row = analysis._summarize(candidate, reference, 4, timing, 0, (10, 40), 31, 12)
+    row = analysis._summarize(candidate, reference, timing, 0, (10, 40), 31, 12)
     assert row["paired_wins"] == 12
     assert row["adjusted_p"] == pytest.approx(1 / ((1.25 + 1.5) / 2))
 
 
-def test_bonus_predictions_use_prior_valid_days_and_date_specific_inverse(monkeypatch):
-    from loto_enterprise.core.lotteries import require_lottery
-    captured = []
-    def record(matrix, bounds, game, size, excluded, target):
-        captured.append((matrix.ravel().tolist(), bounds, game, size, target))
-        return {}, {"method": "frequency"}
-    monkeypatch.setattr(analysis, "restricted_bench_scores", record)
-    lot = require_lottery("joker", "RO")
-    draws = np.asarray([5, 0, 3, 5, 5, 3, 20, 20, 20])
-    bounds = np.asarray([0, 1, 1, 3, 4, 5, 6, 6, 8])
-    normal, _ = analysis._bonus_predictor(draws, bounds, 6, lot, 2, 0, False)
-    inverse, _ = analysis._bonus_predictor(draws, bounds, 6, lot, 2, 0, True)
-    assert captured[0] == ([5, 3, 5, 5, 3], (0, 1, 2, 3, 4), "joker_urna2", 1, 1)
-    assert set(normal(6)) == {3, 5} and set(inverse(6)).isdisjoint(normal(6))
-    assert set(inverse(8)).isdisjoint(normal(8))
-
-
 def test_single_comparison_uses_reciprocal_of_paired_evidence():
-    full = np.zeros((10, 2), dtype=int)
+    full = np.zeros((10, 3), dtype=int)
     candidate = full.copy()
-    candidate[:6] = 4
-    full[6:8] = 4
+    candidate[:6] = (4, 4, 1)
+    full[6:8] = (4, 4, 1)
     timing = range_timing(np.tile(np.arange(11, 17), (10, 1)), None, (10, 40))
-    row = analysis._summarize(candidate, full, 4, timing, 0, (10, 40), 31, 12)
+    row = analysis._summarize(candidate, full, timing, 0, (10, 40), 31, 12)
     evidence = ((1.25 ** 6 * 0.75 ** 2) + (1.5 ** 6 * 0.5 ** 2)) / 2
     assert analysis.RANGES == (None, (10, 40))
     assert row["adjusted_p"] == pytest.approx(1 / evidence)
 
 
 def test_range_win_on_date_without_reference_counts_only_in_own_rate():
-    full = np.asarray([[-1, -1], [4, 4], [0, 0]])
-    candidate = np.asarray([[4, 4], [0, 0], [4, 4]])
+    full = np.asarray([[-1, -1, -1], [4, 4, 1], [0, 0, 0]])
+    candidate = np.asarray([[4, 4, 1], [0, 0, 0], [4, 4, 1]])
     timing = range_timing(np.tile(np.arange(11, 17), (3, 1)), None, (10, 40))
-    row = analysis._summarize(candidate, full, 4, timing, 0, (10, 40), 31, 12)
+    row = analysis._summarize(candidate, full, timing, 0, (10, 40), 31, 12)
     assert row["successes"] == 2 and row["objective_evaluated"] == row["recent_evaluated"] == 3
     assert (row["paired_evaluated"], row["paired_wins"], row["paired_losses"]) == (2, 1, 1)
 
@@ -292,3 +277,92 @@ def test_real_int32_history_reproduces_random_guard_at_known_disagreement():
     assert tuple(pool(full)) == normal
     scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme, excluded_numbers=normal, max_run=2)
     assert pool(tuple(n for n in full if n not in normal)).tolist() == sorted(rank_lr_pool(scores, scheme.n))
+
+
+def test_no_paid_tickets_cannot_contribute_an_objective_win(monkeypatch):
+    frame, _ = _frame(253)
+    from loto_enterprise.benchmark import lr_budget_scoring
+    monkeypatch.setattr(lr_budget_scoring, "replay_budget_portfolios",
+                        lambda *args, **kw: {origin: {"pool": [1, 4], "jokers": ()} for origin in args[5]})
+    monkeypatch.setattr(analysis, "restrict_to_pool", lambda *args: {"tickets": []})
+    analysis._replay.cache_clear()
+    result = analysis.compare_budget_ranges(171, FOUR_PLUS, "6/49", {"6/49": ("test.csv", frame)})
+    assert result["recommended_range"] is None and "bilete jucabile" in result["reason"]
+    assert all(row["infeasible"] == 3 and not row["objective_evaluated"] and not row["feasible_now"]
+               for row in result["ranges"])
+
+
+def test_fixed_share_uses_only_draws_before_each_full_day(monkeypatch):
+    from copy import deepcopy
+    from loto_enterprise.core import lr_ticket_experts
+    frame, _ = _frame(253)
+    frame.loc[251, "date"] = frame.loc[250, "date"]
+    seen = []
+    def fixed_share(lot, plan, scheme, prefix, *, inverse, number_range, objective, **options):
+        seen.append((len(prefix), number_range, inverse))
+        return deepcopy(plan)
+    monkeypatch.setattr(lr_ticket_experts, "online_ticket_forecast", fixed_share)
+    analysis._replay.cache_clear()
+    result = analysis.compare_budget_ranges(171, FOUR_PLUS, "6/49", {"6/49": ("source.csv", frame)},
+                                            inverse=True, selection_policy="online_ticket_experts")
+    assert seen == [(origin, limits, True) for limits in analysis.RANGES for origin in (250, 252, 253)]
+    assert result["days"] == 2 and "Fixed Share" in result["protocol"]
+
+
+@pytest.mark.parametrize("inverse", [False, True])
+def test_both_ranges_replay_the_same_paid_joker_tickets_as_live_generation(inverse):
+    from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
+    from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw
+
+    frame, _ = _frame(252, main=5, maximum=45)
+    # The 15-number inverse Joker scheme needs a playable complement in the 31-ball range.
+    rng = np.random.default_rng(57)
+    frame.loc[:249, [f"n{i}" for i in range(1, 6)]] = [
+        rng.choice(np.arange(10, 40, 2), 5, replace=False) for _ in range(250)
+    ]
+    frame["joker"] = np.arange(len(frame)) % 20 + 1
+    frame.loc[251, "date"] = frame.loc[250, "date"]
+    training = {"joker": ("source.csv", frame.iloc[:250])}
+    played = []
+    for limits in analysis.RANGES:
+        plan, = recommend_playable_games(100, ANY_PRIZE, "joker", training, number_range=limits,
+                                          inverse=inverse, pool_codes={}, joker_size=5)
+        assert plan["forecast"]["selection"]["source"] == "paid_budget"
+        played.append(expand_plan(plan))
+    # The two official draws on the same date each use a different actual paid variant.
+    for i, portfolio in enumerate(played, start=250):
+        numbers, joker, _ = portfolio.variants[0]
+        frame.loc[i, [f"n{j}" for j in range(1, 6)]] = numbers
+        frame.loc[i, "joker"] = joker
+    report = analysis.compare_budget_ranges(100, ANY_PRIZE, "joker", {"joker": ("source.csv", frame)},
+                                            inverse=inverse, joker_size=5)
+    assert report["rows"] == 2 and report["days"] == 1
+    for row, portfolio in zip(report["ranges"], played, strict=True):
+        expected = [grade_draw(portfolio, r[:5], r[6], draw_date=history_dates(frame).iloc[250].date().isoformat())
+                    for r in frame.iloc[250:].itertuples(index=False, name=None)]
+        assert row["objective_evaluated"] == 2
+        assert row["successes"] == sum(g["any_prize"] for g in expected) >= 1
+        assert row["ticket_4plus"] == sum(g["hit4"] for g in expected)
+
+
+def test_any_prize_uses_categories_in_force_on_each_draw_date(monkeypatch):
+    from copy import deepcopy
+    from covering.lr_pool_budget import restrict_to_pool
+    from loto_enterprise.benchmark import lr_budget_scoring
+    from loto_enterprise.core.lr_played_portfolio import expand_plan
+
+    frame, _ = _frame(252)
+    frame["date"] = pd.date_range(end="2010-05-02", periods=len(frame)).strftime("%d-%m-%Y")
+    plan, = analysis.recommend_games(171, ANY_PRIZE, "6/49")
+    scheme = analysis.budget_plan_scheme(plan)
+    pool = sorted(rank_lr_pool(dict.fromkeys(range(10, 41), 1.), scheme.n))
+    played = expand_plan(restrict_to_pool(deepcopy(plan), ANY_PRIZE, pool, ()))
+    variant = played.variants[0][0]
+    outside = sorted(set(range(1, 50)).difference(pool))
+    frame.loc[250:, [f"n{i}" for i in range(1, 7)]] = list(variant[:3]) + outside[:3]
+    monkeypatch.setattr(lr_budget_scoring, "replay_budget_portfolios",
+                        lambda *args, **opts: {origin: {"pool": pool, "jokers": ()} for origin in args[5]})
+    analysis._replay.cache_clear()
+    report = analysis.compare_budget_ranges(171, ANY_PRIZE, "6/49", {"6/49": ("history.csv", frame)})
+    assert all(row["ticket_3plus"] == 2 and row["successes"] == 1 and row["objective_evaluated"] == 2
+               for row in report["ranges"])

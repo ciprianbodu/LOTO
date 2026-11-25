@@ -531,11 +531,23 @@ def _refine_layout(game, width, objective, price, joker_count, threshold, upper,
     return search.optimize(zones, attained)
 
 
-@catalog_cache(maxsize=128)
+def _default_search_seconds(width):
+    # Keep the larger geometries responsive with or without a cancellation hook.
+    return 1.05 if width < 15 else 0.65
+
+
+def _layout_rules_signature():
+    from loto_enterprise.benchmark.lr_provenance import layout_formulas
+
+    return layout_formulas()
+
+
+@catalog_cache(maxsize=128, semantic_key=_layout_rules_signature)
 def _refine_cached(game, width, objective, price, joker_count, threshold, upper, zones, attained):
-    # Materially more placement choices only when the pool can support them.
-    seconds = 1.05 if width < 15 else 0.65
-    return _refine_layout(game, width, objective, price, joker_count, threshold, upper, zones, attained, seconds, None)
+    return _refine_layout(
+        game, width, objective, price, joker_count, threshold, upper, zones, attained,
+        _default_search_seconds(width), None,
+    )
 
 
 def _attach(plan, lot, zones, pool, jokers, price, attained, upper):
@@ -624,7 +636,7 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
         if time_limit_s is None and cancelled is None:
             selected, attained, price, report = _refine_cached(*args)
         else:
-            seconds = 1.05 if time_limit_s is None else float(time_limit_s)
+            seconds = _default_search_seconds(width) if time_limit_s is None else float(time_limit_s)
             if not isfinite(seconds) or seconds < 0:
                 raise ValueError("Limita de timp a optimizării LR trebuie să fie finită și nenegativă.")
             selected, attained, price, report = _refine_layout(*args, seconds, cancelled)

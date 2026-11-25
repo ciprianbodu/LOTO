@@ -103,7 +103,7 @@
       "hit4": 1,
       "hit5": 0,
       "hit6": 0,
-      "any_prize": 10,
+      "any_prize": 11,
       "cost_bani": 1076650
     },
     "ticket_choice_score": {
@@ -112,7 +112,7 @@
       "hit4": 2,
       "hit5": 0,
       "hit6": 0,
-      "any_prize": 6,
+      "any_prize": 7,
       "cost_bani": 1076650
     }
   },
@@ -139,292 +139,292 @@
     "pool_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
+      "hit4": 0,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 13,
+      "cost_bani": 1076650
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 2,
+      "hit5": 1,
+      "hit6": 0,
+      "any_prize": 9,
+      "cost_bani": 1076650
+    }
+  },
+  {
+    "game": "6/49",
+    "rows": 180,
+    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
+    "budget": 200,
+    "scheme": 57,
+    "objective": "any_prize",
+    "inverse": false,
+    "restricted": false,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "compact_renewal_hazard",
+      ""
+    ],
+    "ticket_choice": [
+      "compact_renewal_hazard",
+      ""
+    ],
+    "changed": false,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 2,
+      "hit5": 1,
+      "hit6": 0,
+      "any_prize": 11,
+      "cost_bani": 1076650
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 2,
+      "hit5": 1,
+      "hit6": 0,
+      "any_prize": 11,
+      "cost_bani": 1076650
+    }
+  },
+  {
+    "game": "6/49",
+    "rows": 180,
+    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
+    "budget": 200,
+    "scheme": 57,
+    "objective": "any_prize",
+    "inverse": false,
+    "restricted": true,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "ticket_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "changed": false,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
       "hit4": 1,
       "hit5": 0,
       "hit6": 0,
-      "any_prize": 8,
+      "any_prize": 13,
       "cost_bani": 1076650
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 1,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 13,
+      "cost_bani": 1076650
+    }
+  },
+  {
+    "game": "6/49",
+    "rows": 180,
+    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
+    "budget": 200,
+    "scheme": 57,
+    "objective": "any_prize",
+    "inverse": true,
+    "restricted": false,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "ticket_choice": [
+      "compact_transition_prior",
+      ""
+    ],
+    "changed": true,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 1,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 7,
+      "cost_bani": 1076650
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 1,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 10,
+      "cost_bani": 1076650
+    }
+  },
+  {
+    "game": "6/49",
+    "rows": 180,
+    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
+    "budget": 200,
+    "scheme": 57,
+    "objective": "any_prize",
+    "inverse": true,
+    "restricted": true,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "ticket_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "changed": false,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 0,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 7,
+      "cost_bani": 1076650
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 0,
+      "hit5": 0,
+      "hit6": 0,
+      "any_prize": 7,
+      "cost_bani": 1076650
+    }
+  },
+  {
+    "game": "5/40",
+    "rows": 180,
+    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
+    "budget": 200,
+    "scheme": 37,
+    "objective": "four_plus",
+    "inverse": false,
+    "restricted": false,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "compact_transition_prior",
+      ""
+    ],
+    "ticket_choice": [
+      "compact_multiscale_shrink",
+      ""
+    ],
+    "changed": true,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 1,
+      "hit5": 0,
+      "hit6": null,
+      "any_prize": 1,
+      "cost_bani": 1192550
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 5,
+      "hit5": 0,
+      "hit6": null,
+      "any_prize": 5,
+      "cost_bani": 1192550
+    }
+  },
+  {
+    "game": "5/40",
+    "rows": 180,
+    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
+    "budget": 200,
+    "scheme": 37,
+    "objective": "four_plus",
+    "inverse": false,
+    "restricted": true,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "compact_transition_prior",
+      ""
+    ],
+    "ticket_choice": [
+      "markov_lag2",
+      ""
+    ],
+    "changed": true,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 2,
+      "hit5": 0,
+      "hit6": null,
+      "any_prize": 2,
+      "cost_bani": 1192550
+    },
+    "ticket_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 4,
+      "hit5": 0,
+      "hit6": null,
+      "any_prize": 4,
+      "cost_bani": 1192550
+    }
+  },
+  {
+    "game": "5/40",
+    "rows": 180,
+    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
+    "budget": 200,
+    "scheme": 37,
+    "objective": "four_plus",
+    "inverse": true,
+    "restricted": false,
+    "days": 60,
+    "draws": 61,
+    "pool_choice": [
+      "compact_renewal_hazard",
+      ""
+    ],
+    "ticket_choice": [
+      "compact_renewal_hazard",
+      ""
+    ],
+    "changed": false,
+    "pool_choice_score": {
+      "n_eval": 61,
+      "infeasible": 0,
+      "hit4": 3,
+      "hit5": 0,
+      "hit6": null,
+      "any_prize": 3,
+      "cost_bani": 1192550
     },
     "ticket_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
       "hit4": 3,
       "hit5": 0,
-      "hit6": 0,
-      "any_prize": 6,
-      "cost_bani": 1076650
-    }
-  },
-  {
-    "game": "6/49",
-    "rows": 180,
-    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
-    "budget": 200,
-    "scheme": 57,
-    "objective": "any_prize",
-    "inverse": false,
-    "restricted": false,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "compact_renewal_hazard",
-      ""
-    ],
-    "ticket_choice": [
-      "compact_renewal_hazard",
-      ""
-    ],
-    "changed": false,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 2,
-      "hit5": 1,
-      "hit6": 0,
-      "any_prize": 11,
-      "cost_bani": 1076650
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 2,
-      "hit5": 1,
-      "hit6": 0,
-      "any_prize": 11,
-      "cost_bani": 1076650
-    }
-  },
-  {
-    "game": "6/49",
-    "rows": 180,
-    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
-    "budget": 200,
-    "scheme": 57,
-    "objective": "any_prize",
-    "inverse": false,
-    "restricted": true,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "ticket_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "changed": false,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 13,
-      "cost_bani": 1076650
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 13,
-      "cost_bani": 1076650
-    }
-  },
-  {
-    "game": "6/49",
-    "rows": 180,
-    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
-    "budget": 200,
-    "scheme": 57,
-    "objective": "any_prize",
-    "inverse": true,
-    "restricted": false,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "ticket_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "changed": false,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 10,
-      "cost_bani": 1076650
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 10,
-      "cost_bani": 1076650
-    }
-  },
-  {
-    "game": "6/49",
-    "rows": 180,
-    "history": "7b841ea2372ce4e9e6dd4100e540a1dbb8883f67d0565dd51d21696edabf98d9",
-    "budget": 200,
-    "scheme": 57,
-    "objective": "any_prize",
-    "inverse": true,
-    "restricted": true,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "ticket_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "changed": false,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 8,
-      "cost_bani": 1076650
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
-      "hit6": 0,
-      "any_prize": 8,
-      "cost_bani": 1076650
-    }
-  },
-  {
-    "game": "5/40",
-    "rows": 180,
-    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
-    "budget": 200,
-    "scheme": 37,
-    "objective": "four_plus",
-    "inverse": false,
-    "restricted": false,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "compact_transition_prior",
-      ""
-    ],
-    "ticket_choice": [
-      "compact_multiscale_shrink",
-      ""
-    ],
-    "changed": true,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 1,
-      "hit5": 0,
       "hit6": null,
-      "any_prize": 1,
-      "cost_bani": 1192550
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 5,
-      "hit5": 0,
-      "hit6": null,
-      "any_prize": 5,
-      "cost_bani": 1192550
-    }
-  },
-  {
-    "game": "5/40",
-    "rows": 180,
-    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
-    "budget": 200,
-    "scheme": 37,
-    "objective": "four_plus",
-    "inverse": false,
-    "restricted": true,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "compact_transition_prior",
-      ""
-    ],
-    "ticket_choice": [
-      "markov_lag2",
-      ""
-    ],
-    "changed": true,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 2,
-      "hit5": 0,
-      "hit6": null,
-      "any_prize": 2,
-      "cost_bani": 1192550
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 4,
-      "hit5": 0,
-      "hit6": null,
-      "any_prize": 4,
-      "cost_bani": 1192550
-    }
-  },
-  {
-    "game": "5/40",
-    "rows": 180,
-    "history": "be9048da7cdab1736029ddf1941bf3c5f3d3ecbb993c626bdb03df6c6d8dd6ec",
-    "budget": 200,
-    "scheme": 37,
-    "objective": "four_plus",
-    "inverse": true,
-    "restricted": false,
-    "days": 60,
-    "draws": 61,
-    "pool_choice": [
-      "compact_renewal_hazard",
-      ""
-    ],
-    "ticket_choice": [
-      "frequency",
-      ""
-    ],
-    "changed": true,
-    "pool_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 2,
-      "hit5": 0,
-      "hit6": null,
-      "any_prize": 2,
-      "cost_bani": 1192550
-    },
-    "ticket_choice_score": {
-      "n_eval": 61,
-      "infeasible": 0,
-      "hit4": 4,
-      "hit5": 0,
-      "hit6": null,
-      "any_prize": 4,
+      "any_prize": 3,
       "cost_bani": 1192550
     }
   },
@@ -533,26 +533,26 @@
       ""
     ],
     "ticket_choice": [
-      "frequency",
+      "compact_renewal_hazard",
       ""
     ],
-    "changed": true,
+    "changed": false,
     "pool_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
-      "hit4": 2,
+      "hit4": 3,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 2,
+      "any_prize": 3,
       "cost_bani": 1192550
     },
     "ticket_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
-      "hit4": 4,
+      "hit4": 3,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 4,
+      "any_prize": 3,
       "cost_bani": 1192550
     }
   },
@@ -661,23 +661,23 @@
       "compact_multiscale_shrink"
     ],
     "ticket_choice": [
-      "compact_multiscale_shrink",
+      "markov_lag2",
       "compact_multiscale_shrink"
     ],
-    "changed": true,
+    "changed": false,
     "pool_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 6,
+      "any_prize": 7,
       "cost_bani": 1198650
     },
     "ticket_choice_score": {
       "n_eval": 61,
       "infeasible": 0,
-      "hit4": 1,
+      "hit4": 0,
       "hit5": 0,
       "hit6": null,
       "any_prize": 7,
@@ -705,22 +705,22 @@
     ],
     "changed": false,
     "pool_choice_score": {
-      "n_eval": 37,
-      "infeasible": 24,
+      "n_eval": 11,
+      "infeasible": 50,
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 6,
-      "cost_bani": 727050
+      "any_prize": 4,
+      "cost_bani": 216150
     },
     "ticket_choice_score": {
-      "n_eval": 37,
-      "infeasible": 24,
+      "n_eval": 11,
+      "infeasible": 50,
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 6,
-      "cost_bani": 727050
+      "any_prize": 4,
+      "cost_bani": 216150
     }
   },
   {
@@ -818,7 +818,7 @@
     ],
     "ticket_choice": [
       "frequency",
-      "compact_multiscale_shrink"
+      "compact_renewal_hazard"
     ],
     "changed": true,
     "pool_choice_score": {
@@ -827,7 +827,7 @@
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 6,
+      "any_prize": 8,
       "cost_bani": 1162050
     },
     "ticket_choice_score": {
@@ -861,22 +861,22 @@
     ],
     "changed": false,
     "pool_choice_score": {
-      "n_eval": 37,
-      "infeasible": 24,
+      "n_eval": 50,
+      "infeasible": 11,
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 8,
-      "cost_bani": 704850
+      "any_prize": 11,
+      "cost_bani": 952500
     },
     "ticket_choice_score": {
-      "n_eval": 37,
-      "infeasible": 24,
+      "n_eval": 50,
+      "infeasible": 11,
       "hit4": 0,
       "hit5": 0,
       "hit6": null,
-      "any_prize": 8,
-      "cost_bani": 704850
+      "any_prize": 11,
+      "cost_bani": 952500
     }
   }
 ]

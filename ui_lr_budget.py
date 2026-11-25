@@ -114,6 +114,8 @@ def _ticket_details(plan, *, expanded=False):
             date = f" · ultima extragere {forecast['date']}" if forecast["date"] else ""
             history = count(forecast["rows"], "extrageri folosite", "extragere folosită")
             ui.label(f"{forecast['filename']}{date}" + (f" · {history}" if forecast["rows"] else "")).classes("text-caption")
+            if reason := forecast.get("portfolio_unmeasured"):
+                ui.label(f"Comparația pe bilete este indisponibilă. {reason}").classes("text-caption text-warning")
             if mismatch := forecast.get("profile_reference_mismatch"):
                 urns = ", ".join("urna a doua Joker" if key == "joker_urna2" else "urna principală" for key in mismatch)
                 ui.label(
@@ -125,6 +127,15 @@ def _ticket_details(plan, *, expanded=False):
                 if selection.get("source") == ONLINE_TICKET_EXPERTS:
                     days = count(selection["training_days"], "zile evaluate", "zi evaluată")
                     evidence = f"Fixed Share pe bilete · {selection['method']} · {days}"
+                elif selection.get("source") == "paid_budget":
+                    days = count(selection["validation_days"], "zile evaluate", "zi evaluată")
+                    objective = "orice premiu" if selection["portfolio_objective"] == "any_prize" else "4+ pe o variantă"
+                    evidence = (
+                        f"{selection['method']} · {objective} · {selection['portfolio_hits']} față de "
+                        f"{selection['random_portfolio_hits']} pentru martor · {days}"
+                    )
+                    if selection["fallback"]:
+                        evidence += " · frecvență de rezervă"
                 elif mismatch:
                     evidence = f"{selection['method']} · recalculată pe complementul actual"
                 elif selection.get("source") in ("lr_rebench", "lr_rebench_reference") or not forecast["dynamic"]:
@@ -146,11 +157,14 @@ def _ticket_details(plan, *, expanded=False):
                         evidence += " · metodă de rezervă"
                 method_label = "Metoda pool-ului invers" if excluded is not None else "Metoda pool-ului"
                 ui.label(f"{method_label} · {evidence}").classes("text-caption")
-                if selection.get("source") not in ("lr_rebench", "lr_rebench_reference", ONLINE_TICKET_EXPERTS):
+                if selection.get("source") not in ("lr_rebench", "lr_rebench_reference", ONLINE_TICKET_EXPERTS, "paid_budget"):
                     ui.label("Bilet calculat fără un rezultat Re-Bench LR pentru această selecție și acest istoric.").classes("text-caption")
             bonus = forecast["joker_selection"] or {}
             if bonus.get("method"):
-                bonus_method = f"{bonus['method']} · recalculată" if mismatch else _bench_method(bonus)
+                if bonus.get("source") == "paid_budget":
+                    bonus_method = f"{bonus['method']} · evaluată împreună cu urna principală"
+                else:
+                    bonus_method = f"{bonus['method']} · recalculată" if mismatch else _bench_method(bonus)
                 ui.label(f"Urna 2 Joker · {bonus_method}").classes("text-caption")
 
 
@@ -287,7 +301,7 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
             base = _range_label(row["range"])
             eligible = row.get("eligible_now")
             feasible = row.get("feasible_now")
-            choices[base] = base if feasible is not False else f"{base} · insuficiente numere eligibile"
+            choices[base] = base if feasible is not False else f"{base} · fără bilete în condițiile alese"
             evaluated = row.get("evaluated", 0)
             recent = row.get("recent_evaluated", 0)
             objective_evaluated = row.get("objective_evaluated", evaluated)
@@ -617,12 +631,13 @@ def lr_budget_panel(
                         fingerprint, inputs = await run.io_bound(_budget_input_snapshot, forecast_inputs, game_id)
                         if obsolete():
                             continue
-                        analysis_key = (budget_settings, inverse_mode, fingerprint)
+                        analysis_key = (budget_settings, inverse_mode, fixed_share, fingerprint)
                         if cached_analysis is None or cached_analysis[0] != analysis_key:
                             comparison.clear()
                             games = [game_id] if game_id else [key for key in game_options if key != "all"]
                             show_status(f"Se compară bazele de selecție pentru {amount} lei…")
-                            reports = await run.io_bound(_compare_games, amount, goal, games, inputs, inverse_mode)
+                            analysis_inputs = {**inputs, "selection_policy": ONLINE_TICKET_EXPERTS} if fixed_share else inputs
+                            reports = await run.io_bound(_compare_games, amount, goal, games, analysis_inputs, inverse_mode)
                             if obsolete():
                                 continue
                             if reports is None:

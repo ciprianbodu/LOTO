@@ -168,9 +168,9 @@ def test_fixed_share_live_and_replay_agree_and_exclude_the_exact_direct_pool():
     assert not set(pools[0]["jokers"]) & set(pools[1]["jokers"])
     assert all(10 <= num <= 40 for pool in pools for num in pool["pool"])
     assert all(longest_consecutive_run(pool["pool"]) <= 2 for pool in pools)
-    assert pools[0]["selection"]["training_days"] == 13
-    assert pools[0]["selection"]["training_draws"] == 14
-    assert pools[0]["selection"]["skipped_days"] == 1
+    assert pools[0]["selection"]["training_days"] == 14
+    assert pools[0]["selection"]["training_draws"] == 15
+    assert pools[0]["selection"]["skipped_days"] == 0
 
     from loto_enterprise.core.lr_walk_forward import validate_lr_walk_forward
 
@@ -199,3 +199,73 @@ def test_fixed_share_live_and_replay_agree_and_exclude_the_exact_direct_pool():
     )
     assert corrected["forecast"]["history_hash"] != pools[0]["history_hash"]
     assert corrected["forecast"]["date"] == pools[0]["date"]
+
+
+def test_ticket_tuning_uses_completed_days_and_resumes(tmp_path, monkeypatch):
+    import pandas as pd
+    import runtime_paths
+    import loto_enterprise.core.lr_ticket_experts as experts
+    from loto_enterprise.core.lotteries import require_lottery
+    from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
+    from loto_enterprise.benchmark import lr_provenance
+
+    rng = np.random.default_rng(331)
+    draws = [rng.choice(np.arange(1, 50), size=6, replace=False) for _ in range(41)]
+    frame = pd.DataFrame(draws, columns=[f"n{n}" for n in range(1, 7)])
+    frame["date"] = pd.date_range("2025-01-01", periods=len(frame)).strftime("%Y-%m-%d")
+    lot = require_lottery("6/49", "RO")
+    plan, = recommend_games(100, FOUR_PLUS, lot.game_id)
+    monkeypatch.setattr(runtime_paths, "WF_CACHE_DIR", tmp_path)
+    args = lot, plan, budget_plan_scheme(plan), frame
+    opts = dict(inverse=False, number_range=None, lookback=100, joker_size=0, objective=FOUR_PLUS)
+
+    class UserCancelled(Exception):
+        pass
+
+    calls = 0
+    def cancel():
+        nonlocal calls
+        calls += 1
+        if calls == 32:
+            raise UserCancelled()
+
+    experts._FORECAST_CACHE.clear()
+    with pytest.raises(UserCancelled):
+        experts.online_ticket_forecast(*args, **opts, cancelled=cancel)
+    assert len(list((tmp_path / "lr_ticket_experts").glob("*.pkl"))) == 1
+    experts._expert_scores.cache_clear()
+    calls = 0
+    resumed = experts.online_ticket_forecast(*args, **opts, cancelled=cancel)
+    assert calls == 16  # Initial cancellation check, 14 unfinished dates and the final choice.
+    calibrated = resumed["forecast"]["selection"]["calibration"]
+    assert calibrated["evaluated_days"] == 14 and len(calibrated["trials"]) == 3
+    monkeypatch.setattr(runtime_paths, "WF_CACHE_DIR", tmp_path / "cold")
+    experts._FORECAST_CACHE.clear()
+    assert experts.online_ticket_forecast(*args, **opts) == resumed
+    checkpoint, = (tmp_path / "cold" / "lr_ticket_experts").glob("*.pkl")
+    checkpoint.write_bytes(checkpoint.read_bytes()[:10])
+    experts._FORECAST_CACHE.clear()
+    assert experts.online_ticket_forecast(*args, **opts) == resumed
+    # The same method name can acquire a new formula in the registry.
+    original = lr_provenance.lr_semantics
+    monkeypatch.setattr(lr_provenance, "lr_semantics", lambda *a, **kw: {**original(*a, **kw), "formulas": "changed"})
+    calls = 0
+    with pytest.raises(UserCancelled):
+        experts.online_ticket_forecast(*args, **opts, cancelled=cancel)
+
+
+def test_missing_joker_preserves_definite_wins_and_reports_unknown_counts():
+    from loto_enterprise.core.lr_played_portfolio import PlayedPortfolio, grade_draw
+
+    variants = (((1, 2, 3, 4, 5), 7, 1), ((1, 2, 3, 8, 9), 8, 2))
+    paid = PlayedPortfolio("joker", frozenset((1, 2, 3, 4, 5, 8, 9)), variants, 2150, 3)
+    for balls in [(1, 2, 3, 4, 12), (1, 2, 13, 14, 15), (11, 12, 13, 14, 15)]:
+        partial = grade_draw(paid, balls)
+        oracle = [grade_draw(paid, balls, bonus) for bonus in range(1, 21)]
+        for field in ("hit4", "pool_hits", "max_hits", "any_prize", "winning_variants", "prize_counts"):
+            expected = oracle[0][field] if all(row[field] == oracle[0][field] for row in oracle) else None
+            assert partial[field] == expected
+        counts = [row["winning_variants"] for row in oracle]
+        assert (partial["winning_variants_min"], partial["winning_variants_max"]) == (min(counts), max(counts))
+    assert grade_draw(paid, (1, 2, 13, 14, 15))["any_prize"] is None
+    assert grade_draw(paid, (11, 12, 13, 14, 15, 3)) == grade_draw(paid, (11, 12, 13, 14, 15), 3)

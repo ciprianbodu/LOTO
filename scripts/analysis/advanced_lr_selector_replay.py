@@ -14,9 +14,9 @@ import pandas as pd
 from covering.lr_budget import FOUR_PLUS, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
 from covering.lr_pool_ranking import rank_lr_pool
+from loto_enterprise.benchmark.lr_budget_scoring import LIVE_BUDGET_REFERENCE
 from loto_enterprise.benchmark.methods import EVALUATION_METHODS, call_method
 from loto_enterprise.core.draw_validation import valid_draw_matrix
-from loto_enterprise.core.dynamic_winner import DYNAMIC_VERSION
 from loto_enterprise.core.history import training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, recommend_playable_games
@@ -220,13 +220,13 @@ def evaluate_selector_replay(history, first_day=DEFAULT_FIRST, last_day=DEFAULT_
             "budget_lei": budget, "objective": FOUR_PLUS, "base": "full", "inverse": False,
             "history_pct": 100, "joker_size": JOKER_SIZE, "bench_target": 4,
         },
-        "method_revisions": {**METHOD_REVISIONS, "dynamic_catalog": DYNAMIC_VERSION, ONLINE_TICKET_EXPERTS: FIXED_SHARE_VERSION},
+        "method_revisions": {**METHOD_REVISIONS, "dynamic_catalog": LIVE_BUDGET_REFERENCE, ONLINE_TICKET_EXPERTS: FIXED_SHARE_VERSION},
         "configuration_sha256": {name: sha256((project / name).read_bytes()).hexdigest()
                                  for name in ("best_methods.json", "curated_methods.json") if (project / name).exists()},
         "protocol": {
             "frozen_rebench": "Live LR walk-forward selects from training dates once, then reranks on each prior-day prefix.",
-            "dynamic_catalog": "The normal live LR budget generator runs once per date on the complete earlier prefix, "
-                               "including its built-in scorer fallback when a production decision cannot be reused.",
+            "dynamic_catalog": "The normal live LR budget generator runs once per date on the complete earlier prefix. "
+                               "Its bounded rolling comparison scores paid variants before the forecast date.",
             "new": "The two numeric scorers rank the main urn, using the independent frequency Joker pool. "
                    "The live Fixed Share portfolio policy is replayed from the complete earlier prefix.",
             "paired": "Exact paid tickets at the same price per game. A date with two official draws uses one forecast "

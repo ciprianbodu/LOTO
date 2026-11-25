@@ -130,8 +130,11 @@ def _compact_profile(entry, finished_at):
         if (type(decision.get("evaluated")) is not int or decision["evaluated"] < 1
                 or not decision.get("folds") or decision.get("target") != urn.get("target")):
             return None
-        if settings["inverse"] and (not settings["dynamic"] or key == lot.bench_key_urna2):
-            if not _valid_members(decision.get("reference_members")):
+        if settings["inverse"]:
+            from loto_enterprise.benchmark.lr_budget_scoring import LIVE_BUDGET_REFERENCE
+            if (decision.get("reference_policy") != LIVE_BUDGET_REFERENCE
+                    and (not settings["dynamic"] or key == lot.bench_key_urna2)
+                    and not _valid_members(decision.get("reference_members"))):
                 return None
         fields = ("game_key", "name", "pool_size", "target", "eligible_count", "decision")
         if not all(field in urn for field in fields):

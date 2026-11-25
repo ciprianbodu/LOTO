@@ -66,6 +66,10 @@ def test_daily_scoring_matches_independent_frequency_and_official_variants(inver
     assert report["summary"]["evaluated"] == 3 and progress == [(0, 3), (1, 3), (2, 3), (3, 3)]
     expected_in_range = frame.iloc[17:, :6].isin(range(10, 41)).all(axis=1).sum()
     assert report["summary"]["all_main_in_10_40"] == expected_in_range
+    assert report["summary"]["fallback_draws"] == report["summary"]["evaluated"] == 3
+    assert report["summary"]["fallback_by_role"]["selected_method"] == 3
+    assert report["summary"]["fallback_by_role"]["direct_selection"] == (3 if inverse else 0)
+    assert all(row["selected_method"]["source"] == "training_frequency" for row in report["draws"])
     assert report["methods"]["tested"]["loto_6_49"]["source"] == "training_frequency"
     assert (report["scheme_code"], report["price_bani"], report["variants"]) == (49, 12050, 15)
     assert report["max_consecutive_run"] == 2
@@ -163,7 +167,7 @@ def test_540_counts_six_drawn_balls_but_any_prize_requires_four_on_a_five_ball_v
     numbers = [f"n{i}" for i in range(1, 7)]
     frame.loc[18, numbers] = [*variant, sixth]
     frame.loc[19, numbers] = [*variant[:3], 38, 39, 40]
-    monkeypatch.setattr(wf, "_rank", lambda *args, **kwargs: pool)
+    monkeypatch.setattr(wf, "_rank", lambda *args, **kwargs: (pool, {"method": "frequency", "fallback": False}))
 
     report = _run(frame, "5/40", objective=ANY_PRIZE)
     assert len(variant) == 5
@@ -313,3 +317,21 @@ def test_frozen_joker_validates_both_inverse_references_before_using_the_paid_wi
         assert set(draw["jokers"]).isdisjoint(draw["excluded_jokers"])
         assert len(draw["excluded_jokers"]) == len(draw["jokers"]) == 5
         assert draw["tickets"]
+
+
+def test_fixed_inverse_counts_bonus_reference_fallback_once_on_each_played_draw(monkeypatch):
+    frame = _frame(draw_size=5, maximum=45)
+    frame["joker"] = np.arange(len(frame)) % 20 + 1
+    def fit(game, training, lot, *, inverse, **options):
+        profile = {"members": [{"method": "frequency", "weight": 1.0}], "source": "training_rebench",
+                   "reference_members": [{"method": "frequency", "weight": 1.0}], "target": 4}
+        return {lot.bench_key: {**profile, "fallback": False},
+                lot.bench_key_urna2: {**profile, "target": 1, "fallback": not inverse}}
+    monkeypatch.setattr(wf, "_fit", fit)
+    report = _run(frame, "joker", inverse=True, budget_lei=100)
+    summary = report["summary"]
+    assert summary["evaluated"] > 0
+    assert summary["fallback_draws"] == summary["evaluated"]
+    assert summary["fallback_by_role"] == {"selected_method": 0, "joker_selection": 0,
+                                         "direct_selection": 0, "direct_joker_selection": summary["evaluated"]}
+    assert all(row["direct_joker_selection"]["method"] == "frequency" for row in report["draws"] if row.get("tickets"))

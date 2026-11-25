@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from covering.lr_catalog_cache import catalog_cache
 import io
+import json
 import logging
 import math
 from copy import deepcopy
@@ -58,6 +59,52 @@ def _dynamic_scores(game, code, draws, cutoffs, excluded_numbers=()):
         matrix, cutoffs, resolve_lr_scheme(game, code), excluded_numbers=excluded_numbers,
         max_run=LR_MAX_CONSECUTIVE_RUN,
     )
+
+
+@catalog_cache(maxsize=24, semantic_key=dynamic_formulas)
+def _live_budget_forecast(game, code, layout_json, draws, dates, bonus, inverse, dynamic, lookback, joker_size, limits):
+    from loto_enterprise.benchmark.lr_budget_scoring import replay_budget_portfolios
+
+    lot = require_lottery(game, "RO")
+    layout = json.loads(layout_json)
+    matrix = np.frombuffer(draws, dtype=np.int32).reshape(-1, lot.draw_n)
+    frame = pd.DataFrame({"date": dates})
+    if bonus is not None:
+        frame["joker"] = bonus
+    size = len(matrix)
+    return replay_budget_portfolios(
+        layout, lot, resolve_lr_scheme(lot.geometry, code), matrix, frame, [size],
+        inverse=inverse, dynamic=dynamic, lookback=lookback, joker_size=joker_size, number_range=limits,
+    )[size]
+
+
+def _paid_budget_forecast(plan, lot, scheme, full_frame, full_matrix, engine, *,
+                          limits, inverse, dynamic, lookback, joker_size, prepared=None):
+    dates = history_dates(full_frame)
+    if dates is None:
+        return None
+    bonus = None
+    if lot.geo.second:
+        values, valid = valid_draw_matrix(full_frame, ["joker"], draw_n=1, max_num=lot.geo.second.max_n)
+        aligned = np.zeros(len(full_matrix), dtype=np.int32)
+        aligned[valid] = values[:, 0]
+        bonus = tuple(map(int, aligned))
+    if prepared is None:
+        prepared = _live_budget_forecast(
+            lot.game_id, scheme.code, json.dumps(plan, sort_keys=True),
+            np.ascontiguousarray(full_matrix, dtype=np.int32).tobytes(),
+            tuple(dates.dt.strftime("%Y-%m-%d")), bonus, inverse, dynamic, lookback, joker_size, limits,
+        )
+    if error := prepared.get("error"):
+        raise ValueError(error)
+    forecast = deepcopy(prepared)
+    forecast.update(
+        generated=False, dynamic=dynamic, code=scheme.code, inverse=inverse, number_range=limits,
+        inverse_range=limits if inverse else None, max_consecutive_run=LR_MAX_CONSECUTIVE_RUN,
+        rows=len(engine.data), date=dates.iloc[-1].strftime("%d-%m-%Y"),
+        history_hash=engine.audit.get("hash"), history_sha256=engine.audit.get("history_sha256"),
+    )
+    return forecast
 
 
 def _forecast_engine(lot, source, lookback, expected_hash=None):
@@ -166,8 +213,14 @@ def _same_profile_recipe(actual, expected):
 
 def _mismatched_inverse_references(lot, engine, scheme, dynamic, profile, direct_profiles, direct_forecast):
     """Ensure a paid inverse profile excludes the reference policy it evaluated."""
+    from loto_enterprise.benchmark.lr_budget_scoring import LIVE_BUDGET_REFERENCE
+
     mismatched = []
     for key, (inverse, _) in profile.items():
+        if inverse.get("reference_policy") == LIVE_BUDGET_REFERENCE:
+            if (direct_forecast.get("selection") or {}).get("source") != "paid_budget" or direct_profiles:
+                mismatched.append(key)
+            continue
         expected = inverse.get("reference_members")
         current = direct_profiles.get(key)
         if current is not None:
@@ -345,7 +398,8 @@ def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, 
 
 
 def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynamic, joker_size, inverse, hit_target,
-                     number_range, exclude_generated_pool=False, lr_rebench_entries=(), selection_policy=None):
+                     number_range, exclude_generated_pool=False, lr_rebench_entries=(), selection_policy=None,
+                     paid_snapshot=None):
     scheme = budget_plan_scheme(plan)
     number_range = _number_range(number_range)
     filename = source[0] if source else Path(lot.csv).name
@@ -363,6 +417,7 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
                         history_sha256=engine.audit["history_sha256"])
         return forecast
     engine, bonus_history = None, None
+    full_frame, full_matrix = None, None
     profiles = {}
     candidates = _rebench_candidates(
         () if exclude_generated_pool else lr_rebench_entries, lot, scheme, number_range,
@@ -384,6 +439,7 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
                     bonus_history = current.data.loc[valid]
                     if 0 < lookback < 100:
                         bonus_history = bonus_history.tail(max(1, int(len(bonus_history) * (lookback / 100))))
+                full_frame, full_matrix = current.data, current._draw_matrix
                 engine = _apply_lookback(current, lookback)
     inverse_profiles = {key: (p, "members") for key, p in profiles.get(True, {}).items()}
     direct_profiles = {key: (p, "members") for key, p in profiles.get(False, {}).items()}
@@ -438,7 +494,9 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
         if result and filename != result[0]:
             raise ValueError("Lipsește istoricul folosit la generarea acestui pool.")
         expected_hash = (saved.get("audit") or {}).get("hash")
-        engine = _forecast_engine(lot, source, lookback, expected_hash)
+        engine = _forecast_engine(lot, source, 0, expected_hash)
+        full_frame, full_matrix = engine.data, engine._draw_matrix
+        engine = _apply_lookback(engine, lookback)
         if previous and not expected_hash:
             dates = history_dates(engine.data)
             if same_lookback and previous["rows"] and previous["rows"] != len(engine.data):
@@ -450,9 +508,46 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
             if source is None and not (previous["rows"] and previous["date"]):
                 raise ValueError("Istoricul inițial al pool-ului generat este indisponibil. Regenerați pool-ul.")
 
-    # The inverse uses the direct pool for the same interval. The email
-    # explicitly pairs its alternative with an already generated normal pool.
-    if reuse_main and not restricted_direct:
+    from loto_enterprise.benchmark.lr_budget_scoring import LIVE_BUDGET_REFERENCE, MIN_PORTFOLIO_DAYS, _MIN_TRAINING_ROWS
+
+    active_reference = reuse_main and not restricted_direct
+    if engine is None and active_reference and not exclude_generated_pool and filename == result[0]:
+        # The ordinary budget action can perform its own paid comparison when
+        # the archived input for an already generated display is available.
+        expected_hash = (saved.get("audit") or {}).get("hash")
+        try:
+            current = _forecast_engine(lot, source, 0, expected_hash)
+        except (ValueError, OSError):
+            pass
+        else:
+            full_frame, full_matrix = current.data, current._draw_matrix
+            engine = _apply_lookback(current, lookback)
+    legacy_refs = inverse_profiles and any(
+        profile.get("reference_policy") != LIVE_BUDGET_REFERENCE for profile, _ in inverse_profiles.values()
+    )
+    paid_available = (
+        full_frame is not None and len(full_frame) >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS
+        and not exclude_generated_pool and not direct_profiles and not legacy_refs
+    )
+    paid = None
+    if paid_available:
+        if number_range is not None:
+            _range_exclusions(lot, scheme, number_range)
+        paid_inverse = inverse and not inverse_profiles
+        paid = _paid_budget_forecast(
+            plan, lot, scheme, full_frame, full_matrix, engine, limits=number_range, inverse=paid_inverse,
+            dynamic=dynamic, lookback=lookback, joker_size=joker_size, prepared=paid_snapshot,
+        )
+        if paid is not None and (not inverse or paid_inverse):
+            if size != scheme.n:
+                paid.update(expanded_from=size, expanded_to_max=required_pool_size(plan) > scheme.n)
+            paid["filename"] = filename
+            return paid
+
+    # A completed job supplies an external exclusion which could not be replayed causally.
+    if paid is not None:
+        forecast = paid
+    elif active_reference:
         forecast = previous
         filename = result[0]
     else:
@@ -472,11 +567,23 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
         mismatched = _mismatched_inverse_references(
             lot, engine, scheme, dynamic, inverse_profiles, direct_profiles, forecast,
         )
+        direct_selection = forecast.get("selection"), forecast.get("joker_selection")
         forecast = _inverse_forecast(lot, engine, scheme, dynamic, pool, jokers, hit_target, number_range,
                                      profiles=None if mismatched else inverse_profiles, bonus_history=bonus_history)
+        forecast["direct_selection"], forecast["direct_joker_selection"] = direct_selection
         if mismatched:
             forecast["profile_reference_mismatch"] = mismatched
+        if mismatched or not inverse_profiles:
+            forecast["portfolio_unmeasured"] = (
+                "Referința directă disponibilă nu poate fi reconstituită înaintea fiecărei zile de test."
+                if active_reference or direct_profiles else "Istoric insuficient pentru comparația pe bilete."
+            )
     else:
+        if not direct_profiles and paid is None:
+            forecast["portfolio_unmeasured"] = (
+                "Pool-ul provine dintr-o generare anterioară." if active_reference
+                else "Istoric insuficient pentru comparația pe bilete."
+            )
         forecast.update(pool=pool, jokers=jokers)
         forecast.setdefault("eligible_count", lot.max_n)
     forecast["history_hash"] = engine.audit.get("hash") if engine is not None else (saved.get("audit") or {}).get("hash")
@@ -500,7 +607,7 @@ def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5, inverse=False, hit_target=None,
     inverse_range=None, number_range=None, exclude_generated_pool=False, lr_rebench_entries=(),
-    selection_policy=None,
+    selection_policy=None, paid_snapshot=None,
 ):
     """Build a budget plan under the chosen pool or paid-portfolio policy."""
     if selection_policy not in (None, ONLINE_TICKET_EXPERTS):
@@ -518,6 +625,7 @@ def recommend_playable_games(
                 plan, lot, pool_codes.get(lot.game_id), result, source,
                 lookback, dynamic, joker_size, inverse, hit_target, limits, exclude_generated_pool, lr_rebench_entries,
                 **({"selection_policy": selection_policy} if selection_policy else {}),
+                **({"paid_snapshot": paid_snapshot[lot.game_id]} if paid_snapshot and lot.game_id in paid_snapshot else {}),
             )
             if selection_policy is None and not restrict_to_pool(plan, objective, forecast["pool"], forecast["jokers"])["tickets"]:
                 plan["forecast_error"] = f"Niciun cod LR în buget pentru pool-ul de {len(forecast['pool'])} numere."

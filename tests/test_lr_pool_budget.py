@@ -129,3 +129,67 @@ def test_lr_milp_matches_full_enumeration_with_second_ticket_fee_and_protection(
     assert solved and selected in feasible
     assert len(selected) == expected_zones
     assert score(selected) == upper == max(map(score, feasible))
+
+
+def test_optimizer_cache_keeps_budget_and_explicit_timing_separate(monkeypatch):
+    from copy import deepcopy
+
+    from covering import lr_pool_budget as optimizer
+
+    first, = recommend_games(300, FOUR_PLUS, "5/40")
+    other, = recommend_games(400, FOUR_PLUS, "5/40")
+    pool = _nominal_pool("5/40")
+    calls = []
+    refine = optimizer._refine_layout
+
+    def observed(*args):
+        calls.append((args[3], args[-2], args[-1] is not None))
+        return refine(*args)
+
+    optimizer._refine_cached.cache_clear()
+    monkeypatch.setattr(optimizer, "_refine_layout", observed)
+    normal = restrict_to_pool(deepcopy(first), FOUR_PLUS, pool)
+    abandoned = restrict_to_pool(deepcopy(first), FOUR_PLUS, pool, cancelled=lambda: True)
+    assert abandoned == restrict_to_pool(deepcopy(first), FOUR_PLUS, pool, time_limit_s=0)
+    assert normal == restrict_to_pool(deepcopy(first), FOUR_PLUS, pool)
+    larger = restrict_to_pool(deepcopy(other), FOUR_PLUS, pool)
+    assert abandoned["attained"] <= normal["attained"]
+    assert first["budget_bani"] == normal["budget_bani"] == 30000
+    assert other["budget_bani"] == larger["budget_bani"] == 40000
+    assert calls == [
+        (normal["price_bani"], 0.65, False),
+        (normal["price_bani"], 0.65, True),
+        (normal["price_bani"], 0, False),
+        (larger["price_bani"], 0.65, False),
+    ]
+
+
+def test_hot_layout_cache_invalidates_after_milp_callable_replacement(monkeypatch):
+    from copy import deepcopy
+
+    from covering import lr_pool_budget as optimizer, lr_pool_milp
+
+    template, = recommend_games(106, FOUR_PLUS, "joker")
+    template.update(tickets=[], budget_bani=10599, price_bani=0, attained=0, variants=0)
+    pool = (2, 5, 8, 9, 12, 15, 16, 19)
+    calls = []
+
+    def solver(label):
+        def solve(*args, **kwargs):
+            calls.append(label)
+            return (), None, False
+
+        return solve
+
+    def play():
+        return restrict_to_pool(deepcopy(template), FOUR_PLUS, pool, (3, 13))
+
+    optimizer._refine_cached.cache_clear()
+    monkeypatch.setattr(lr_pool_milp, "solve_zone_coverage", solver("first implementation"))
+    result = play()
+    assert result == play()
+    assert calls == ["first implementation"]
+
+    monkeypatch.setattr(lr_pool_milp, "solve_zone_coverage", solver("updated implementation"))
+    assert result == play() == play()
+    assert calls == ["first implementation", "updated implementation"]

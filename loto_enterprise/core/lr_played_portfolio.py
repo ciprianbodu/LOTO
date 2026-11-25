@@ -12,14 +12,15 @@ from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.prize_categories import resolve_variant_category
 
 
-CONTRACT_VERSION = 1
+LAYOUT_VERSION = 1
+CONTRACT_VERSION = 2
 
 
 def layout_identity(plan):
     fields = {key: plan.get(key) for key in ("game", "objective", "budget_bani", "price_bani")}
     fields["tickets"] = [[(z["code"], list(z["numbers"]), z.get("joker")) for z in ticket]
                          for ticket in plan["tickets"]]
-    return sha256(json.dumps([CONTRACT_VERSION, fields], sort_keys=True,
+    return sha256(json.dumps([LAYOUT_VERSION, fields], sort_keys=True,
                              separators=(",", ":")).encode()).hexdigest()
 
 
@@ -88,6 +89,27 @@ def expand_plan(plan):
 def grade_draw(expanded, drawn, joker=None, *, draw_date=None):
     """Grade complete paid variants. Absent draw date uses the current category schedule."""
     drawn = tuple(drawn)
+    if expanded.game == "joker" and len(drawn) == 6:
+        if joker is not None and joker != drawn[-1]:
+            raise ValueError("Bila Joker declarată diferă de cea din rezultat.")
+        drawn, joker = drawn[:5], drawn[-1]
+    if expanded.game == "joker" and joker is None:
+        # All unplayed bonus values produce the same grades. Evaluate that
+        # outcome once alongside every distinct bonus attached to a paid zone.
+        bonuses = {bonus for _, bonus, _ in expanded.variants}
+        bonus_limit = require_lottery(expanded.game, "RO").geo.second.max_n
+        unused = next((b for b in range(1, bonus_limit + 1) if b not in bonuses), None)
+        if unused is not None:
+            bonuses.add(unused)
+        possible = [grade_draw(expanded, drawn, bonus, draw_date=draw_date) for bonus in sorted(bonuses)]
+        result = possible[0].copy()
+        for field in ("winning_variants", "distinct_winning_variants", "any_prize", "prize_counts"):
+            first = possible[0][field]
+            result[field] = first if all(row[field] == first for row in possible) else None
+        counts = [row["winning_variants"] for row in possible]
+        result["winning_variants_min"], result["winning_variants_max"] = min(counts), max(counts)
+        return result
+
     actual = set(drawn)
     first_five = set(drawn[:5])
     categories, resolved = Counter(), {}

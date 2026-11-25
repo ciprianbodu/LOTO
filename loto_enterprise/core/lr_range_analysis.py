@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-from covering.lr_catalog_cache import catalog_cache
-from loto_enterprise.benchmark.lr_provenance import lr_semantics
+import json
 from collections import defaultdict
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
+from covering.lr_catalog_cache import catalog_cache
 from covering.lr_pool_budget import restrict_to_pool
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
-from covering.lr_schemes import scheme_tickets
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
 from covering.lr_selection import resolve_lr_scheme
-from covering.probability import subset_hit_table
+from loto_enterprise.benchmark.lr_provenance import lr_semantics
 from loto_enterprise.benchmark.methods import call_method
-from loto_enterprise.benchmark.restricted_decision import restricted_bench_scores
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.dynamic_pools import ranked_pools
 from loto_enterprise.core.dynamic_winner import (
@@ -26,9 +25,9 @@ from loto_enterprise.core.dynamic_winner import (
 )
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
-from loto_enterprise.core.lr_budget_forecast import _forecast_engine, budget_plan_scheme, recommend_playable_games
+from loto_enterprise.core.lr_budget_forecast import ONLINE_TICKET_EXPERTS, _forecast_engine, budget_plan_scheme
+from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw
 from loto_enterprise.core.lr_range_timing import phase_evidence, range_timing
-from loto_enterprise.core.ranking import rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
 
@@ -46,24 +45,6 @@ def _left(origin, lookback):
 def _eligible(universe, limits):
     low, high = limits or (1, universe)
     return tuple(range(max(1, low), min(universe, high) + 1))
-
-
-def _budget_layout(plan, objective, scheme, joker_size):
-    pool = tuple(range(1, scheme.n + 1))
-    jokers = tuple(range(1, joker_size + 1)) if plan["game"] == "joker" else ()
-    layout = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
-    masks = set()
-    touches = [0] * len(jokers)
-    for ticket in layout["tickets"]:
-        for zone in ticket:
-            if jokers:
-                touches[zone["joker"] - 1] |= sum(1 << (p - 1) for p in zone["numbers"])
-            official = resolve_lr_scheme(plan["game"], zone["code"])
-            for variant in scheme_tickets(official, zone["numbers"]):
-                masks.add(sum(1 << (p - 1) for p in variant))
-    if not masks:
-        raise ValueError("Bugetul nu produce variante oficiale pentru comparație.")
-    return tuple(sorted(masks)), tuple(touches)
 
 
 def _dynamic_predictor(matrix, bounds, days, scheme, universe, indicators, lookback):
@@ -120,137 +101,80 @@ def _frozen_scores(method, past, maximum, cutoffs):
     return call_method("frequency", past, maximum, history_cutoffs=cutoffs)[0]
 
 
-def _fixed_predictor(matrix, bounds, first, lot, scheme, target, lookback):
-    """Freeze a pre-validation Re-Bench winner, then update its scores on each prefix."""
-    left = _left(first, lookback)
-    _, selection = restricted_bench_scores(
-        matrix[left:first], np.maximum(0, bounds[left:first] - left), lot.bench_key, scheme.n, (), target, strict_lr=True,
-    )
-    # The fixed production catalog currently selects one member. An old or
-    # unavailable combined decision has the documented frequency fallback.
-    method = selection["method"]
-    if not method or " + " in method:
-        method = "frequency"
-
-    def prepare(origin):
-        start = _left(origin, lookback)
-        history = matrix[start:origin]
-        cutoffs = tuple(np.maximum(0, bounds[start:origin] - start).tolist())
-        scores = _frozen_scores(method, history, lot.max_n, cutoffs)
-
-        def pool(eligible):
-            return np.asarray(sorted(rank_lr_pool({n: scores[n] for n in eligible}, scheme.n)), dtype=int)
-        return pool
-    return prepare, method
-
-
-def _bonus_predictor(values, bounds, first, lot, count, lookback, inverse):
-    """Fit the bonus scorer before validation and rank only strictly past valid draws."""
-    maximum = lot.geo.second.max_n
-
-    def history(origin):
-        start = _left(origin, lookback)
-        valid = np.flatnonzero(values[start:origin]) + start
-        groups = bounds[valid]
-        return values[valid, None], tuple(np.searchsorted(groups, groups).tolist())
-
-    initial, cutoffs = history(first)
-    method = "frequency"
-    if len(initial):
-        _, decision = restricted_bench_scores(initial, cutoffs, lot.bench_key_urna2, 1, (), 1)
-        method = decision["method"] or "frequency"
-    if " + " in method:
-        method = "frequency"
-
-    def prepare(origin):
-        past, cutoffs = history(origin)
-        if not len(past):
-            return None
-        scores = _frozen_scores(method, past, maximum, cutoffs)
-        ranked = rank_by_score(scores, maximum)
-        return ranked[count:2 * count] if inverse else ranked[:count]
-    return prepare, method
-
-
-def _matched_bonus(hit_masks, drawn, selected, touches):
-    # At least one main ball must be in a zone carrying the matching bonus.
-    if selected is None:
-        return np.full(len(drawn), -1, dtype=np.int8)
-    zone_masks = np.zeros(21, dtype=np.int64)
-    zone_masks[selected] = touches
-    return np.where(drawn > 0, (hit_masks & zone_masks[drawn]) != 0, -1)
-
-
 @catalog_cache(maxsize=8)
-def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target, bonus_data, touches,
-            semantic_signature=None):
+def _replay(data, date_labels, game, code, template, lookback, dynamic, inverse, joker_size,
+            bonus_data, policy, semantic_signature):
+    from loto_enterprise.benchmark.lr_budget_scoring import replay_budget_portfolios
+    from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
+
     lot = require_lottery(game, "RO")
     scheme = resolve_lr_scheme(game, code)
+    layout = json.loads(template)
     matrix = np.frombuffer(data, dtype=np.int32).reshape(-1, lot.draw_n)
-    bounds = np.asarray(cutoffs, dtype=np.intp)
-    days = np.flatnonzero(bounds == np.arange(len(bounds)))
-    eligible_days = days[days >= WARMUP_DRAWS]
-    start = max(int(eligible_days[0]), len(matrix) - VALIDATION_DRAWS) if len(eligible_days) else len(matrix)
-    # A partially scored date must still forecast before the first draw of its day.
-    origins = eligible_days[eligible_days >= (bounds[start] if start < len(matrix) else start)]
+    frame = pd.DataFrame(matrix, columns=[f"n{i + 1}" for i in range(lot.draw_n)])
+    if date_labels is not None:
+        frame["date"] = date_labels
+    bonus = np.frombuffer(bonus_data, dtype=np.uint8)
+    if lot.geo.second:
+        frame["joker"] = bonus
+    bounds = training_cutoffs(frame)
+    days = [origin for origin in dict.fromkeys(bounds) if origin >= WARMUP_DRAWS]
+    start = max(days[0], len(matrix) - VALIDATION_DRAWS) if days else len(matrix)
+    origins = [day for day in days if day >= bounds[start]] if days else []
     results = np.full((len(RANGES), len(matrix) - start, 3), -1, dtype=np.int8)
-    if not len(origins):
-        return start, 0, results, None, None
-    indicators = np.zeros((len(matrix), lot.max_n), dtype=np.uint8)
-    indicators[np.arange(len(matrix))[:, None], matrix - 1] = 1
-    variant_hits = subset_hit_table(scheme.n, masks)[1]
-    positions = 1 << np.arange(scheme.n)
-    bases = tuple(_eligible(lot.max_n, limits) for limits in RANGES)
-    required = 2 * scheme.n if inverse else scheme.n
-    method = None
-    if dynamic:
-        prepare = _dynamic_predictor(matrix, bounds, days, scheme, lot.max_n, indicators, lookback)
-    else:
-        prepare, method = _fixed_predictor(matrix, bounds, int(origins[0]), lot, scheme, target, lookback)
-    bonus_method = None
-    if bonus_data:
-        drawn_bonus = np.frombuffer(bonus_data, dtype=np.uint8)
-        prepare_bonus, bonus_method = _bonus_predictor(
-            drawn_bonus, bounds, int(origins[0]), lot, len(touches), lookback, inverse,
-        )
-    for origin, end in zip(origins, (*origins[1:], len(matrix)), strict=True):
-        predict = prepare(int(origin))
-        bonus = prepare_bonus(int(origin)) if bonus_data else None
-        for i, base in enumerate(bases):
-            if len(base) < required or lr_pool_capacity(base) < scheme.n:
-                continue
-            eligible = base
-            if inverse:
-                direct = set(predict(base))
-                eligible = tuple(n for n in base if n not in direct)
-                if lr_pool_capacity(eligible) < scheme.n:
+    current = [False] * len(RANGES)
+    if not len(matrix) or date_labels is None:
+        return start, len(origins), results, current
+
+    objective = layout["objective"]
+    outcome = "any_prize" if objective == ANY_PRIZE else "hit4"
+    for index, limits in enumerate(RANGES):
+        base = _eligible(lot.max_n, limits)
+        if lr_pool_capacity(base) < scheme.n or len(base) < scheme.n * (2 if inverse else 1):
+            continue
+        wanted = [*origins, len(matrix)]
+        if policy != ONLINE_TICKET_EXPERTS:
+            forecasts = replay_budget_portfolios(
+                layout, lot, scheme, matrix, frame, wanted, inverse=inverse, dynamic=dynamic,
+                lookback=lookback, joker_size=joker_size, number_range=limits,
+            )
+        for origin, end in zip(wanted, [*wanted[1:], len(matrix)], strict=True):
+            if policy == ONLINE_TICKET_EXPERTS:
+                try:
+                    played = online_ticket_forecast(
+                        lot, layout, scheme, frame.iloc[:origin], inverse=inverse, number_range=limits,
+                        lookback=lookback, joker_size=joker_size, objective=objective,
+                    )
+                except ValueError:
                     continue
-            pool = predict(eligible)
-            scored_start = max(origin, start)
-            matches = indicators[scored_start:end, pool - 1]
-            dest = results[i, scored_start - start:end - start]
-            dest[:, 0] = matches.sum(axis=1)
-            hit_masks = matches @ positions
-            dest[:, 1] = variant_hits[hit_masks]
-            if bonus_data:
-                dest[:, 2] = _matched_bonus(hit_masks, drawn_bonus[scored_start:end], bonus, touches)
-    return start, len(origins), results, method, bonus_method
+            else:
+                forecast = forecasts[origin]
+                if forecast.get("error"):
+                    continue
+                played = restrict_to_pool(deepcopy(layout), objective, forecast["pool"], forecast["jokers"])
+                played["forecast_pool"] = forecast["pool"]
+            if not played["tickets"]:
+                continue
+            if origin == len(matrix):
+                current[index] = True
+                continue
+            portfolio = expand_plan(played)
+            for i in range(max(start, origin), end):
+                joker = (int(bonus[i]) or None) if lot.geo.second else None
+                grade = grade_draw(portfolio, matrix[i], joker, draw_date=date_labels[i])
+                attained = grade[outcome]
+                results[index, i - start] = grade["pool_hits"], grade["max_hits"], -1 if attained is None else int(attained)
+    return start, len(origins), results, current
 
 
-def _summarize(data, reference, threshold, timing, start, limits, eligible_count, size, bonus_prize=False):
+def _summarize(data, reference, timing, start, limits, eligible_count, size):
     pool, tickets = data[:, 0], data[:, 1]
     played = pool >= 0
     base_played = reference[:, 0] >= 0
-    base_tickets = reference[:, 1]
-    evaluated, base_evaluated = played, base_played
-    success = tickets >= threshold
-    base_success = base_tickets >= threshold
-    if bonus_prize:
-        # A main-only prize and an entirely missed ticket are known without the bonus.
-        evaluated = played & (success | (tickets == 0) | (data[:, 2] >= 0))
-        base_evaluated = base_played & (base_success | (base_tickets == 0) | (reference[:, 2] >= 0))
-        success |= data[:, 2] > 0
-        base_success |= reference[:, 2] > 0
+    evaluated = played & (data[:, 2] >= 0)
+    base_evaluated = base_played & (reference[:, 2] >= 0)
+    success = data[:, 2] == 1
+    base_success = reference[:, 2] == 1
     compared = evaluated & base_evaluated
     differences = success.astype(int) - base_success.astype(int)
     paired = differences[compared]
@@ -291,13 +215,15 @@ def _summarize(data, reference, threshold, timing, start, limits, eligible_count
 
 
 def _decision(rows):
-    if not rows[0]["evaluated"]:
+    if not rows[0]["evaluated"] and not rows[0]["infeasible"]:
         return None, "Istoricul nu conține extrageri de validare după cele 250 de extrageri inițiale."
+    if not rows[0]["evaluated"]:
+        return None, "Selectorul nu a produs bilete jucabile pe baza completă în perioada de validare."
     if not rows[0]["objective_evaluated"]:
         return None, "Lipsesc rezultate valide din Urna 2 pentru a compara premiile pe perioada de test."
     restricted = rows[1]
     if not restricted["feasible_now"]:
-        return None, "În intervalul 10–40 nu rămân suficiente numere pentru schema din buget."
+        return None, "În intervalul 10–40, selectorul nu a produs bilete jucabile pentru schema din buget."
     if restricted["infeasible"]:
         return None, "Intervalul 10–40 nu a permis aceeași dimensiune a pool-ului la toate extragerile de validare."
     if restricted["adjusted_p"] > 0.05 or restricted["paired_wins"] <= restricted["paired_losses"]:
@@ -312,11 +238,16 @@ def _decision(rows):
 
 def compare_budget_ranges(
     budget_lei, objective, game_id, histories=None, *, lookback=100, dynamic=True, inverse=False,
-    hit_target=4, joker_size=5, pool_codes=None, generated=None,
+    hit_target=4, joker_size=5, pool_codes=None, generated=None, selection_policy=None,
 ):
     """Compare official main-number tickets before using a range for the next draw."""
     lot = require_lottery(game_id, "RO")
-    plan, = recommend_games(budget_lei, objective, game_id)
+    if selection_policy not in (None, ONLINE_TICKET_EXPERTS):
+        raise ValueError(f"Politică de selecție LR necunoscută: {selection_policy!r}.")
+    plans = recommend_games(budget_lei, objective, game_id)
+    if not plans or not plans[0]["tickets"]:
+        raise ValueError("Bugetul nu produce bilete LR pentru comparația bazelor.")
+    plan, = plans
     scheme = budget_plan_scheme(plan)
     source = (histories or {}).get(game_id)
     saved = (generated or {}).get(game_id)
@@ -327,36 +258,23 @@ def compare_budget_ranges(
     engine = _forecast_engine(lot, source, 0, fingerprint)
     matrix = engine._draw_matrix
     dates = history_dates(engine.data)
-    if inverse:
-        current, = recommend_playable_games(
-            budget_lei, objective, game_id, histories, pool_codes=pool_codes or {}, generated=generated,
-            dynamic=dynamic, lookback=lookback, joker_size=joker_size, hit_target=hit_target,
-        )
-        if not current["tickets"]:
-            raise ValueError(current.get("forecast_error", "Pool-ul normal nu poate fi determinat."))
-        if lot.bench_key_urna2:
-            bonus_size = len(current["forecast"]["jokers"])
-            remaining = lot.geo.second.max_n - bonus_size
-            if remaining < bonus_size:
-                raise ValueError(
-                    f"Urna 2 Joker: rămân {remaining} bile eligibile pentru un pool invers de {bonus_size}. "
-                    "Comparația dintre baza completă și intervalul 10–40 nu poate produce bilete inverse."
-                )
-    masks, touches = _budget_layout(plan, objective, scheme, joker_size)
+    if lot.geo.second:
+        maximum = lot.geo.second.max_n
+        if type(joker_size) is not int or not 1 <= joker_size <= maximum:
+            raise ValueError("Dimensiunea pool-ului Joker pentru Urna 2 este nevalidă.")
+        if inverse and maximum - joker_size < joker_size:
+            raise ValueError(f"Urna 2 Joker: rămân {maximum - joker_size} bile eligibile pentru un pool invers de {joker_size}.")
     bonus_prize = objective == ANY_PRIZE and game_id == "joker"
-    bonus_data = b""
-    if bonus_prize:
-        bonus = np.zeros(len(matrix), dtype=np.uint8)
-        if "joker" in engine.data:
-            valid_values, valid = valid_draw_matrix(engine.data, ["joker"], draw_n=1, max_num=lot.geo.second.max_n)
-            bonus[valid] = valid_values[:, 0]
-        bonus_data = bonus.tobytes()
-    start, days, results, method, bonus_method = _replay(
-        np.ascontiguousarray(matrix, dtype=np.int32).tobytes(), training_cutoffs(engine.data),
-        game_id, scheme.code, masks, lookback, dynamic, inverse, hit_target, bonus_data, touches,
+    bonus = np.zeros(len(matrix), dtype=np.uint8) if lot.geo.second else np.empty(0, dtype=np.uint8)
+    if lot.geo.second and "joker" in engine.data:
+        values, valid = valid_draw_matrix(engine.data, ["joker"], draw_n=1, max_num=lot.geo.second.max_n)
+        bonus[valid] = values[:, 0]
+    labels = tuple(dates.dt.strftime("%Y-%m-%d")) if dates is not None else None
+    start, days, results, current = _replay(
+        np.ascontiguousarray(matrix, dtype=np.int32).tobytes(), labels, game_id, scheme.code,
+        json.dumps(plan, sort_keys=True), lookback, dynamic, inverse, joker_size, bonus.tobytes(), selection_policy,
         tuple(sorted(lr_semantics(lot, scheme, hit_target, layout=plan).items())),
     )
-    threshold = 3 if objective == ANY_PRIZE and game_id != "5/40" else 4
     rows = []
     for index, limits in enumerate(RANGES):
         timing = range_timing(matrix, dates, limits or (1, lot.max_n))
@@ -364,49 +282,33 @@ def compare_budget_ranges(
         base_count = len(base)
         eligible_count = max(0, base_count - scheme.n) if inverse else base_count
         row = _summarize(
-            results[index], results[0], threshold, timing, start, limits,
-            eligible_count, scheme.n, bonus_prize,
+            results[index], results[0], timing, start, limits,
+            eligible_count, scheme.n,
         )
-        # Every third ball would have to be skipped even in one unbroken interval.
-        # Only an intermediate-sized complement needs the exact current direct pool.
-        if inverse and eligible_count - eligible_count // 3 < scheme.n <= eligible_count:
-            reference = current
-            if limits is not None:
-                reference, = recommend_playable_games(
-                    budget_lei, objective, game_id, histories, pool_codes=pool_codes or {}, generated=generated,
-                    dynamic=dynamic, lookback=lookback, joker_size=joker_size, hit_target=hit_target, number_range=limits,
-                )
-            row["feasible_now"] = bool(reference["tickets"]) and (
-                lr_pool_capacity(set(base).difference(reference["forecast"]["pool"])) >= scheme.n
-            )
-        elif not inverse:
-            row["feasible_now"] = lr_pool_capacity(base) >= scheme.n
+        row["feasible_now"] = current[index]
         rows.append(row)
     recommendation, reason = _decision(rows)
-    origin = "zi" if dates is not None else "extragere"
     each_origin = "fiecărei zile" if dates is not None else "fiecărei extrageri"
+    selector = "Fixed Share" if selection_policy else "dinamic" if dynamic else "fix"
     protocol = (
-        f"Selectorul dinamic a fost recalculat înaintea {each_origin}, inclusiv pentru martorul aleator."
-        if dynamic else f"Estimare în mod fix. Metoda {method or 'indisponibilă'} a fost aleasă prin Re-Bench "
-        f"pe baza completă înaintea perioadei de test și folosită și pentru 10–40, cu scoruri actualizate la fiecare {origin}."
+        f"Selectorul {selector} compară variantele plătite înaintea {each_origin}, "
+        "folosind numai extragerile din zilele anterioare. Se verifică variantele finale și obiectivul ales."
     )
     if dates is None:
-        protocol += " Istoricul nu are date calendaristice. Se păstrează ordinea rândurilor din fișier."
+        recommendation, reason = None, "Istoricul nu are date calendaristice pentru validarea pe zile."
+        protocol = "Se păstrează ordinea rândurilor din fișier pentru frecvențele intervalului. Validarea variantelor pe zile cere date calendaristice."
+    if saved:
+        protocol += " Comparația reconstruiește numai selecțiile de atunci. Pool-ul salvat pentru extragerea curentă nu se aplică retroactiv."
     protocol += " Pool-urile din urna principală au cel mult două numere consecutive."
-    if inverse:
+    if inverse and dates is not None:
         protocol += (
             f" Înaintea {each_origin}, simularea calculează pool-ul direct separat pentru fiecare bază "
             "și îl exclude din acea bază înainte de a alege pool-ul invers."
         )
-    metric = f"{threshold}+ numere principale pe cel puțin o variantă"
+    metric = "4+ numere principale pe cel puțin o variantă" if objective != ANY_PRIZE else "Orice premiu pe o variantă"
     if bonus_prize:
         metric = "Orice premiu Joker pe o variantă"
-        protocol += (
-            f" Pentru Urna 2 se estimează bilele jucate cu metoda {bonus_method or 'indisponibilă'}, fixată "
-            f"înaintea validării și actualizată pe extragerile anterioare {each_origin}. Ambele baze "
-            "folosesc aceleași bile Joker pe aceleași zone. Sunt numărate trei numere principale sau "
-            "cel puțin un număr principal cu bila Joker corectă pe aceeași variantă."
-        )
+        protocol += " Urna 2 se verifică pe fiecare variantă cu bila Joker atribuită zonei jucate."
     if game_id == "5/40":
         protocol += " La 5/40 se evaluează toate cele șase numere extrase."
     protocol += (
@@ -423,7 +325,7 @@ def compare_budget_ranges(
         "rows": len(matrix) - start, "days": days, "first_date": (
             dates.iloc[start].date().isoformat() if dates is not None and len(matrix) > start else None
         ), "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(matrix) else None,
-        "metric": metric, "ranges": rows, "bonus_method": bonus_method,
-        "recommended_range": recommendation, "reason": reason, "fixed_method": method,
+        "metric": metric, "ranges": rows,
+        "recommended_range": recommendation, "reason": reason,
         "protocol": protocol,
     }

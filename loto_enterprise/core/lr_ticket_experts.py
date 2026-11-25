@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from compression.zstd import ZstdError
 from copy import deepcopy
 from datetime import date
 from functools import lru_cache
 from hashlib import sha256
 import json
+import logging
+import pickle
 from math import exp, isfinite, log
 from threading import Lock
 
 import numpy as np
 
 
-FIXED_SHARE_VERSION = "lr-ticket-fixed-share-v1"
+FIXED_SHARE_VERSION = "lr-ticket-fixed-share-v2"
+# First entry is the baseline and wins ties. All settings are fixed before the outer evaluation.
+TUNING_GRID = ((0.7, 0.05), (0.35, 0.02), (1.4, 0.10))
+TUNING_WARMUP_DAYS = 26
 ONLINE_TICKET_EXPERTS = "online_ticket_experts"
 TRAINING_DAYS = 104
 DEFAULT_EXPERTS = ("frequency", "compact_transition_prior", "markov_lag2",
@@ -151,6 +157,65 @@ class FixedShareTicketExperts:
         return model
 
 
+class _TunedTicketExperts:
+    """Compete predeclared rates on complete past days using the actual chosen expert's loss."""
+
+    def __init__(self, experts, objective, context):
+        self.models = [FixedShareTicketExperts(experts, objective, learning_rate=rate, share=share, context=context)
+                       for rate, share in TUNING_GRID]
+        self.losses = [0.0] * len(self.models)
+        self.evaluated_days = 0
+
+    @property
+    def selected(self):
+        return self.models[min(range(len(self.models)), key=self.losses.__getitem__)]
+
+    def observe(self, day, plans, outcomes):
+        choices = [model.choose() for model in self.models]
+        baseline = self.models[0]
+        # Grade once; every policy observes the same underlying expert portfolios.
+        record = baseline.observe(day, plans, outcomes)
+        losses = [record["losses"][name] for name in baseline.experts]
+        if record["evaluated"]:
+            if self.evaluated_days >= TUNING_WARMUP_DAYS:
+                for i, choice in enumerate(choices):
+                    self.losses[i] += record["losses"][choice]
+            self.evaluated_days += 1
+        for model in self.models[1:]:
+            if record["evaluated"]:
+                model._update(losses)
+            model.last_day, model.days = baseline.last_day, baseline.days
+            model.history_digest = baseline.history_digest
+        return record["evaluated"]
+
+    def checkpoint(self):
+        return {"models": [m.checkpoint() for m in self.models], "losses": list(self.losses),
+                "evaluated_days": self.evaluated_days}
+
+    def resume(self, state):
+        saved = state["models"]
+        digest = saved[0]["history_digest"]
+        restored = [FixedShareTicketExperts.restore(item, context=model.context, history_digest=digest)
+                    for item, model in zip(saved, self.models, strict=True)]
+        if any((m.objective, m.experts, m.learning_rate, m.share) !=
+               (expected.objective, expected.experts, expected.learning_rate, expected.share)
+               for m, expected in zip(restored, self.models, strict=True)):
+            raise ValueError("Fixed Share checkpoint has incompatible competitors.")
+        losses = state["losses"]
+        days = state["evaluated_days"]
+        if (type(days) is not int or not 0 <= days <= restored[0].days
+                or len(losses) != len(restored) or not all(isfinite(x) and 0 <= x <= days for x in losses)):
+            raise ValueError("Invalid Fixed Share calibration state.")
+        self.models, self.losses, self.evaluated_days = restored, list(losses), days
+
+    def calibration(self):
+        tested = max(0, self.evaluated_days - TUNING_WARMUP_DAYS)
+        return {"warmup_days": TUNING_WARMUP_DAYS, "evaluated_days": tested,
+                "trials": [{"learning_rate": model.learning_rate, "share": model.share, "sum_daily_loss": loss}
+                           for model, loss in zip(self.models, self.losses, strict=True)],
+                "learning_rate": self.selected.learning_rate, "share": self.selected.share}
+
+
 def replay_ticket_experts(days, forecast, model, *, training=()):
     """Replay complete dates, giving the forecaster an immutable prior prefix."""
     past = list(training)
@@ -170,7 +235,7 @@ _CACHE_SIZE = 16
 
 
 @lru_cache(maxsize=256)
-def _expert_scores(maximum, draw_n, payload, relative_bounds):
+def _expert_scores(maximum, draw_n, payload, relative_bounds, formula_signature):
     from loto_enterprise.benchmark.methods import call_method
 
     draws = np.frombuffer(payload, dtype=np.int32).reshape(-1, draw_n)
@@ -249,6 +314,8 @@ def online_ticket_forecast(
     from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
     from loto_enterprise.benchmark.methods import call_method
 
+    if cancelled is not None:
+        cancelled()
     if not isfinite(lookback := float(lookback)) or not 0 <= lookback <= 100:
         raise ValueError("Procentul de istoric pentru Fixed Share trebuie să fie între 0 și 100.")
     dates, matrix, bonus = _fixed_share_history(lot, frame_before_day)
@@ -264,10 +331,16 @@ def online_ticket_forecast(
     history_hash = sha256(
         "".join(dates).encode("ascii") + matrix.tobytes() + bonus.tobytes()
     ).hexdigest()
+    from loto_enterprise.benchmark.lr_provenance import lr_semantics
+    from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path_atomic
+    from runtime_paths import WF_CACHE_DIR
+
+    semantics = lr_semantics(lot, scheme, 4, layout=plan)
     context = fixed_share_context({
         "plan": plan, "scheme": scheme.code, "range": number_range, "lookback": lookback,
         "objective": objective, "joker_size": joker_size, "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
-        "training_days": TRAINING_DAYS, "experts": DEFAULT_EXPERTS,
+        "training_days": TRAINING_DAYS, "experts": DEFAULT_EXPERTS, "semantics": semantics,
+        "tuning": TUNING_GRID, "warmup": TUNING_WARMUP_DAYS,
     })
     key = (history_hash, context, bool(inverse))
     with _CACHE_LOCK:
@@ -285,8 +358,8 @@ def online_ticket_forecast(
             f"Fixed Share invers: cele {len(eligible)} numere eligibile nu permit "
             f"două pool-uri disjuncte cu câte {scheme.n} numere."
         )
-    direct = FixedShareTicketExperts(DEFAULT_EXPERTS, objective, context=context)
-    selected = FixedShareTicketExperts(DEFAULT_EXPERTS, objective, context=context) if inverse else direct
+    direct = _TunedTicketExperts(DEFAULT_EXPERTS, objective, context)
+    selected = _TunedTicketExperts(DEFAULT_EXPERTS, objective, context) if inverse else direct
     date_values = np.asarray(dates)
     bounds = np.searchsorted(date_values, date_values, side="left")
     starts = [0, *(np.flatnonzero(np.diff(bounds)) + 1).tolist(), len(matrix)]
@@ -297,7 +370,7 @@ def online_ticket_forecast(
         width = origin if lookback in (0, 100) else max(1, int(origin * lookback / 100))
         start = origin - width
         cuts = tuple(map(int, np.maximum(bounds[start:origin] - start, 0)))
-        values = _expert_scores(lot.max_n, lot.draw_n, matrix[start:origin].tobytes(), cuts)
+        values = _expert_scores(lot.max_n, lot.draw_n, matrix[start:origin].tobytes(), cuts, semantics["formulas"])
         bonus_score = {}
         if maximum:
             bonus_prefix = bonus[start:origin]
@@ -307,32 +380,58 @@ def online_ticket_forecast(
         return values, bonus_score
 
     recent = starts[max(1, len(starts) - TRAINING_DAYS - 1):]
-    for origin, end in zip(recent[:-1], recent[1:], strict=True):
+    spans = list(zip(recent[:-1], recent[1:], strict=True))
+    completed = 0
+    mode = "inverse" if inverse else "direct"
+    cache_path = WF_CACHE_DIR / "lr_ticket_experts" / f"{lot.bench_key}-{mode}.pkl"
+    # One bounded slot per game/mode. A concurrent different forecast may replace
+    # the file, but its context and history can never be adopted by this request.
+    try:
+        state = pickle_load_path(cache_path)
+        if state["identity"] == key and fixed_share_context(state["progress"]) == state["checksum"]:
+            progress = state["progress"]
+            offset = progress["completed"]
+            if type(offset) is not int or not 0 <= offset <= len(spans):
+                raise ValueError("Invalid Fixed Share checkpoint origin.")
+            direct.resume(progress["direct"])
+            if inverse:
+                selected.resume(progress["inverse"])
+            completed, observed, skipped = offset, progress["observed"], progress["skipped"]
+    except FileNotFoundError:
+        pass
+    except (OSError, EOFError, ZstdError, pickle.UnpicklingError, TypeError, KeyError, IndexError, ValueError) as exc:
+        logging.warning("Fixed Share: recalculare după checkpoint ilizibil: %s", exc)
+        direct = _TunedTicketExperts(DEFAULT_EXPERTS, objective, context)
+        selected = _TunedTicketExperts(DEFAULT_EXPERTS, objective, context) if inverse else direct
+
+    for step, (origin, end) in enumerate(spans[completed:], start=completed + 1):
         if cancelled is not None:
             cancelled()
-        outcomes = [
-            (list(map(int, matrix[row])), int(bonus[row]) if bonus[row] else None)
-            for row in range(origin, end)
-            if not maximum or bonus[row]
-        ]
-        if not outcomes:
-            skipped += 1
-            continue
+        outcomes = [(list(map(int, matrix[row])), int(bonus[row]) if bonus[row] else None)
+                    for row in range(origin, end)]
         scores, bonus_score = candidates(origin)
-        if bonus_score is None:
-            skipped += 1
-            continue
-        active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size)
-        if inverse:
-            reference = active[direct.choose()]["forecast"]
-            if lr_pool_capacity(eligible.difference(reference["pool"])) >= scheme.n:
-                inverses = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size, reference)
-                observed += selected.observe(dates[origin], inverses, outcomes)["evaluated"]
+        counted = 0
+        if bonus_score is not None:
+            active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size)
+            if inverse:
+                reference = active[direct.selected.choose()]["forecast"]
+                if lr_pool_capacity(eligible.difference(reference["pool"])) >= scheme.n:
+                    inverses = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score,
+                                                eligible, joker_size, reference)
+                    counted = selected.observe(dates[origin], inverses, outcomes)
+                direct.observe(dates[origin], active, outcomes)
             else:
-                skipped += 1
-            direct.observe(dates[origin], active, outcomes)
-        else:
-            observed += selected.observe(dates[origin], active, outcomes)["evaluated"]
+                counted = selected.observe(dates[origin], active, outcomes)
+        observed += counted
+        skipped += not counted
+        if step % TUNING_WARMUP_DAYS == 0 or step == len(spans):
+            progress = {"completed": step, "observed": observed, "skipped": skipped,
+                        "direct": direct.checkpoint(), "inverse": selected.checkpoint() if inverse else None}
+            try:
+                pickle_store_path_atomic(cache_path, {"identity": key, "checksum": fixed_share_context(progress),
+                                                     "progress": progress})
+            except OSError as exc:
+                logging.warning("Fixed Share: checkpoint indisponibil: %s", exc)
 
     if cancelled is not None:
         cancelled()
@@ -341,16 +440,19 @@ def online_ticket_forecast(
         raise ValueError("Fixed Share: fereastra de istoric nu conține bile Joker valide.")
     active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size)
     if inverse:
-        reference = active[direct.choose()]["forecast"]
+        reference = active[direct.selected.choose()]["forecast"]
         active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size, reference)
-    expert = selected.choose()
+    expert = selected.selected.choose()
     played = active[expert]
     played["forecast"].update(
         selection_policy=ONLINE_TICKET_EXPERTS,
         selection={
             "method": expert, "source": ONLINE_TICKET_EXPERTS, "version": FIXED_SHARE_VERSION,
-            "training_days": selected.days, "training_draws": observed, "skipped_days": skipped,
-            "weights": dict(zip(selected.experts, selected.weights, strict=True)),
+            "calibration": selected.calibration(),
+            "training_days": selected.evaluated_days, "training_draws": observed, "skipped_days": skipped,
+            "available_days": len(spans), "available_draws": sum(end - origin for origin, end in spans),
+            "unscored_draws": sum(end - origin for origin, end in spans) - observed,
+            "weights": dict(zip(selected.selected.experts, selected.selected.weights, strict=True)),
         },
         joker_selection={"method": "frequency", "source": ONLINE_TICKET_EXPERTS} if maximum else None,
         history_hash=history_hash, rows=len(matrix),

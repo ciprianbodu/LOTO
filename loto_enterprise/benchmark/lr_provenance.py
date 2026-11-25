@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import asdict
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from types import CodeType
 
@@ -60,12 +61,32 @@ def _function_digest(fn):
                     _code_value(closure), constants))
 
 
+@lru_cache(maxsize=1)
+def _numeric_runtime():
+    packages = []
+    for name in ("numpy", "scipy"):
+        try:
+            packages.append((name, version(name)))
+        except PackageNotFoundError:
+            packages.append((name, None))
+    return tuple(packages)
+
+
+def _module_rules(modules):
+    return {module.__name__: _module_digest(Path(module.__file__).read_bytes()) for module in modules}
+
+
 def method_formulas(names):
-    """Include the executed callable and the numerical helpers in its module."""
+    """Include the executed callable, scoring dispatch and the numerical helpers."""
     import inspect
     from loto_enterprise.benchmark import methods_common
 
-    files = {Path(methods_common.__file__)}
+    dispatcher = inspect.unwrap(registry.call_method)
+    files = {Path(methods_common.__file__), Path(registry.__file__)}
+    if inspect.isfunction(dispatcher):
+        source = Path(inspect.getfile(dispatcher))
+        if source.is_file():
+            files.add(source)
     formulas = {}
     for name in sorted(set(names)):
         record = registry.METHODS.get(registry.resolve_method_name(name))
@@ -80,11 +101,12 @@ def method_formulas(names):
                 files.add(Path(inspect.getfile(function)))
                 if function is not fn:
                     formulas[name].append(_function_digest(function))
-    return _digest((formulas, {file.name: _module_digest(file.read_bytes()) for file in files}))
+    sources = sorted((file.name, _module_digest(file.read_bytes())) for file in files)
+    return _digest((formulas, _function_digest(dispatcher), sources, _numeric_runtime()))
 
 
 def lr_semantics(lot, scheme, hit_target, *, layout=None):
-    from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_ranking
+    from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_milp, lr_pool_ranking
     from covering import lr_catalog_cache, lr_portfolio, lr_schemes, lr_selection, probability
     from loto_enterprise.benchmark import decision, lr_budget_scoring, lr_hypotheses, restricted_decision, runner
     from loto_enterprise.core import dynamic_pools, dynamic_winner, lr_budget_forecast, lr_range_analysis, ranking
@@ -94,20 +116,22 @@ def lr_semantics(lot, scheme, hit_target, *, layout=None):
     selection_modules = (lr_hypotheses, decision, runner, restricted_decision, lr_pool_ranking,
                          dynamic_winner, dynamic_pools, ranking, lr_range_analysis, lr_schemes, lr_selection,
                          lr_played_portfolio, lr_ticket_experts, lr_budget_scoring, lr_budget_forecast,
-                         lr_budget, lr_pool_budget, lr_portfolio, lr_any_prize_649, lr_any_prize_joker,
+                         lr_budget, lr_pool_budget, lr_pool_milp, lr_portfolio, lr_any_prize_649, lr_any_prize_joker,
                          prize_categories, probability, lr_catalog_cache)
-    rules = {m.__name__: _module_digest(Path(m.__file__).read_bytes()) for m in selection_modules}
+    rules = _module_rules(selection_modules)
     executed = [_function_digest(f) for f in (
         lr_hypotheses.rank_lr_pool, lr_hypotheses.rank_by_score, lr_hypotheses._evaluate_fold,
         decision.decide_optimal_config_for_pool, lr_played_portfolio.grade_plan, lr_played_portfolio.grade_draw,
         lr_budget_scoring.evaluate_budget_recipes, lr_budget_scoring.restrict_to_pool,
+        lr_budget_forecast.choose_dynamic_winner,
     )]
     return {
         "version": 1,
         "catalog": _digest([(k, registry.catalog_version_for_game(k), v) for k, v in catalog.items()]),
         "formulas": method_formulas({name for names in catalog.values() for name in names}
-                                    | set(dynamic_winner.CANDIDATES) | {"frequency", "random"}),
-        "selection": _digest((rules, executed, tuple(lr_hypotheses.VALIDATION_PERCENTILES),
+                                    | set(dynamic_winner.CANDIDATES) | set(lr_ticket_experts.DEFAULT_EXPERTS)
+                                    | {"frequency", "random"}),
+        "selection": _digest((rules, executed, layout_formulas(), tuple(lr_hypotheses.VALIDATION_PERCENTILES),
                               decision.game_hit_target(lot.bench_key, hit_target),
                               lr_pool_ranking.LR_MAX_CONSECUTIVE_RUN)),
         "geometry": _digest((lot.game_id, lot.bench_keys, asdict(lot.geo), lot.min_hit_target)),
@@ -118,6 +142,27 @@ def lr_semantics(lot, scheme, hit_target, *, layout=None):
     }
 
 
+def layout_formulas():
+    """Identity of the loaded optimizer used by the in-process layout cache."""
+    from covering import lr_pool_budget, lr_pool_milp
+
+    search = lr_pool_budget._PortfolioSearch
+    executed = (
+        lr_pool_budget._refine_layout, lr_pool_budget._default_search_seconds,
+        search.optimize, search.search, search.grow, search.consider, search.solve,
+        lr_pool_milp.solve_zone_coverage, lr_pool_milp._classes,
+    )
+    return _digest(([_function_digest(f) for f in executed], _numeric_runtime()))
+
+
 def dynamic_formulas():
-    from loto_enterprise.core import dynamic_winner
-    return method_formulas((*dynamic_winner.CANDIDATES, "frequency", "random"))
+    """Bind a hot scoring cache to the formulas and the code that executes them."""
+    from loto_enterprise.core import dynamic_pools, dynamic_winner, lr_budget_forecast, ranking
+
+    formulas = method_formulas((*dynamic_winner.CANDIDATES, "frequency", "random"))
+    rules = _module_rules((dynamic_pools, dynamic_winner, ranking))
+    executed = [_function_digest(f) for f in (
+        lr_budget_forecast._dynamic_scores, lr_budget_forecast.choose_dynamic_winner,
+        dynamic_winner.choose_dynamic_winner,
+    )]
+    return _digest((formulas, rules, executed))

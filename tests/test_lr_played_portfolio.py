@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
-from loto_enterprise.core.lr_played_portfolio import evaluation_contract, expand_plan, grade_draw
+from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw
 from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, recommend_playable_games
 from loto_enterprise.core.lr_walk_forward import validate_lr_walk_forward
 import numpy as np
@@ -58,6 +58,7 @@ def test_daily_policy_replays_real_generator_and_ignores_later_draws():
         100, FOUR_PLUS, "6/49", {"6/49": ("sample.csv", frame.iloc[:20])},
         inverse=True, dynamic=True, number_range=(10, 40), pool_codes={"6/49": code}, hit_target=4)
     assert first["tickets"] == generated["tickets"]
+    assert generated["evaluation"]["version"] == 2
     assert generated["evaluation"]["layout"] == first["layout_id"]
 
 

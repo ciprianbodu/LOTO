@@ -200,6 +200,10 @@ def evaluate(game, history, test_days, budget):
     hits = {threshold: defaultdict(list) for threshold in THRESHOLDS}
     prices, calibration, bonus_calibration = (defaultdict(list) for _ in range(3))
     selections = Counter()
+    trial_log = []
+    pool_hits = defaultdict(Counter)
+    ticket_hits = defaultdict(Counter)
+    paid_totals = defaultdict(Counter)
     for origin, end in zip(origins, np.r_[origins[1:], len(matrix)], strict=True):
         prior = matrix[:origin]
         day_cutoffs = tuple(cutoffs[:origin])
@@ -225,7 +229,9 @@ def evaluate(game, history, test_days, budget):
             lot, template, scheme, frame.iloc[:origin], inverse=False, number_range=None,
             lookback=100, joker_size=5, objective=FOUR_PLUS,
         )
-        selections[played["forecast"]["selection"]["method"]] += 1
+        selection = played["forecast"]["selection"]
+        selections[selection["method"]] += 1
+        trial_log.append({"date": date, **selection["calibration"]})
         plans["online_ticket_experts"] = played
         for name, played in plans.items():
             expanded = expand_plan(played)
@@ -234,6 +240,14 @@ def evaluate(game, history, test_days, budget):
                 for threshold in THRESHOLDS:
                     hits[threshold][name].append(grade[f"hit{threshold}"])
                 prices[name].append(grade["price_bani"])
+                pool_hits[name][grade["pool_hits"]] += 1
+                ticket_hits[name][grade["max_hits"]] += 1
+                for key in ("paid_variants", "distinct_variants", "duplicates"):
+                    paid_totals[name][key] += grade[key]
+                paid_totals[name]["any_prize"] += grade["any_prize"] is True
+                paid_totals[name]["prize_evaluated"] += grade["any_prize"] is not None
+                paid_totals[name]["winning_variants_min"] += grade.get("winning_variants_min", grade["winning_variants"])
+                paid_totals[name]["winning_variants_max"] += grade.get("winning_variants_max", grade["winning_variants"])
         for drawn, joker in actual:
             _marginals(calibration, scores, drawn, lot.max_n)
             if bonus is not None:
@@ -260,7 +274,8 @@ def evaluate(game, history, test_days, budget):
             "mean_paid_bani":{name:sum(values)/len(values) for name,values in prices.items()},
             "paired":paired,"inclusion_losses":_calibration(calibration),
             "joker_urna2_inclusion_losses":_calibration(bonus_calibration),
-            "fixed_share_days":dict(selections),
+            "fixed_share_days":dict(selections), "fixed_share_inner_trials":trial_log,
+            "pool_hits_histogram":pool_hits, "best_variant_hits_histogram":ticket_hits, "paid_totals":paid_totals,
             "fixed_share_version":FIXED_SHARE_VERSION, "fixed_share_lookback_days":TRAINING_DAYS}
 
 

@@ -448,11 +448,13 @@ def test_prospective_registration_requires_an_explicit_generate_click(monkeypatc
 def test_fixed_share_policy_is_forwarded_only_when_selected(monkeypatch):
     view = _widgets(monkeypatch)
     captured = []
+    compared = []
 
     async def io_bound(fn, *args, **kwargs):
         if fn is budget._budget_input_snapshot:
             return "fixed-history", {}
         if fn is budget._compare_games:
+            compared.append(args[3].get("selection_policy"))
             return [{"game": "6/49", "recommended_range": None}]
         assert fn is budget._generate_selection
         captured.append(kwargs)
@@ -478,4 +480,5 @@ def test_fixed_share_policy_is_forwarded_only_when_selected(monkeypatch):
 
     asyncio.run(scenario())
     assert captured == [{}, {"selection_policy": budget.ONLINE_TICKET_EXPERTS}, {}]
+    assert compared == [None, budget.ONLINE_TICKET_EXPERTS, None]
     assert [call.args for call in choice.call_args_list] == [(True,), (False,)]
