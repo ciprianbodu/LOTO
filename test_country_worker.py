@@ -22,11 +22,13 @@ import job_queue as jq
 import loto_enterprise.core.method_selector as ms
 import worker
 from loto_engine import LotoEngine
+from loto_enterprise.benchmark.freshness import GAMES_COLS_MAP, write_signatures_to_best_methods
 from loto_enterprise.core.lotteries import UnknownLotteryError
 from ui_shared import decode_queue_result
 
 ROOT = Path(__file__).resolve().parent
 RO_CSV = ROOT / "_ISTORIC/loto_6_49.csv"
+RO_FIXTURE_ROWS = 300
 DE_CSV = ROOT / "_ISTORIC/externe/germania_lotto_6aus49.csv"
 ECHO = ("country", "game_id", "bench_key", "geometry")
 BASE_TASK_KEYS = {
@@ -177,6 +179,12 @@ def queue(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
+    # Semnăm numai rândurile din taskul românesc, cu aceeași schemă ca bench-ul.
+    signed_history = tmp_path / RO_CSV.name
+    pd.read_csv(RO_CSV).tail(RO_FIXTURE_ROWS).to_csv(signed_history, index=False)
+    write_signatures_to_best_methods(
+        str(ro_decision), csv_map={"loto_6_49": [signed_history]}, cols_map=GAMES_COLS_MAP,
+    )
     monkeypatch.setattr(ms, "_DEFAULT_CONFIG_PATH", ro_decision)
     monkeypatch.setattr(ms, "_DECISIONS_ROOT", tmp_path / "countries_root")
     monkeypatch.setattr(ms, "_CONFIG", None)
@@ -200,7 +208,7 @@ def queue(tmp_path, monkeypatch):
     return run
 
 
-def _app_config(monkeypatch, rows=300) -> dict:
+def _app_config(monkeypatch, rows=RO_FIXTURE_ROWS) -> dict:
     import app_nicegui as app
 
     df = pd.read_csv(RO_CSV).tail(rows).reset_index(drop=True)

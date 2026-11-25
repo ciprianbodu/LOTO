@@ -207,7 +207,9 @@ def compatible_lr_config(config, frame, game_keys):
     meta = config.get("_meta", {})
     signatures = meta.get("csv_signatures", {}) if isinstance(meta, dict) else {}
     result = {}
-    if not isinstance(signatures, dict) or not signatures or meta.get("engine_signature") != compute_engine_signature(country="RO"):
+    if frame is None or not isinstance(signatures, dict) or not signatures:
+        return result
+    if meta.get("engine_signature") != compute_engine_signature(country="RO"):
         return result
     for key in game_keys:
         signature = signatures.get(key)
