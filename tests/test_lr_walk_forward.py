@@ -46,7 +46,7 @@ def _frequency(frame, allowed, count):
         for number in row:
             if number in tallies:
                 tallies[number] += weight
-    return sorted(tallies, key=lambda number: (-tallies[number], -number))[:count]
+    return wf.rank_lr_pool(tallies, count)
 
 
 @pytest.mark.parametrize("inverse", [False, True])
@@ -68,6 +68,7 @@ def test_daily_scoring_matches_independent_frequency_and_official_variants(inver
     assert report["summary"]["all_main_in_10_40"] == expected_in_range
     assert report["methods"]["tested"]["loto_6_49"]["source"] == "training_frequency"
     assert (report["scheme_code"], report["price_bani"], report["variants"]) == (49, 12050, 15)
+    assert report["max_consecutive_run"] == 2
     base = set(range(10, 41) if restricted else range(1, 50))
     assert [row["training_rows"] for row in report["draws"]] == [17, 17, 19]
     for row in report["draws"]:
@@ -123,7 +124,13 @@ def test_joker_bonus_is_unchanged_by_main_range_and_prize_needs_matching_variant
     full = _run(frame, "joker", objective=ANY_PRIZE, inverse=True, depth=25)
     restricted = _run(frame, "joker", objective=ANY_PRIZE, inverse=True, restricted=True, depth=25)
     plan, = recommend_games(171, ANY_PRIZE, "joker")
+    usable_bonus = 0
     for own, partner in zip(restricted["draws"], full["draws"], strict=True):
+        if error := own.get("error"):
+            assert "fără trei consecutive" in error
+            assert own["pool_hits"] is own["joker_hit"] is None
+            continue
+        usable_bonus += own["joker_drawn"] is not None
         assert own["jokers"] == partner["jokers"] and own["excluded_jokers"] == partner["excluded_jokers"]
         assert set(own["jokers"]).isdisjoint(own["excluded_jokers"])
         scored = set(own["numbers"])
@@ -139,7 +146,7 @@ def test_joker_bonus_is_unchanged_by_main_range_and_prize_needs_matching_variant
         matching = None if actual is None else any(hits >= 1 and j == actual for hits, j in pairs)
         assert own["ticket_joker_hit"] == matching
         assert own["objective_hit"] == (True if best >= 3 else matching if best >= 1 else False)
-    assert restricted["summary"]["joker_evaluated"] == 9
+    assert restricted["summary"]["joker_evaluated"] == usable_bonus > 0
     assert restricted["draws"][-1]["joker_hit"] is None
 
 
@@ -147,7 +154,7 @@ def test_540_counts_six_drawn_balls_but_any_prize_requires_four_on_a_five_ball_v
     frame = _frame(maximum=40)
     plan, = recommend_games(171, ANY_PRIZE, "5/40")
     scheme = wf.budget_plan_scheme(plan)
-    pool = list(range(1, scheme.n + 1))
+    pool = [n for n in range(1, 38) if n % 3 != 0][:scheme.n]
     tickets = restrict_to_pool(dict(plan), ANY_PRIZE, pool)["tickets"]
     first_zone = tickets[0][0]
     variant = scheme_tickets(resolve_lr_scheme("5/40", first_zone["code"]), first_zone["numbers"])[0]
@@ -155,7 +162,7 @@ def test_540_counts_six_drawn_balls_but_any_prize_requires_four_on_a_five_ball_v
     numbers = [f"n{i}" for i in range(1, 7)]
     frame.loc[18, numbers] = [*variant, sixth]
     frame.loc[19, numbers] = [*variant[:3], 38, 39, 40]
-    monkeypatch.setattr(wf, "_rank", lambda *args: pool)
+    monkeypatch.setattr(wf, "_rank", lambda *args, **kwargs: pool)
 
     report = _run(frame, "5/40", objective=ANY_PRIZE)
     assert len(variant) == 5
@@ -194,6 +201,7 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
                 },
                 "result": {
                     "history_hash": fingerprint,
+                    "max_consecutive_run": 2,
                     "urns": [{"game_key": "loto_6_49", "decision": winner}],
                 },
             }

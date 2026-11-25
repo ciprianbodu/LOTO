@@ -23,6 +23,7 @@ def test_budget_changes_update_the_next_lottery_job(monkeypatch):
         config = json.loads(app._build_config_json())
         task, = config["datasets"][0]["tasks"]
         assert (task["lr_scheme_code"], task["pool_size"]) == (code, width)
+        assert task["max_consecutive_run"] == 2
         assert (app._lr_scheme_for("6/49").code, app.SETTINGS["lr_budget_lei"]) == (code, amount)
     assert saves == [200, 100, 200]
 

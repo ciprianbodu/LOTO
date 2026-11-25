@@ -94,7 +94,8 @@ def test_fixed_reference_is_trained_before_the_first_target_and_based_in_range(m
     frame.loc[80, "date"] = frame.loc[79, "date"]
     calls = []
 
-    def reference(matrix, bounds, game, width, blocked, target):
+    def reference(matrix, bounds, game, width, blocked, target, *, strict_lr):
+        assert strict_lr
         calls.append((len(matrix), width, set(blocked), target))
         return {}, {"method": "frequency"}
 
@@ -104,6 +105,58 @@ def test_fixed_reference_is_trained_before_the_first_target_and_based_in_range(m
     assert urn["eligible_count"] == 22
     assert "fixată pe datele disponibile înaintea primei zile" in urn["protocol"]
     assert urn["decision"]["reference_members"] == [{"method": "frequency", "weight": 1.0}]
+
+
+def test_scoped_benchmark_counts_the_playable_pool_instead_of_the_raw_top_n(monkeypatch):
+    frame = _history()
+    frame.loc[80:, ["n1", "n2", "n3", "n4", "n5", "n6"]] = [38, 35, 32, 2, 4, 6]
+    monkeypatch.setattr(bench, "call_method", lambda _, history, maximum, **kwargs:
+                        ({n: float(28 if n == 27 else n) for n in range(1, maximum + 1)}, 0.0))
+    ties = []
+    decide = bench.decision.decide_optimal_config_for_pool
+    def capture(folds, *args, **kwargs):
+        ties.extend(folds["tiebreak_k9"])
+        return decide(folds, *args, **kwargs)
+    monkeypatch.setattr(bench.decision, "decide_optimal_config_for_pool", capture)
+    report = _run(frame)
+    assert report["max_consecutive_run"] == 2
+    # Raw 32..40 would hit 32, 35, 38. The legal top nine are
+    # 40,39,37,36,34,33,31,30,28 and hit none of these targets.
+    assert all(row["evaluated"] == 20 and row["avg_hits"] == 0 for row in report["urns"][0]["rows"])
+    assert report["urns"][0]["rows"]
+    # Scores at raw ranks nine and ten differ, but 27 and 28 tie for the last legal position.
+    assert ties and set(ties) == {1.0}
+
+
+@pytest.mark.parametrize("all_infeasible", [False, True])
+def test_inverse_excludes_unplayable_dates_equally_and_preserves_later_prefixes(monkeypatch, all_infeasible):
+    frame = _history(maximum=40)
+    frame.loc[83, "date"] = frame.loc[82, "date"]
+    leaves_room = tuple(range(10, 40, 2))
+    too_compact = (40, 39, 37, 36, 34, 33, 31, 30, 28, 27, 25, 24, 22, 21, 19)
+    monkeypatch.setattr(bench, "_dynamic_predictor", lambda *_:
+                        lambda origin: lambda _: too_compact if all_infeasible or origin % 2 == 0 else leaves_room)
+    lengths = []
+    def scorer(_, history, maximum, **kwargs):
+        lengths.append(len(history))
+        return {n: float(n) for n in range(1, maximum + 1)}, 0.0
+    monkeypatch.setattr(bench, "call_method", scorer)
+    decision_samples = []
+    decide = bench.decision.decide_optimal_config_for_pool
+    def capture(folds, *args, **kwargs):
+        decision_samples.extend(zip(folds["percentile"], folds["n_test"], folds["n_eval"], strict=True))
+        return decide(folds, *args, **kwargs)
+    monkeypatch.setattr(bench.decision, "decide_optimal_config_for_pool", capture)
+    urn, = _run(frame, game="5/40", scheme=35, inverse=True, dynamic=True)["urns"]
+    if all_infeasible:
+        assert urn["test_draws"] == urn["infeasible_draws"] == 20 and not lengths
+        assert "nu încap 15" in urn["error"] and not urn["rows"]
+    else:
+        assert (urn["infeasible_days"], urn["infeasible_draws"], urn["playable_draws"]) == (10, 11, 9)
+        assert {row["evaluated"] for row in urn["rows"]} == {9}
+        assert {(tested, scored) for pct, tested, scored in decision_samples if pct == 100} == {(9, 9)}
+        assert "9 din 20" in urn["protocol"] and urn["decision"]["evaluated"] == 9
+        assert 82 not in lengths and max(lengths) == 99
 
 
 def test_infeasible_inverse_range_preserves_true_capacity():

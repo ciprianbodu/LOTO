@@ -2061,7 +2061,7 @@ Ramase de decis (nu s-au schimbat):
 
 ### Validarea cronologică după Re-Bench — 2026-11-20
 
-După publicarea deciziei, Re-Bench din interfață rulează automat comparația cronologică pentru jocurile țării. În România, panoul marchează regula care a găsit cel mai des cel puțin patru numere pe aceeași variantă a codului LR ales. La jocurile externe se folosește în clasament pragul 4+ în pool, iar pentru Joker Urna 2 se numără bilele ghicite. Comparația include regula dinamică a generatorului pentru urna principală, când raportul are toate metodele acelei reguli. Fiecare politică eligibilă folosește la alegerea metodei numai zilele anterioare. Pool-urile validării curente urmează generatorul actual, cu grupuri de numere consecutive permise. Panoul afișează separat pragurile 5+ și 6 unde sunt posibile. Regulile retrospective servesc comparației. Rezultatele se păstrează local, împreună cu obiectivul folosit în rulare.
+După publicarea deciziei, Re-Bench din interfață rulează automat comparația cronologică pentru jocurile țării. În România, panoul marchează regula care a găsit cel mai des cel puțin patru numere pe aceeași variantă a codului LR ales. La jocurile externe se folosește în clasament pragul 4+ în pool, iar pentru Joker Urna 2 se numără bilele ghicite. Comparația include regula dinamică a generatorului pentru urna principală, când raportul are toate metodele acelei reguli. Fiecare politică eligibilă folosește la alegerea metodei numai zilele anterioare. În validarea românească, pool-ul principal permite cel mult două numere consecutive. Panoul afișează separat pragurile 5+ și 6 unde sunt posibile. Regulile retrospective servesc comparației. Rezultatele se păstrează local, împreună cu obiectivul folosit în rulare.
 
 În România, codurile LR și dimensiunile pool-urilor sunt fixate la lansarea Re-Bench, inclusiv pentru jocurile al căror fișier se încarcă ulterior. Tabelul 4+ arată numărul de bile din pool-ul salvat pe fiecare rând. Costul și premiul estimat folosesc codul LR al rulării, iar codurile deduse din istoricul vechi sunt marcate ca atare.
 
@@ -2110,6 +2110,13 @@ aceleași scheme reduse pentru toate bazele. În modul invers, fiecare comparaț
 folosește complementul pool-ului normal disponibil înainte de extragerea
 respectivă. Intervalul restrânge numai urna principală. În detaliile biletului
 apar pool-ul exclus și numerele de jucat.
+
+Pentru jocurile românești, pool-ul principal se formează în ordinea scorurilor.
+Un candidat care ar forma o serie de trei numere consecutive este sărit.
+Pe o bază restrânsă, fiecare alegere trebuie să permită și completarea pool-ului
+la dimensiunea codului. Metoda normală, cea inversă, Re-Bench LR și validarea
+walk-forward folosesc aceeași regulă. O bază insuficientă pentru codul ales
+este semnalată la generare.
 
 Pentru jocurile românești, butonul „RE-BENCH” evaluează metoda normală sau
 inversă cu schema din recomandarea LR, pe istoricul încărcat la lansare.
@@ -2178,8 +2185,8 @@ Se afișează „Maxim demonstrat” când biletul atinge limita superioară.
 
 ### Setări simplificate de generare — 2026-11-21
 
-Generările noi din UI folosesc întreaga urnă, inclusiv numerele extrase
-recent și seriile consecutive. Încărcarea setărilor ignoră cheile retrase
+Generările noi din UI includ și numerele extrase recent. Pool-urile principale
+ale jocurilor românești permit maximum două numere consecutive. Încărcarea setărilor ignoră cheile retrase
 pentru aceste filtre, intervalul de numere, fereastra de telemetrie și
 bugetul walk-forward. Walk-forward are un termen intern de 90 de minute.
 Generarea manuală folosește 40% pentru telemetria bench, iar Auto-Pilot

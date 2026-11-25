@@ -129,8 +129,10 @@ def ranked_pools(
             penalty_draws > 0 and past_draws is not None and len(past_draws) > 0
             and penalty_factor < 1
         )
-        if not penalize and max_run <= 0:
+        if not penalize:
             order = np.argsort(restricted, axis=1, kind="stable")[:, ::-1]
+            if 0 < max_run < k:
+                return _bounded_ranked_rows(restricted, labels, order, k, int(max_run))
             return np.sort(labels[order[:, :k]], axis=1).astype(np.uint8)
 
         from loto_engine import LotoEngine
@@ -167,11 +169,16 @@ def ranked_pools(
         max_run = max(int(max_run), (k + slots - 1) // slots)
     if max_run <= 0 or max_run >= k:
         return (np.sort(ranked[:, :k], axis=1) + lo).astype(np.uint8)
+    return _bounded_ranked_rows(scores, np.arange(lo, hi + 1), ranked, k, max_run)
+
+
+def _bounded_ranked_rows(scores, labels, ranked, k, max_run):
+    """Use real ball labels so exclusions remain gaps when checking consecutive runs."""
     n_rows = len(scores)
-    bits = np.left_shift(np.uint64(1), np.arange(width, dtype=np.uint64))
+    bits = np.left_shift(np.uint64(1), (labels - 1).astype(np.uint64))
     chosen = np.zeros(n_rows, dtype=np.uint64)
     sizes = np.zeros(n_rows, dtype=np.uint8)
-    for column in range(width):
+    for column in range(len(labels)):
         candidate = chosen | bits[ranked[:, column]]
         runs = candidate & (candidate >> 1)
         for shift in range(2, max_run + 1):
@@ -185,13 +192,13 @@ def ranked_pools(
     # Where the scan gets stuck only the production look-ahead can decide.
     for row in np.flatnonzero(sizes != k):
         pool = select_pool_from_scores(
-            dict(enumerate(scores[row], start=lo)),
+            dict(zip(labels.tolist(), scores[row], strict=True)),
             k,
             set(),
-            max_num=hi,
+            max_num=int(labels[-1]),
             max_consecutive_run=max_run,
         )
-        chosen[row] = np.bitwise_or.reduce(bits[np.asarray(pool) - lo])
+        chosen[row] = np.bitwise_or.reduce(bits[np.searchsorted(labels, pool)])
     present = (chosen[:, None] & bits) != 0
-    numbers = np.nonzero(present)[1].reshape(n_rows, k) + lo
+    numbers = labels[np.nonzero(present)[1]].reshape(n_rows, k)
     return numbers.astype(np.uint8)

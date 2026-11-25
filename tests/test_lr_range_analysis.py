@@ -5,12 +5,13 @@ import pandas as pd
 import pytest
 
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
+from covering.lr_pool_ranking import lr_pool_capacity, rank_lr_pool
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.core import lr_range_analysis as analysis
+from loto_enterprise.core.dynamic_pools import ranked_pools
 from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lr_range_timing import range_timing
-from loto_enterprise.core.ranking import rank_by_score
 
 
 def _frame(draws, main=6, maximum=49):
@@ -20,6 +21,18 @@ def _frame(draws, main=6, maximum=49):
     dates = pd.date_range("1996-01-01", periods=draws)
     frame["date"] = dates.strftime("%d-%m-%Y")
     return frame, matrix
+
+
+def test_batched_ranking_uses_real_labels_on_gapped_bases_at_exact_capacity():
+    rng = np.random.default_rng(123)
+    for _ in range(25):
+        eligible = tuple(sorted(map(int, rng.choice(np.arange(8, 41), 22, replace=False))))
+        size = lr_pool_capacity(eligible)
+        scores = rng.integers(0, 5, (8, 49))
+        result = ranked_pools(scores, pool_size=size, universe=49, eligible_numbers=eligible, max_run=2)
+        for row, pool in zip(scores, result, strict=True):
+            expected = rank_lr_pool({n: float(row[n - 1]) for n in eligible}, size)
+            assert pool.tolist() == sorted(expected)
 
 
 @pytest.mark.parametrize("lookback", [0, 80])
@@ -42,15 +55,15 @@ def test_dynamic_replay_matches_production_pool_for_every_treatment(lookback):
         base = analysis._eligible(49, limits)
         outside_base = tuple(sorted(set(full) - set(base)))
         direct, _ = choose_dynamic_winner(
-            matrix[left:origin], relative, scheme, excluded_numbers=outside_base,
+            matrix[left:origin], relative, scheme, excluded_numbers=outside_base, max_run=2,
         )
-        normal = set(rank_by_score(direct, scheme.n))
+        normal = set(rank_lr_pool(direct, scheme.n))
         for exclusions in ((), normal):
             eligible = tuple(n for n in base if n not in exclusions)
             expected, _ = choose_dynamic_winner(
-                matrix[left:origin], relative, scheme, excluded_numbers=tuple(sorted(set(full) - set(eligible))),
+                matrix[left:origin], relative, scheme, excluded_numbers=tuple(sorted(set(full) - set(eligible))), max_run=2,
             )
-            assert pool(eligible).tolist() == sorted(rank_by_score(expected, scheme.n))
+            assert pool(eligible).tolist() == sorted(rank_lr_pool(expected, scheme.n))
 
 
 @pytest.mark.parametrize("dynamic", [False, True])
@@ -100,7 +113,8 @@ def test_only_last_100_scored_and_whole_day_excluded_from_first_forecast(monkeyp
     # The scored segment starts on row 300, on the same date as the unscored row 299.
     frame.loc[300, "date"] = frame.loc[299, "date"]
     seen = []
-    def frozen(history, bounds, game, size, excluded, target):
+    def frozen(history, bounds, game, size, excluded, target, *, strict_lr):
+        assert strict_lr
         seen.append((len(history), history[-1].tolist()))
         return {}, {"method": "frequency"}
     monkeypatch.setattr(analysis, "restricted_bench_scores", frozen)
@@ -215,6 +229,15 @@ def test_single_comparison_uses_reciprocal_of_paired_evidence():
     assert row["adjusted_p"] == pytest.approx(1 / evidence)
 
 
+def test_range_win_on_date_without_reference_counts_only_in_own_rate():
+    full = np.asarray([[-1, -1], [4, 4], [0, 0]])
+    candidate = np.asarray([[4, 4], [0, 0], [4, 4]])
+    timing = range_timing(np.tile(np.arange(11, 17), (3, 1)), None, (10, 40))
+    row = analysis._summarize(candidate, full, 4, timing, 0, (10, 40), 31, 12)
+    assert row["successes"] == 2 and row["objective_evaluated"] == row["recent_evaluated"] == 3
+    assert (row["paired_evaluated"], row["paired_wins"], row["paired_losses"]) == (2, 1, 1)
+
+
 def test_real_int32_history_reproduces_random_guard_at_known_disagreement():
     from loto_enterprise.core.lotteries import require_lottery
 
@@ -230,8 +253,8 @@ def test_real_int32_history_reproduces_random_guard_at_known_disagreement():
     scheme = resolve_lr_scheme("6/49", 48)
     full = tuple(range(1, 50))
     pool = analysis._dynamic_predictor(matrix, bounds, days, scheme, 49, flags, 0)(origin)
-    base_scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme)
-    normal = tuple(sorted(rank_by_score(base_scores, scheme.n)))
+    base_scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme, max_run=2)
+    normal = tuple(sorted(rank_lr_pool(base_scores, scheme.n)))
     assert tuple(pool(full)) == normal
-    scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme, excluded_numbers=normal)
-    assert pool(tuple(n for n in full if n not in normal)).tolist() == sorted(rank_by_score(scores, scheme.n))
+    scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme, excluded_numbers=normal, max_run=2)
+    assert pool(tuple(n for n in full if n not in normal)).tolist() == sorted(rank_lr_pool(scores, scheme.n))

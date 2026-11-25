@@ -36,7 +36,8 @@ def _rebench_entry(history, members, *, game="6/49", inverse=False, dynamic=True
         urns.append(decision(lot.bench_key_urna2, joker_members))
     return {"game": game, "settings": {"inverse": inverse, "restricted": True, "dynamic": dynamic,
             "lookback": lookback, "hit_target": 4, "joker_size": 2, "scheme": code},
-            "result": {"history_hash": engine.audit["hash"], "scheme_code": code, "urns": urns}}
+            "result": {"history_hash": engine.audit["hash"], "scheme_code": code, "urns": urns,
+                       "max_consecutive_run": 2}}
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
@@ -63,7 +64,7 @@ def test_saved_rebench_ranks_actual_tickets_and_excludes_current_direct_pool(mon
         (name, {n: s for n, s in scores(name, None, 49)[0].items() if 10 <= n <= 40}, weight)
         for name, weight in direct_weights
     ])
-    assert pool["pool"] == sorted(forecast.rank_by_score(expected, 10)) == plan["tickets"][0][0]["numbers"]
+    assert pool["pool"] == sorted(forecast.rank_lr_pool(expected, 10)) == plan["tickets"][0][0]["numbers"]
     assert pool["selection"]["members"] == direct["result"]["urns"][0]["decision"]["members"]
     assert pool["selection"]["source"] == inv["selection"]["source"] == "lr_rebench"
     assert inv["selection"]["method"] == "compact_renewal_hazard"
@@ -90,11 +91,11 @@ def test_inverse_only_dynamic_decision_preserves_verified_current_direct_job():
     history = _history()
     inverse = _rebench_entry(history, [("frequency", 1)], inverse=True)
     inverse["settings"]["restricted"] = False
-    direct_numbers = list(range(2, 12))
+    direct_numbers = [2, 3, 5, 6, 8, 9, 11, 12, 14, 15]
     args = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, hit_target=4,
                 lr_rebench_entries=[inverse], generated={"6/49": ("current.csv", {
                     "hard_core": direct_numbers, "dynamic_method": True, "lr_scheme_code": 49,
-                    "audit": {"hash": inverse["result"]["history_hash"]},
+                    "audit": {"hash": inverse["result"]["history_hash"]}, "max_consecutive_run": 2,
                 })})
     direct, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **args)
     other, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **args)
@@ -105,6 +106,7 @@ def test_inverse_only_dynamic_decision_preserves_verified_current_direct_job():
 
 @pytest.mark.parametrize("mismatch", [
     "game", "scheme", "dynamic", "lookback", "hit_target", "restricted", "legacy", "history", "custom_range",
+    "previous_consecutive_rule",
 ])
 def test_stale_or_incompatible_saved_rebench_keeps_current_selector(monkeypatch, mismatch):
     history = _history()
@@ -113,6 +115,8 @@ def test_stale_or_incompatible_saved_rebench_keeps_current_selector(monkeypatch,
         entry["game"] = "joker"
     elif mismatch == "legacy":
         del entry["result"]["urns"][0]["decision"]
+    elif mismatch == "previous_consecutive_rule":
+        del entry["result"]["max_consecutive_run"]
     elif mismatch == "history":
         history.loc[0, "n1"] = 42  # Same dates, last row and number of draws; different full input.
     elif mismatch != "custom_range":
@@ -182,22 +186,24 @@ def test_generated_pool_rescored_for_exact_budget_code(monkeypatch, former, budg
     width = resolve_lr_scheme("6/49", required).n
     area, = plan["tickets"][0]
     assert area["code"] == required
-    assert area["numbers"] == list(range(50 - width, 50)) == plan["forecast"]["pool"]
+    expected = [n for n in range(49, 0, -1) if (49 - n) % 3 != 2][:width]
+    assert area["numbers"] == sorted(expected) == plan["forecast"]["pool"]
     assert not plan["forecast"]["generated"]
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
 def test_inverse_excludes_exact_generated_pool_and_keeps_ordinary_available(dynamic):
+    original = [2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18]
     options = dict(
         histories={"6/49": ("input.csv", _history())}, pool_codes={},
         generated={"6/49": ("input.csv", {
-            "hard_core": list(range(2, 14)), "lr_scheme_code": 57,
-            "total_draws": 4, "dynamic_method": dynamic,
+            "hard_core": original, "lr_scheme_code": 57,
+            "total_draws": 4, "dynamic_method": dynamic, "max_consecutive_run": 2,
         })}, hit_target=4, dynamic=dynamic,
     )
     normal, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", **options)
     inverse, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse=True, **options)
-    assert inverse["forecast"]["excluded_pool"] == normal["tickets"][0][0]["numbers"] == list(range(2, 14))
+    assert inverse["forecast"]["excluded_pool"] == normal["tickets"][0][0]["numbers"] == original
     assert inverse["forecast"]["eligible_count"] == 37
     assert inverse["forecast"]["dynamic"] is dynamic
     assert inverse["forecast"]["code"] == normal["forecast"]["code"] == 57
@@ -325,14 +331,15 @@ def test_range_limits_every_selected_main_ball_and_passes_full_union_to_selector
         calls.append(tuple(excluded))
         # Put both ends of the interval at the top of the ranking.
         return {n: 100 if n in (10, 40) else n for n in range(1, 50)}, {"method": "test"}
-    def restricted(matrix, cutoffs, game, size, excluded, hit_target):
+    def restricted(matrix, cutoffs, game, size, excluded, hit_target, *, strict_lr):
+        assert strict_lr
         return scores(game, size, matrix, cutoffs, excluded)
     monkeypatch.setattr(forecast, "_dynamic_scores", scores)
     monkeypatch.setattr(forecast, "restricted_bench_scores", restricted)
-    original = [1, 2, 3, 4, 5, 6, 20, 21, 22, 23, 24, 25]
+    original = [1, 2, 4, 5, 7, 8, 20, 21, 23, 24, 26, 27]
     options = dict(pool_codes={}, dynamic=dynamic, histories={"6/49": ("source.csv", _history())},
                    generated={"6/49": ("source.csv", {"hard_core": original, "lr_scheme_code": 57,
-                                                      "dynamic_method": dynamic})})
+                                                      "dynamic_method": dynamic, "max_consecutive_run": 2})})
     normal, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse_range=(10, 40), **options)
     assert normal["forecast"]["pool"] == original and not calls
     direct, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", number_range=(10, 40), **options)
@@ -375,11 +382,50 @@ def test_all_budget_zones_use_disjoint_pool(number_range):
 
 
 def test_legacy_string_balls_keep_numeric_order_when_reused():
-    normal_pool = [2, 3, 4, 5, 9, 10, 13, 20, 32, 33, 36, 46]
+    normal_pool = [2, 3, 5, 6, 9, 10, 13, 20, 32, 33, 36, 46]
     plan, = forecast.recommend_playable_games(
         200, FOUR_PLUS, "6/49", pool_codes={}, generated={"6/49": ("legacy.csv", {
             "hard_core": [str(n) for n in normal_pool], "lr_scheme_code": "57", "dynamic_method": True,
+            "max_consecutive_run": 2,
         })},
     )
     assert plan["forecast"]["generated"]
     assert plan["tickets"][0][0]["numbers"] == normal_pool
+
+
+@pytest.mark.parametrize(("limits", "ranking", "removed", "added"), [
+    ((10, 40), [27, 13, 26, 20, 28, 21, 30, 32, 33, 40, 36], 28, 36),
+    (None, [24, 4, 5, 9, 12, 23, 25, 32, 36, 43, 40], 25, 40),
+])
+def test_ranked_candidates_skip_only_the_third_consecutive_number(monkeypatch, limits, ranking, removed, added):
+    scores = dict.fromkeys(range(1, 50), 0.0)
+    scores.update({n: len(ranking) - position for position, n in enumerate(ranking)})
+    monkeypatch.setattr(forecast, "_dynamic_scores", lambda *args: (scores, {"method": "ranked"}))
+    labels = {"6/49": ("test.csv", _history())}
+    plan, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", labels, pool_codes={}, number_range=limits)
+    expected = sorted((set(ranking[:10]) - {removed}) | {added})
+    assert plan["forecast"]["pool"] == plan["tickets"][0][0]["numbers"] == expected
+    assert plan["forecast"]["max_consecutive_run"] == 2
+    assert scores[removed] > scores[added]
+
+
+def test_legacy_dynamic_pool_is_rescored_before_use_even_when_already_without_triples(monkeypatch):
+    legacy = [2, 3, 5, 6, 8, 9, 11, 12, 14, 15]
+    captured = []
+
+    def dynamic(matrix, cutoffs, scheme, **settings):
+        captured.append(settings)
+        return {n: n for n in range(1, 50)}, {"method": "new"}
+
+    monkeypatch.setattr(forecast, "choose_dynamic_winner", dynamic)
+    forecast._dynamic_scores.cache_clear()
+    try:
+        direct, = forecast.recommend_playable_games(
+            171, FOUR_PLUS, "6/49", {"6/49": ("test.csv", _history())}, pool_codes={},
+            generated={"6/49": ("test.csv", {"hard_core": legacy, "lr_scheme_code": 49, "dynamic_method": True})},
+        )
+        assert captured == [{"excluded_numbers": (), "max_run": 2}]
+        assert not direct["forecast"]["generated"]
+        assert direct["forecast"]["pool"] != legacy
+    finally:
+        forecast._dynamic_scores.cache_clear()

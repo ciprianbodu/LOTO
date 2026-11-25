@@ -11,6 +11,7 @@ import pandas as pd
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
 from covering.lr_schemes import scheme_tickets
 from covering.lr_selection import resolve_lr_scheme
 from covering.probability import subset_hit_table
@@ -71,10 +72,10 @@ def _fit(game, training, lot, *, inverse, cancel_path, **options):
     return fitted
 
 
-def _rank(profile, matrix, bounds, origin, lookback, maximum, count, excluded):
+def _rank(profile, matrix, bounds, origin, lookback, maximum, count, excluded, *, main_urn=False):
     past, cutoffs = _training(matrix, bounds, origin, lookback)
     scores, _ = _profile_scores((profile, "members"), past, cutoffs, maximum, excluded, count)
-    return list(rank_by_score(scores, count))
+    return rank_lr_pool(scores, count) if main_urn else rank_by_score(scores, count)
 
 
 def _ticket_layout(plan, objective, scheme, joker_count):
@@ -105,10 +106,14 @@ def _day_forecast(
     blocked = set(outside)
     excluded_pool = []
     if inverse:
-        normal = _rank(direct[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked)
+        normal = _rank(
+            direct[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
+        )
         excluded_pool = sorted(normal)
         blocked.update(normal)
-    pool = sorted(_rank(tested[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked))
+    pool = sorted(_rank(
+        tested[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
+    ))
 
     jokers, excluded_jokers = [], []
     if key := lot.bench_key_urna2:
@@ -207,9 +212,16 @@ def validate_lr_walk_forward(
     if restricted:
         low, high = _RANGE
         outside = {n for n in range(1, lot.max_n + 1) if not low <= n <= high}
-    available = lot.max_n - len(outside) - (scheme.n if inverse else 0)
+    eligible = set(range(1, lot.max_n + 1)).difference(outside)
+    available = len(eligible) - (scheme.n if inverse else 0)
     if available < scheme.n:
         raise ValueError(f"Urna principală: rămân {max(0, available)} numere eligibile. Cod {scheme.code} necesită {scheme.n}.")
+    capacity = lr_pool_capacity(eligible)
+    if capacity < scheme.n:
+        raise ValueError(
+            f"Urna principală: se pot alege cel mult {capacity} numere fără trei consecutive. "
+            f"Cod {scheme.code} necesită {scheme.n}."
+        )
 
     bonus_matrix, bonus_bounds = None, ()
     valid_bonus_rows = np.empty(0, dtype=np.intp)
@@ -281,6 +293,7 @@ def validate_lr_walk_forward(
         "Când Re-Bench nu poate alege o metodă pe acel istoric, se folosește frequency. "
         "Pentru fiecare zi, pool-urile se refac cu scoruri bazate numai pe extragerile din zilele anterioare. "
         "Toate extragerile din test contează, inclusiv cele cu numere în afara intervalului. "
+        "Pool-ul urnei principale păstrează cel mult două numere consecutive. "
         "Potrivirile pe bilet se măsoară pe cea mai bună variantă oficială."
     )
     if depth == 100:
@@ -298,6 +311,7 @@ def validate_lr_walk_forward(
         "game": game_id, "scheme_code": scheme.code, "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": day_labels[-1], "training_end": day_labels[start - 1], "depth": depth,
         "inverse": bool(inverse), "restricted": bool(restricted), "requested_restricted": requested_restricted,
+        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "dynamic": bool(dynamic), "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
         "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
         "auto_reason": auto_reason, "summary": _summary(draws, len(days), start), "draws": draws,

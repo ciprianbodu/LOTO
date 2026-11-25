@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from nicegui import run, ui
 
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
@@ -73,6 +74,8 @@ def _compact_profile(entry, finished_at):
     settings = entry.get("settings")
     if entry.get("error") or not isinstance(result, dict) or result.get("error"):
         return None
+    if result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
+        return None
     if not isinstance(settings, dict) or not all(key in settings for key in _PROFILE_SETTINGS):
         return None
     if (any(type(settings[key]) is not bool for key in ("inverse", "restricted", "dynamic"))
@@ -113,7 +116,7 @@ def _compact_profile(entry, finished_at):
         "game": game, "source": entry["source"], "settings": captured_settings, "finished_at": finished_at,
         "result": {
             "game": game, "scheme_code": scheme, "history_hash": history_hash, "history_rows": history_rows,
-            "as_of": result.get("as_of"), "urns": urns,
+            "as_of": result.get("as_of"), "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "urns": urns,
         },
     }
 
@@ -352,6 +355,9 @@ def _game_report(entry):
         ui.label(entry["name"]).classes("text-h6")
         ui.label(f"Cod LR {settings['scheme']} · Metodă {mode.lower()} · {scope}").classes("text-body2")
         result = entry.get("result") or {}
+        if result and result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
+            ui.label("Raport anterior regulii de maximum două numere consecutive. "
+                     "Rulează din nou Re-Bench pentru selecția actuală.").classes("text-warning")
         ui.label(f"{entry['source']} · Ultima extragere {_date_text(result.get('as_of'))} · Istoric {lookback}").classes(
             "text-caption"
         )

@@ -4,6 +4,7 @@ import json
 
 from nicegui import ui
 
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.benchmark import methods as registry
 from loto_enterprise.benchmark.chronological_validation import (
     selection_metric,
@@ -68,7 +69,7 @@ def _nested_results(result, *, game_key=None):
         saved_catalog == registry.catalog_version_for_game(key)
         and result.get("hit_target") == (1 if single else 4)
         and result.get("selection_metric") == metric
-        and (single or result.get("max_consecutive_run") == 0)
+        and (single or result.get("max_consecutive_run") == (LR_MAX_CONSECUTIVE_RUN if game.is_romanian else 0))
     )
     best = result.get("best_policy") if current else None
     labels = [("policy", "Criteriu"), ("origin", "Când s-a ales metoda")]

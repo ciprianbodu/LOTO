@@ -12,10 +12,11 @@ import numpy as np
 import pandas as pd
 
 from covering.lr_selection import resolve_lr_scheme
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES, decision
 from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
 from loto_enterprise.benchmark.methods import call_method, list_methods, method_meta
-from loto_enterprise.benchmark.restricted_decision import restricted_bench_scores
+from loto_enterprise.benchmark.restricted_decision import _lr_fold_pool, restricted_bench_scores
 from loto_enterprise.benchmark.runner import (
     GameDef, _evaluate_fold, _methods_for_game, bench_worker_count, fold_sizes,
 )
@@ -86,7 +87,7 @@ def _blocked_by_date(
         initial, cutoffs = _training(matrix, bounds, origins[0], lookback)
         _, selection = restricted_bench_scores(
             initial, cutoffs, game.key, game.base_k if game.is_single_pick else reference_size,
-            outside_base, target,
+            outside_base, target, strict_lr=not game.is_single_pick,
         )
         method = selection["method"]
         if not method or " + " in method:
@@ -96,7 +97,8 @@ def _blocked_by_date(
         def direct_pool(origin):
             past, cuts = _training(matrix, bounds, origin, lookback)
             scores = _frozen_scores(method, past, game.max_num, cuts)
-            return rank_by_score({n: scores[n] for n in base if n in scores}, reference_size)
+            eligible = {n: scores[n] for n in base if n in scores}
+            return (rank_by_score if game.is_single_pick else rank_lr_pool)(eligible, reference_size)
 
         protocol = (
             f"Pool-ul direct folosește metoda {method}, fixată pe datele disponibile "
@@ -121,6 +123,9 @@ def _evaluate_method(method, *, matrix, game, windows, blocked, lookback, size, 
     def score_prefix(name, history, maximum, **_context):
         check()
         origin = len(history)
+        if blocked[origin] is None:
+            # The date remains in history for later fits, but no candidate had a playable pool on it.
+            return {}, 0.0
         if origin not in scores_by_origin:
             past, cuts = _training(matrix, game.history_cutoffs, origin, lookback)
             scores, duration = call_method(name, past, maximum, history_cutoffs=cuts)
@@ -131,9 +136,16 @@ def _evaluate_method(method, *, matrix, game, windows, blocked, lookback, size, 
     records = []
     for pct, start in windows:
         check(force=True)
-        fold, _ = _evaluate_fold(method, matrix[:start], matrix[start:], game, 1, score_method=score_prefix)
+        fold, _ = _evaluate_fold(
+            method, matrix[:start], matrix[start:], game, 1, score_method=score_prefix,
+            rank_pool=None if game.is_single_pick else _lr_fold_pool, selection_size=size,
+        )
         check(force=True)
         fold.percentile = pct
+        if any(excluded is None for excluded in blocked.values()):
+            # Decision completeness is relative to the common playable sample.
+            # n_eval can still be lower if this particular scorer failed on a playable date.
+            fold.n_test = sum(blocked[day] is not None for day in game.history_cutoffs[start:])
         records.append(fold.as_record())
     return records
 
@@ -206,6 +218,9 @@ def _bench_urn(
     if eligible_count < required:
         output["error"] = f"Rămân {eligible_count} numere eligibile. Sunt necesare {required}."
         return output
+    if not game.is_single_pick and lr_pool_capacity(base) < required:
+        output["error"] = f"În baza aleasă nu încap {required} numere fără trei consecutive."
+        return output
 
     windows = []
     for pct in VALIDATION_PERCENTILES:
@@ -225,6 +240,30 @@ def _bench_urn(
         matrix, game.history_cutoffs, game, scheme, origins, base, reference_size,
         dynamic, lookback, target, check,
     )
+    coverage = ""
+    if not game.is_single_pick and reference_size:
+        base_set = set(base)
+        skipped = {origin for origin, excluded in blocked.items() if lr_pool_capacity(base_set - excluded) < size}
+        if skipped:
+            cutoffs = game.history_cutoffs[earliest:]
+            missing = sum(day in skipped for day in cutoffs)
+            output.update(infeasible_days=len(skipped), infeasible_draws=missing,
+                          playable_draws=len(cutoffs) - missing, test_draws=len(cutoffs))
+            if len(skipped) == len(origins):
+                output["error"] = (
+                    f"În toate cele {missing} extrageri de test, după excluderea pool-ului direct, "
+                    f"nu încap {size} numere fără trei consecutive."
+                )
+                return output
+            for origin in skipped:
+                blocked[origin] = None
+            windows = [(pct, start) for pct, start in windows
+                       if any(day not in skipped for day in game.history_cutoffs[start:])]
+            coverage = (
+                f" În cea mai lungă fereastră au fost disponibile bilete la {len(cutoffs) - missing} din "
+                f"{len(cutoffs)} extrageri. În {len(skipped)} zile ({missing} extrageri), pool-ul invers nu "
+                "a încăput fără trei numere consecutive. Aceleași extrageri au fost omise pentru toate metodele."
+            )
     methods = _methods(game.key)
     evaluate = partial(
         _evaluate_method, matrix=matrix, game=game, windows=windows, blocked=blocked,
@@ -260,8 +299,8 @@ def _bench_urn(
         protocol=(
             "Clasamentul arată fereastra cea mai lungă. Decizia folosește toate ferestrele disponibile. "
             "Metodele folosesc numai extragerile disponibile înaintea fiecărei zile. "
-            "Toate extragerile din perioada evaluată contează, inclusiv când au numere în afara bazei. "
-            + reference_protocol
+            "Extragerile cu numere în afara bazei sunt incluse. "
+            + reference_protocol + coverage
         ).rstrip(),
     )
     if not reusable:
@@ -314,6 +353,7 @@ def benchmark_lr_hypotheses(
     check(force=True)
     return {
         "game": game_id, "scheme_code": scheme.code,
+        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(dates) else None,
         "inverse": bool(inverse), "restricted": bool(restricted), "lookback": lookback, "urns": urns,

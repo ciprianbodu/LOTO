@@ -439,6 +439,8 @@ def lr_budget_panel(
             ).classes("max-w-full").tooltip(
                 "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
             )
+        ui.label("Pool-ul principal permite perechi consecutive. Dacă un număr ar forma o serie de trei, "
+                 "generatorul trece la următorul din clasament.").classes("text-caption")
 
         with ui.column().classes("w-full gap-1 border-l-4 border-primary pl-3"):
             low, high = _INVERSE_RANGE

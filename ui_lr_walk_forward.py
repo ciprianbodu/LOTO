@@ -5,6 +5,7 @@ from datetime import date, datetime
 from nicegui import ui
 
 from covering.lr_budget import ANY_PRIZE
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_snapshot
 
@@ -101,6 +102,9 @@ def _game_result(entry):
         if error := entry.get("error") or result.get("error"):
             ui.label(error).classes("text-warning").props('role="status"')
             return
+        if result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
+            ui.label("Raport anterior regulii de maximum două numere consecutive. "
+                     "Pornește o nouă validare pentru selecția actuală.").classes("text-warning")
         lot = require_lottery(entry["game"], "RO")
         summary = result["summary"]
         if result.get("requested_restricted") is None:

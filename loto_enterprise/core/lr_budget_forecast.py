@@ -15,6 +15,7 @@ import pandas as pd
 
 from covering.lr_budget import recommend_games
 from covering.lr_pool_budget import required_pool_size, restrict_to_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
 from covering.lr_selection import lr_pool_sizes, resolve_lr_scheme, select_lr_scheme
 from covering.probability import _integer
 from loto_engine import LotoEngine
@@ -26,7 +27,7 @@ from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.method_selector import combine_ensemble_scores
-from loto_enterprise.core.ranking import rank_by_score
+from loto_enterprise.core.ranking import longest_consecutive_run, rank_by_score
 
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +54,7 @@ def _dynamic_scores(game, code, draws, cutoffs, excluded_numbers=()):
     matrix = np.frombuffer(draws, dtype=np.int32).reshape(-1, lot.draw_n)
     return choose_dynamic_winner(
         matrix, cutoffs, resolve_lr_scheme(game, code), excluded_numbers=excluded_numbers,
+        max_run=LR_MAX_CONSECUTIVE_RUN,
     )
 
 
@@ -101,7 +103,8 @@ def _rebench_candidates(entries, lot, scheme, number_range, dynamic, lookback, h
         if not isinstance(entry, dict) or entry.get("game") != lot.game_id:
             continue
         settings, report = entry.get("settings"), entry.get("result")
-        if not isinstance(settings, dict) or not isinstance(report, dict) or not report.get("history_hash"):
+        if (not isinstance(settings, dict) or not isinstance(report, dict) or not report.get("history_hash")
+                or report.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN):
             continue
         if (settings.get("restricted") is not (number_range is not None)
                 or settings.get("dynamic") is not dynamic or type(settings.get("inverse")) is not bool
@@ -158,6 +161,13 @@ def _check_capacity(name, maximum, count, excluded):
 
 def _score_pool(lot, engine, scheme, dynamic, joker_size, *, excluded=(), excluded_jokers=(), hit_target=None,
                 profiles=None, bonus_history=None):
+    eligible = set(range(1, lot.max_n + 1)).difference(excluded)
+    capacity = lr_pool_capacity(eligible)
+    if capacity < scheme.n:
+        raise ValueError(
+            f"Din {len(eligible)} numere eligibile se pot alege cel mult {capacity} fără trei consecutive. "
+            f"Cod {scheme.code} necesită {scheme.n}."
+        )
     engine._winner_pool_hint = scheme.n
     profiles = profiles or {}
     if lot.bench_key in profiles:
@@ -171,15 +181,16 @@ def _score_pool(lot, engine, scheme, dynamic, joker_size, *, excluded=(), exclud
     elif excluded:
         scores, selection = restricted_bench_scores(
             engine._draw_matrix, training_cutoffs(engine.data), lot.bench_key, scheme.n, excluded, hit_target,
+            strict_lr=True,
         )
     else:
         scores = engine._get_timesfm_scores()
         selection = engine.audit.get("bench_winner", {}).get(
             lot.bench_key, {"method": "frequency", "fallback": True},
         )
-    pool = engine._get_timesfm_pool(scores, scheme.n, set(excluded))
-    if len(pool) != scheme.n or not set(pool).isdisjoint(excluded):
-        raise ValueError(f"Pool-ul eligibil pentru Cod {scheme.code} nu poate fi completat.")
+    if not scores:
+        scores, _ = call_method("frequency", engine._draw_matrix, lot.max_n)
+    pool = rank_lr_pool({int(n): s for n, s in scores.items() if int(n) in eligible}, scheme.n)
     jokers, bonus = (), None
     if lot.bench_key_urna2:
         maximum = lot.geo.second.max_n
@@ -359,7 +370,18 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
     # An email describes a completed job: its displayed original is the exclusion
     # even when the budget selects a different scoring scheme for the alternative.
     reuse = exclude_generated_pool or (same_settings and size == scheme.n and same_scheme)
-    if engine is None and (not reuse or inverse or number_range is not None):
+    # A legacy dynamic winner may have been chosen on pools that allowed triples.
+    saved_limit = saved.get("max_consecutive_run")
+    if saved_limit is None:
+        saved_limit = (saved.get("context") or {}).get("max_consecutive_run")
+    if isinstance(saved_limit, dict):
+        saved_limit = saved_limit.get("requested")
+    reuse_main = exclude_generated_pool or (
+        reuse and (not dynamic or saved_limit == LR_MAX_CONSECUTIVE_RUN)
+        and longest_consecutive_run(_balls(previous["pool"], lot.max_n)) <= LR_MAX_CONSECUTIVE_RUN
+    )
+    restricted_direct = number_range is not None and not exclude_generated_pool
+    if engine is None and (not reuse_main or inverse or restricted_direct):
         if result and filename != result[0]:
             raise ValueError("Lipsește istoricul folosit la generarea acestui pool.")
         expected_hash = (saved.get("audit") or {}).get("hash")
@@ -377,19 +399,17 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
 
     # The inverse uses the direct pool for the same interval. The email
     # explicitly pairs its alternative with an already generated normal pool.
-    if number_range is not None and not exclude_generated_pool:
-        blocked = _range_exclusions(lot, scheme, number_range)
-        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target,
-                               profiles=direct_profiles, bonus_history=bonus_history)
-        if reuse and lot.bench_key_urna2:
-            # A restriction on the main urn must preserve the generated Joker choice.
-            forecast.update(jokers=previous["jokers"], joker_selection=previous["joker_selection"])
-        forecast["eligible_count"] = lot.max_n - len(blocked)
-    elif reuse:
+    if reuse_main and not restricted_direct:
         forecast = previous
         filename = result[0]
     else:
-        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, profiles=direct_profiles, bonus_history=bonus_history)
+        blocked = _range_exclusions(lot, scheme, number_range) if restricted_direct else ()
+        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target,
+                               profiles=direct_profiles, bonus_history=bonus_history)
+        if reuse and lot.bench_key_urna2:
+            # Changes to the main urn preserve the compatible generated Joker choice.
+            forecast.update(jokers=previous["jokers"], joker_selection=previous["joker_selection"])
+        forecast["eligible_count"] = lot.max_n - len(blocked)
 
     pool = _balls(forecast["pool"], lot.max_n)
     jokers = _balls(forecast["jokers"], lot.geo.second.max_n) if lot.bench_key_urna2 else ()
@@ -402,6 +422,7 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
         forecast.update(pool=pool, jokers=jokers)
         forecast.setdefault("eligible_count", lot.max_n)
     forecast["number_range"] = number_range
+    forecast["max_consecutive_run"] = LR_MAX_CONSECUTIVE_RUN
     if size != scheme.n:
         forecast.update(expanded_from=size, expanded_to_max=required_pool_size(plan) > scheme.n)
     forecast.update(filename=filename, code=scheme.code, pool=sorted(forecast["pool"]), inverse=inverse)

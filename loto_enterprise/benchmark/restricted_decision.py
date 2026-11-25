@@ -8,6 +8,7 @@ from operator import index
 import numpy as np
 import pandas as pd
 
+from covering.lr_pool_ranking import lr_pool_capacity, select_ranked_lr_pool
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES, decision
 from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
 from loto_enterprise.benchmark.methods import call_method, list_methods, method_meta
@@ -16,7 +17,12 @@ from loto_enterprise.core.lotteries import lottery_by_bench_key
 from loto_enterprise.core.method_selector import combine_ensemble_scores
 
 
-def restricted_bench_scores(matrix, cutoffs, game_key, pool_size, excluded_numbers, hit_target=None):
+def _lr_fold_pool(ranked, size):
+    # Auxiliary blacklist diagnostics can cover fewer than size eligible balls.
+    return select_ranked_lr_pool(ranked, min(size, lr_pool_capacity(ranked)))
+
+
+def restricted_bench_scores(matrix, cutoffs, game_key, pool_size, excluded_numbers, hit_target=None, *, strict_lr=False):
     """Evaluate the same excluded set at every origin. Never publish the resulting decision."""
     lot = lottery_by_bench_key(game_key)
     if lot is None or not lot.is_romanian:
@@ -45,17 +51,19 @@ def restricted_bench_scores(matrix, cutoffs, game_key, pool_size, excluded_numbe
     )
     scores, selection = _restricted_decision(
         np.ascontiguousarray(draws, dtype=np.int32).tobytes(), bounds, game_key,
-        draw_n, pick_n, maximum, pool_size, excluded, tuple(sorted(methods)), target,
+        draw_n, pick_n, maximum, pool_size, excluded, tuple(sorted(methods)), target, bool(strict_lr and not bonus),
     )
     return dict(scores), deepcopy(selection)
 
 
 @lru_cache(maxsize=24)
-def _restricted_decision(data, bounds, game_key, draw_n, pick_n, maximum, size, excluded, methods, target):
+def _restricted_decision(data, bounds, game_key, draw_n, pick_n, maximum, size, excluded, methods, target, strict_lr):
     draws = np.frombuffer(data, dtype=np.int32).reshape(-1, draw_n)
     game = GameDef(game_key, game_key, "", [], maximum, draw_n, pool_extra=size - pick_n,
                    is_single_pick=draw_n == 1, pick_n=pick_n, history_cutoffs=bounds)
     blocked = frozenset(excluded)
+    if strict_lr:
+        select_ranked_lr_pool((n for n in range(1, maximum + 1) if n not in blocked), size)
     rows = []
 
     # A method sees the same prefix in overlapping windows. Keep only its scores
@@ -77,7 +85,8 @@ def _restricted_decision(data, bounds, game_key, draw_n, pick_n, maximum, size, 
             train, test = fold_sizes(len(draws), percentile)
             if train < 80 or test < 1:
                 continue
-            fold, _ = _evaluate_fold(method, draws[:train], draws[train:], game, 1, score_method=score_prefix)
+            ranking = {"rank_pool": _lr_fold_pool, "selection_size": size} if strict_lr else {}
+            fold, _ = _evaluate_fold(method, draws[:train], draws[train:], game, 1, score_method=score_prefix, **ranking)
             fold.percentile = percentile
             rows.append(fold.as_record())
     config = {}

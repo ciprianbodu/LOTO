@@ -181,7 +181,7 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
 
 def _profile_result(game, scheme, fingerprint, *, partial=False):
     report = _result(game, scheme)
-    report.update(history_hash=fingerprint, history_rows=240)
+    report.update(history_hash=fingerprint, history_rows=240, max_consecutive_run=2)
     keys = {
         "joker": ("joker_urna1", "joker_urna2"),
         "6/49": ("loto_6_49",),
@@ -250,9 +250,15 @@ def test_saved_decisions_retain_each_game_and_hypothesis_and_replace_only_comple
 
 
 def test_legacy_report_is_visible_but_produces_no_reusable_decision():
+    prior = _profile_result("joker", 24, "a" * 16)
+    entry = {"game": "joker", "source": "legacy.csv", "settings": _settings(24), "result": prior}
+    finished = "2026-11-25T11:20:00+02:00"
+    saved_profile = panel._compact_profile(entry, finished)
+    del saved_profile["result"]["max_consecutive_run"]
+    del prior["max_consecutive_run"]
     panel.atomic_write_json(panel._RESULT_PATH, {
-        "schema": 1, "total": 1, "finished_at": "2026-11-25T11:20:00+02:00",
-        "entries": [{"game": "joker", "settings": _settings(24), "source": "legacy.csv", "result": _result("joker", 24)}],
+        "schema": 1, "total": 1, "finished_at": finished, "entries": [entry],
+        "decision_profiles": {"joker": [saved_profile]},
     })
     assert panel.lr_rebench_decisions() == {}
     assert panel._last["entries"][0]["result"]["urns"][0]["method"] == "frequency"

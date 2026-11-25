@@ -20,7 +20,7 @@ def history(game):
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
-@pytest.mark.parametrize("number_range", [(10, 40), (12, 38), (14, 37)])
+@pytest.mark.parametrize("number_range", [(10, 40), (12, 38), (10, 36)])
 def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, number_range):
     first, last = number_range
     observed = []
@@ -32,7 +32,7 @@ def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, 
     monkeypatch.setattr(budget, "_dynamic_scores", lambda game, code, draws, bounds, excluded: score(excluded))
     monkeypatch.setattr(
         budget, "restricted_bench_scores",
-        lambda draws, bounds, game, width, excluded, target: score(excluded),
+        lambda draws, bounds, game, width, excluded, target, **kwargs: score(excluded),
     )
     original = [1, 2, 3, 4, 5, 6, 13, 18, 24, 29, 33, 37]
     options = dict(
@@ -49,25 +49,26 @@ def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, 
         forecast = plan["forecast"]
         assert forecast["number_range"] == number_range
         assert forecast["eligible_count"] == 49 - len(blocked)
-        expected = sorted(set(range(1, 50)) - blocked)[-12:]
+        expected = sorted(budget.rank_lr_pool({n: n for n in set(range(1, 50)) - blocked}, 12))
         assert forecast["pool"] == plan["tickets"][0][0]["numbers"] == expected
     assert not normal["forecast"]["generated"]
     assert inverse["forecast"]["excluded_pool"] == normal_pool
     assert set(inverse["forecast"]["pool"]).isdisjoint(normal_pool)
+    assert all(budget.longest_consecutive_run(plan["forecast"]["pool"]) <= 2 for plan in (normal, inverse))
 
 
 def test_main_range_preserves_generated_joker_from_separate_urn():
     options = dict(
-        histories={"joker": ("source.csv", history("joker"))}, pool_codes={}, joker_size=2,
+        histories={"joker": ("source.csv", history("joker"))}, pool_codes={}, joker_size=3,
         generated={"joker": ("source.csv", {
-            "hard_core": list(range(1, 11)), "joker_pool": [2, 7], "lr_scheme_code": 24,
+            "hard_core": list(range(1, 11)), "joker_pool": [2, 3, 4], "lr_scheme_code": 24,
             "dynamic_method": True,
         })},
     )
     normal, = budget.recommend_playable_games(100, FOUR_PLUS, "joker", **options)
     restricted, = budget.recommend_playable_games(100, FOUR_PLUS, "joker", number_range=(15, 35), **options)
     for plan in (normal, restricted):
-        assert plan["forecast"]["jokers"] == (2, 7)
+        assert plan["forecast"]["jokers"] == (2, 3, 4)
         assert plan["tickets"][0][0]["joker"] == 2
     assert restricted["forecast"]["eligible_count"] == 21
     assert set(restricted["forecast"]["pool"]) <= set(range(15, 36))
@@ -100,4 +101,17 @@ def test_inverse_range_needs_room_for_two_full_pools():
     assert len(direct["forecast"]["pool"]) == 12 and direct["tickets"]
     assert not inverse["tickets"]
     assert "9 numere eligibile după excluderea pool-ului normal" in inverse["forecast_error"]
+    assert "Cod 57 necesită 12" in inverse["forecast_error"]
+
+
+def test_inverse_can_fail_strict_capacity_even_when_enough_numbers_remain(monkeypatch):
+    monkeypatch.setattr(
+        budget, "_dynamic_scores", lambda *args: ({n: n for n in range(1, 50)}, {"method": "test"}),
+    )
+    options = dict(histories={"6/49": ("source.csv", history("6/49"))}, pool_codes={}, number_range=(14, 37))
+    direct, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", **options)
+    inverse, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse=True, **options)
+    assert direct["tickets"] and len(direct["forecast"]["pool"]) == 12
+    assert not inverse["tickets"]
+    assert "Din 12 numere eligibile se pot alege cel mult 10 fără trei consecutive" in inverse["forecast_error"]
     assert "Cod 57 necesită 12" in inverse["forecast_error"]

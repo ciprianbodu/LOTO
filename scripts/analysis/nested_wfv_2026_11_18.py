@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from covering.lr_schemes import _best_position
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import decision
@@ -135,7 +136,7 @@ def scheme_definition(lot, second, code):
 
 def outcome_matrices(
     matrix, cutoffs, days, universe, k, lookup, methods, caller, fallback_days,
-    *, unavailable=None,
+    *, unavailable=None, max_run=2,
 ):
     """Evaluate a shared date prefix, with visible frequency substitution in active reports."""
     first = int(days[0])
@@ -145,7 +146,6 @@ def outcome_matrices(
     ticket_hits = np.empty_like(raw_hits)
     ties = np.empty((len(days), len(methods)), dtype=np.uint8)
     balls = set(range(1, universe + 1))
-    max_run = 2 if fallback_days is None else 0  # The dated research uses the old limit.
     for day, (start, end) in enumerate(zip(days, np.r_[days[1:], len(matrix)], strict=True)):
         targets = matrix[start:end]
         rows = slice(start - first, end - first)
@@ -301,7 +301,9 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
         active_catalog and official and threshold == dynamic_winner.TICKET_HIT_TARGET
         and all(name in candidates for name in dynamic_winner.CANDIDATES)
     )
-    score_options = {}
+    # The archived study used two for every main urn. Live LR games share the generator limit.
+    max_run = (LR_MAX_CONSECUTIVE_RUN if official else 0) if active_catalog else 2
+    score_options = {"max_run": max_run}
     if live_dynamic:
         unavailable = np.zeros((len(days), len(methods)), dtype=bool)
         score_options["unavailable"] = unavailable
@@ -379,7 +381,7 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
     if active_catalog:
         report.update(catalog_version=registry.catalog_version_for_game(key), candidate_methods=list(candidates),
                       comparator="random", fallback_days=fallback_days, scored_days=len(days),
-                      max_consecutive_run=0)
+                      max_consecutive_run=max_run)
     return report
 
 

@@ -10,6 +10,7 @@ import numpy as np
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
 from covering.lr_schemes import scheme_tickets
 from covering.lr_selection import resolve_lr_scheme
 from covering.probability import subset_hit_table
@@ -86,8 +87,11 @@ def _dynamic_predictor(matrix, bounds, days, scheme, universe, indicators, lookb
 
         def pool(eligible):
             width, count = scheme.n, scores.shape[1]
+            if lr_pool_capacity(eligible) < width:
+                raise ValueError(f"Nu încap {width} numere fără trei consecutive în baza LR.")
             ranked = ranked_pools(
                 scores.reshape(-1, universe), pool_size=width, universe=universe, eligible_numbers=eligible,
+                max_run=LR_MAX_CONSECUTIVE_RUN,
             ).reshape(len(scores), count, width)
             totals = np.zeros((count, 1), dtype=int)
             if len(inner):
@@ -117,7 +121,7 @@ def _fixed_predictor(matrix, bounds, first, lot, scheme, target, lookback):
     """Freeze a pre-validation Re-Bench winner, then update its scores on each prefix."""
     left = _left(first, lookback)
     _, selection = restricted_bench_scores(
-        matrix[left:first], np.maximum(0, bounds[left:first] - left), lot.bench_key, scheme.n, (), target,
+        matrix[left:first], np.maximum(0, bounds[left:first] - left), lot.bench_key, scheme.n, (), target, strict_lr=True,
     )
     # The fixed production catalog currently selects one member. An old or
     # unavailable combined decision has the documented frequency fallback.
@@ -132,7 +136,7 @@ def _fixed_predictor(matrix, bounds, first, lot, scheme, target, lookback):
         scores = _frozen_scores(method, history, lot.max_n, cutoffs)
 
         def pool(eligible):
-            return np.asarray(sorted(rank_by_score({n: scores[n] for n in eligible}, scheme.n)), dtype=int)
+            return np.asarray(sorted(rank_lr_pool({n: scores[n] for n in eligible}, scheme.n)), dtype=int)
         return pool
     return prepare, method
 
@@ -209,12 +213,14 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
         predict = prepare(int(origin))
         bonus = prepare_bonus(int(origin)) if bonus_data else None
         for i, base in enumerate(bases):
-            if len(base) < required:
+            if len(base) < required or lr_pool_capacity(base) < scheme.n:
                 continue
             eligible = base
             if inverse:
                 direct = set(predict(base))
                 eligible = tuple(n for n in base if n not in direct)
+                if lr_pool_capacity(eligible) < scheme.n:
+                    continue
             pool = predict(eligible)
             scored_start = max(origin, start)
             matches = indicators[scored_start:end, pool - 1]
@@ -230,13 +236,16 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
 def _summarize(data, reference, threshold, timing, start, limits, eligible_count, size, bonus_prize=False):
     pool, tickets = data[:, 0], data[:, 1]
     played = pool >= 0
-    compared = played.copy()
+    evaluated = played.copy()
+    base_evaluated = reference[:, 0] >= 0
     success = tickets >= threshold
     base_success = reference[:, 1] >= threshold
     if bonus_prize:
-        compared &= (data[:, 2] >= 0) & (reference[:, 2] >= 0)
-        success = (success | (data[:, 2] > 0)) & compared
-        base_success = (base_success | (reference[:, 2] > 0)) & compared
+        evaluated &= data[:, 2] >= 0
+        base_evaluated &= reference[:, 2] >= 0
+        success = (success | (data[:, 2] > 0)) & evaluated
+        base_success = (base_success | (reference[:, 2] > 0)) & base_evaluated
+    compared = evaluated & base_evaluated
     differences = success.astype(int) - base_success.astype(int)
     paired = differences[compared]
     wins, losses = int((paired > 0).sum()), int((paired < 0).sum())
@@ -257,9 +266,10 @@ def _summarize(data, reference, threshold, timing, start, limits, eligible_count
         "range": limits, "evaluated": int(played.sum()), "infeasible": int((~played).sum()),
         "pool_3plus": int((pool >= 3).sum()), "pool_4plus": int((pool >= 4).sum()),
         "ticket_3plus": int((tickets >= 3).sum()), "ticket_4plus": int((tickets >= 4).sum()),
-        "successes": int(success.sum()), "objective_evaluated": int(compared.sum()),
-        "objective_missing": int((played & ~compared).sum()), "recent_successes": int(success[-RECENT_DRAWS:].sum()),
-        "recent_evaluated": int(compared[-RECENT_DRAWS:].sum()), "paired_wins": wins, "paired_losses": losses,
+        "successes": int(success.sum()), "objective_evaluated": int(evaluated.sum()),
+        "objective_missing": int((played & ~evaluated).sum()), "recent_successes": int(success[-RECENT_DRAWS:].sum()),
+        "recent_evaluated": int(evaluated[-RECENT_DRAWS:].sum()), "paired_evaluated": int(compared.sum()),
+        "paired_wins": wins, "paired_losses": losses,
         "adjusted_p": adjusted, "eligible_now": eligible_count, "feasible_now": eligible_count >= size,
         "stable": bool(stable), "phase": phase, "chronology": timing,
     }
@@ -334,18 +344,35 @@ def compare_budget_ranges(
     rows = []
     for index, limits in enumerate(RANGES):
         timing = range_timing(matrix, dates, limits or (1, lot.max_n))
-        base_count = len(_eligible(lot.max_n, limits))
+        base = _eligible(lot.max_n, limits)
+        base_count = len(base)
         eligible_count = max(0, base_count - scheme.n) if inverse else base_count
-        rows.append(_summarize(
+        row = _summarize(
             results[index], results[0], threshold, timing, start, limits,
             eligible_count, scheme.n, bonus_prize,
-        ))
+        )
+        # Every third ball would have to be skipped even in one unbroken interval.
+        # Only an intermediate-sized complement needs the exact current direct pool.
+        if inverse and eligible_count - eligible_count // 3 < scheme.n <= eligible_count:
+            reference = current
+            if limits is not None:
+                reference, = recommend_playable_games(
+                    budget_lei, objective, game_id, histories, pool_codes=pool_codes or {}, generated=generated,
+                    dynamic=dynamic, lookback=lookback, joker_size=joker_size, hit_target=hit_target, number_range=limits,
+                )
+            row["feasible_now"] = bool(reference["tickets"]) and (
+                lr_pool_capacity(set(base).difference(reference["forecast"]["pool"])) >= scheme.n
+            )
+        elif not inverse:
+            row["feasible_now"] = lr_pool_capacity(base) >= scheme.n
+        rows.append(row)
     recommendation, reason = _decision(rows)
     protocol = (
         "Selectorul dinamic a fost recalculat înaintea fiecărei date, inclusiv pentru martorul aleator."
         if dynamic else f"Estimare în mod fix. Metoda {method or 'indisponibilă'} a fost aleasă prin Re-Bench "
         "pe baza completă înaintea perioadei de test și folosită și pentru 10–40, cu scoruri actualizate la fiecare dată."
     )
+    protocol += " Pool-urile din urna principală au cel mult două numere consecutive."
     if inverse:
         protocol += (
             " Înaintea fiecărei date, simularea calculează pool-ul direct separat pentru fiecare bază "

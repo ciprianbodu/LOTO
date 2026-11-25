@@ -94,6 +94,7 @@ from ui_history_upload import (
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_running, run_lr_walk_forward
@@ -186,12 +187,9 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             "recent_penalty_factor": 0.5,
             "restrict_base_max": 0,
             "restrict_base_min": 0,
-            "max_consecutive_run": 0,
+            "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN if _spec.is_romanian else 0,
             "lookback": _int_setting("lookback_val"),
             "sim_depth_pct": sd,  # TELEMETRIE de bench, nu taie istoricul (vezi AGENTS.md)
-            # Mereu True: singurul mod de generare care există azi (scoring → top-N
-                # pe toată urna → wheel, fără filtre
-            # automate). Rămâne în contractul worker↔UI (regula de aur 2).
             "pure_bench_mode": True,
             "bench_hit_target": _clamped_bench_target(),
         }
@@ -201,6 +199,7 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
             scheme = _lr_scheme_for(g_label)
             task.update(lr_scheme_code=scheme.code, guarantee=4, wheel_condition=0,
                         max_variants=scheme.size)
+            h.update(f"|lr_max_run={LR_MAX_CONSECUTIVE_RUN}|".encode("ascii"))
             if _spec.bench_key_urna2:
                 joker_pool_size = min(20, max(1, _int_setting("joker_pool_size_val")))
                 if joker_pool_size > 1:

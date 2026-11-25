@@ -453,11 +453,11 @@ def _evaluate_fold(
     game: GameDef,
     block_size: int,
     *,
-    score_method=None,
+    score_method=None, rank_pool=None, selection_size=None,
 ) -> tuple[FoldResult, HwSnapshot]:
     """Run a single fold with hardware sampling. Returns (FoldResult, hw_snap)."""
     n_test = len(test_draws)
-    pool_sizes = (
+    pool_sizes = list(dict.fromkeys((game.base_k, selection_size))) if selection_size is not None else (
         [game.base_k]
         if game.is_single_pick
         else [game.base_k + i for i in range(game.pool_extra + 1)]
@@ -541,12 +541,27 @@ def _evaluate_fold(
 
             # Pre-compute top-K WITHOUT blacklist
             ranked = _top_k(scores, len(scores))
-            top_sets = {k: set(ranked[:k]) for k in pool_sizes}
+            top_sets = {k: set(rank_pool(ranked, k) if rank_pool else ranked[:k]) for k in pool_sizes}
+            if rank_pool and any(len(pool) < k for k, pool in top_sets.items()):
+                unusable_blocks += block_weight
+                pos = end
+                continue
             # Taietura top-K cade intr-un grup de scoruri egale? Atunci membrii
             # de la granita au fost alesi de tie-break („numarul mare intai").
             _sorted_vals = [float(scores[n]) for n in ranked]
             for k in pool_sizes:
-                if len(_sorted_vals) > k and _sorted_vals[k - 1] == _sorted_vals[k]:
+                if rank_pool:
+                    # Move unselected tied balls to the front of their score group.
+                    # With constraints, membership can depend on a tie away from rank k.
+                    chosen = top_sets[k]
+                    tied = {scores[n] for n in chosen}.intersection(scores[n] for n in ranked if n not in chosen)
+                    if not tied:
+                        continue
+                    opposite = sorted(ranked, key=lambda n: (scores[n], n not in chosen), reverse=True)
+                    depends_on_tie = chosen != set(rank_pool(opposite, k))
+                else:
+                    depends_on_tie = len(_sorted_vals) > k and _sorted_vals[k - 1] == _sorted_vals[k]
+                if depends_on_tie:
                     per_pool_tie[k] += block_weight
 
             # Blacklist = numere "moarte" (absente din ultimele K extrageri).
@@ -563,7 +578,7 @@ def _evaluate_fold(
 
             # Top-K WITH blacklist: exclude blacklisted, then take top-K
             ranked_bl = [n for n in ranked if n not in blacklist]
-            top_sets_bl = {k: set(ranked_bl[:k]) for k in pool_sizes}
+            top_sets_bl = {k: set(rank_pool(ranked_bl, k) if rank_pool else ranked_bl[:k]) for k in pool_sizes}
 
             for j in range(pos, end):
                 actual = set(int(x) for x in test_draws[j])
