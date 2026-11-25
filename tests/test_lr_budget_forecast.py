@@ -99,19 +99,21 @@ def test_joker_inverse_excludes_bonus_and_replays_only_valid_bonus_rows(monkeypa
         return {n: (99 if n == 2 else n) for n in range(1, 21) if n not in excluded}, {"method": "restricted"}
 
     monkeypatch.setattr(forecast, "restricted_bench_scores", restricted)
-    plan, = forecast.recommend_playable_games(
-        100, FOUR_PLUS, "joker", {"joker": ("joker.csv", _history("joker"))},
-        pool_codes={}, inverse=True, inverse_range=(10, 40), joker_size=2, generated={"joker": ("joker.csv", {
-            "hard_core": list(range(1, 11)), "joker_pool": [20, 1], "lr_scheme_code": 24,
-            "dynamic_method": True,
-        })},
-    )
+    options = dict(histories={"joker": ("joker.csv", _history("joker"))},
+                   pool_codes={}, number_range=(10, 40), joker_size=2, generated={"joker": ("joker.csv", {
+                       "hard_core": list(range(1, 11)), "joker_pool": [20, 1], "lr_scheme_code": 24,
+                       "dynamic_method": True,
+                   })})
+    direct, = forecast.recommend_playable_games(100, FOUR_PLUS, "joker", **options)
+    plan, = forecast.recommend_playable_games(100, FOUR_PLUS, "joker", inverse=True, **options)
     assert calls == [([4, 12, 4], (0, 1, 2), "joker_urna2", 1, (1, 20))]
     record = plan["forecast"]
     assert record["eligible_joker_count"] == 18
     assert record["excluded_jokers"] == (1, 20)
     assert record["jokers"] == (2, 19)
     assert plan["tickets"][0][0]["joker"] == 2
+    assert record["excluded_pool"] == direct["forecast"]["pool"]
+    assert record["excluded_jokers"] == tuple(sorted(direct["forecast"]["jokers"]))
     assert set(record["excluded_pool"]).isdisjoint(plan["tickets"][0][0]["numbers"])
 
 
@@ -204,13 +206,17 @@ def test_range_limits_every_selected_main_ball_and_passes_full_union_to_selector
                                                       "dynamic_method": dynamic})})
     normal, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse_range=(10, 40), **options)
     assert normal["forecast"]["pool"] == original and not calls
+    direct, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", number_range=(10, 40), **options)
     plan, = forecast.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse=True, inverse_range=(10, 40), **options)
-    eligible = set(range(10, 41)) - set(original)
+    direct_pool = direct["forecast"]["pool"]
+    interval = set(range(10, 41))
+    eligible = interval - set(direct_pool)
     record = plan["forecast"]
-    assert calls == [tuple(sorted(set(range(1, 50)) - eligible))]
-    assert record["excluded_pool"] == original and record["eligible_count"] == len(eligible)
+    outside = tuple(sorted(set(range(1, 50)) - interval))
+    assert calls == [outside, outside, tuple(sorted(set(range(1, 50)) - eligible))]
+    assert record["excluded_pool"] == direct_pool and record["eligible_count"] == len(eligible)
     assert record["inverse_range"] == (10, 40)
-    assert set(record["pool"]) <= eligible and {10, 40} <= set(record["pool"])
+    assert set(record["pool"]) <= eligible and {10, 40} <= set(direct_pool)
 
 
 def test_range_reports_actual_capacity_without_changing_budget_code():
@@ -225,10 +231,12 @@ def test_range_reports_actual_capacity_without_changing_budget_code():
     assert "Cod 59 necesită 16" in plan["forecast_error"]
 
 
-def test_all_budget_zones_use_disjoint_pool():
+@pytest.mark.parametrize("number_range", [None, (10, 40)])
+def test_all_budget_zones_use_disjoint_pool(number_range):
     history = {"5/40": ("draws.csv", _history())}
-    direct, = forecast.recommend_playable_games(100, FOUR_PLUS, "5/40", history, pool_codes={})
-    inverse, = forecast.recommend_playable_games(100, FOUR_PLUS, "5/40", history, pool_codes={}, inverse=True)
+    options = dict(pool_codes={}, number_range=number_range)
+    direct, = forecast.recommend_playable_games(100, FOUR_PLUS, "5/40", history, **options)
+    inverse, = forecast.recommend_playable_games(100, FOUR_PLUS, "5/40", history, inverse=True, **options)
     zones = [zone for ticket in inverse["tickets"] for zone in ticket]
     assert [zone["code"] for zone in zones] == [15, 15]
     assert all(len(zone["numbers"]) == 7 for zone in zones)

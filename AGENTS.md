@@ -2096,9 +2096,10 @@ cea mai mică dimensiune oficială care cuprinde pozițiile necesare, până la
 maximul catalogului. Fiecare zonă de pe bilet păstrează o schemă redusă
 oficială, iar costul total include taxa de bilet.
 
-„Metoda inversă” pornește de la pool-ul normal pentru același joc, cod și
-istoric. Exclude toate numerele lui pe întreaga fereastră de comparație și la
-alegerea numerelor de jucat. În modul dinamic, candidații și martorul sunt
+„Metoda inversă” pornește de la pool-ul normal pentru același joc, cod,
+istoric și aceeași bază de selecție. Cu intervalul 10–40 activ, calculează
+pool-ul normal între 10 și 40 inclusiv, apoi alege numerele inverse dintre
+cele rămase în interval. Excluderea se aplică tuturor zonelor biletului. În modul dinamic, candidații și martorul sunt
 evaluați pe variantele schemei oficiale. În modul fix, Re-Bench reevaluează
 metodele pe numerele eligibile în ferestrele istorice obișnuite, în memorie.
 La Joker, excluderea se aplică separat și pool-ului Urnei 2. Dacă numerele

@@ -20,7 +20,7 @@ def history(game):
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
-@pytest.mark.parametrize("number_range", [(10, 40), (12, 38), (15, 35)])
+@pytest.mark.parametrize("number_range", [(10, 40), (12, 38), (14, 37)])
 def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, number_range):
     first, last = number_range
     observed = []
@@ -42,15 +42,18 @@ def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, 
     outside = set(range(1, first)) | set(range(last + 1, 50))
     normal, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", number_range=list(number_range), **options)
     inverse, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", number_range=number_range, inverse=True, **options)
-    assert observed == [tuple(sorted(outside)), tuple(sorted(outside | set(original)))]
-    for plan, blocked in ((normal, outside), (inverse, outside | set(original))):
+    normal_pool = normal["forecast"]["pool"]
+    inverse_blocked = outside | set(normal_pool)
+    assert observed == [tuple(sorted(outside)), tuple(sorted(outside)), tuple(sorted(inverse_blocked))]
+    for plan, blocked in ((normal, outside), (inverse, inverse_blocked)):
         forecast = plan["forecast"]
         assert forecast["number_range"] == number_range
         assert forecast["eligible_count"] == 49 - len(blocked)
         expected = sorted(set(range(1, 50)) - blocked)[-12:]
         assert forecast["pool"] == plan["tickets"][0][0]["numbers"] == expected
     assert not normal["forecast"]["generated"]
-    assert inverse["forecast"]["excluded_pool"] == original
+    assert inverse["forecast"]["excluded_pool"] == normal_pool
+    assert set(inverse["forecast"]["pool"]).isdisjoint(normal_pool)
 
 
 def test_main_range_preserves_generated_joker_from_separate_urn():
@@ -88,3 +91,13 @@ def test_normal_range_too_small_keeps_exact_budget_code_and_reports_capacity():
     assert not plan["tickets"]
     assert "10 numere eligibile" in plan["forecast_error"]
     assert "Cod 57 necesită 12" in plan["forecast_error"]
+
+
+def test_inverse_range_needs_room_for_two_full_pools():
+    options = dict(histories={"6/49": ("source.csv", history("6/49"))}, pool_codes={}, number_range=(15, 35))
+    direct, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", **options)
+    inverse, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", inverse=True, **options)
+    assert len(direct["forecast"]["pool"]) == 12 and direct["tickets"]
+    assert not inverse["tickets"]
+    assert "9 numere eligibile după excluderea pool-ului normal" in inverse["forecast_error"]
+    assert "Cod 57 necesită 12" in inverse["forecast_error"]

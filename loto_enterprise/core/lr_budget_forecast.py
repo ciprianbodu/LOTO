@@ -250,7 +250,9 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
             if source is None and not (previous["rows"] and previous["date"]):
                 raise ValueError("Istoricul inițial al pool-ului generat este indisponibil. Regenerați pool-ul.")
 
-    if not inverse and number_range is not None:
+    # The inverse uses the direct pool for the same interval. The email
+    # explicitly pairs its alternative with an already generated normal pool.
+    if number_range is not None and not exclude_generated_pool:
         blocked = _range_exclusions(lot, scheme, number_range)
         forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target)
         if reuse and lot.bench_key_urna2:

@@ -38,14 +38,61 @@ def test_dynamic_replay_matches_production_pool_for_every_treatment(lookback):
     relative = np.maximum(0, bounds[left:origin] - left)
     full = tuple(range(1, 50))
     pool = prepare(origin)
-    normal = set(pool(full))
     for limits in (None, (10, 40)):
+        base = analysis._eligible(49, limits)
+        outside_base = tuple(sorted(set(full) - set(base)))
+        direct, _ = choose_dynamic_winner(
+            matrix[left:origin], relative, scheme, excluded_numbers=outside_base,
+        )
+        normal = set(rank_by_score(direct, scheme.n))
         for exclusions in ((), normal):
-            eligible = analysis._eligible(49, limits, exclusions)
+            eligible = tuple(n for n in base if n not in exclusions)
             expected, _ = choose_dynamic_winner(
                 matrix[left:origin], relative, scheme, excluded_numbers=tuple(sorted(set(full) - set(eligible))),
             )
             assert pool(eligible).tolist() == sorted(rank_by_score(expected, scheme.n))
+
+
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_inverse_replay_excludes_the_direct_pool_of_each_base_before_the_draw_day(monkeypatch, dynamic):
+    frame, matrix = _frame(253)
+    frame.loc[251, "date"] = frame.loc[250, "date"]
+    matrix[250:] = [range(22, 28), range(23, 29), range(24, 30)]
+    scheme = resolve_lr_scheme("6/49", 57)
+    calls = []
+
+    def prepare(origin):
+        def predict(eligible):
+            calls.append((origin, eligible))
+            return np.asarray(eligible[:scheme.n])
+        return predict
+
+    monkeypatch.setattr(analysis, "_dynamic_predictor", lambda *args: prepare)
+    monkeypatch.setattr(analysis, "_fixed_predictor", lambda *args: (prepare, "frequency"))
+    analysis._replay.cache_clear()
+    start, days, results, method, _ = analysis._replay(
+        matrix.astype(np.int32).tobytes(), training_cutoffs(frame), "6/49", 57, (0b111111,),
+        80, dynamic, True, 4, b"", (),
+    )
+    assert (start, days, method) == (250, 2, None if dynamic else "frequency")
+    expected_bases = [range(1, 50), range(13, 50), range(10, 41), range(22, 41)]
+    assert calls == [(origin, tuple(numbers)) for origin in (250, 252) for numbers in expected_bases]
+    assert results[:, :, 0].tolist() == [[3, 2, 1], [6, 6, 6]]
+
+
+@pytest.mark.parametrize(("amount", "restricted_evaluated"), [(200, 3), (400, 0)])
+def test_inverse_metadata_counts_remaining_balls_in_each_base(amount, restricted_evaluated):
+    frame, _ = _frame(253)
+    report = analysis.compare_budget_ranges(
+        amount, FOUR_PLUS, "6/49", {"6/49": ("data.csv", frame)}, inverse=True,
+    )
+    width = report["pool_size"]
+    full, restricted = report["ranges"]
+    assert [full["eligible_now"], restricted["eligible_now"]] == [49 - width, 31 - width]
+    assert [full["feasible_now"], restricted["feasible_now"]] == [True, bool(restricted_evaluated)]
+    assert [full["recent_evaluated"], restricted["recent_evaluated"]] == [3, restricted_evaluated]
+    assert restricted["infeasible"] == 3 - restricted_evaluated
+    assert "pool-ul direct separat pentru fiecare bază" in report["protocol"]
 
 
 def test_only_last_100_scored_and_whole_day_excluded_from_first_forecast(monkeypatch):
@@ -116,9 +163,9 @@ def test_only_consistent_feasible_temporally_supported_advantage_can_narrow():
     candidate = reference.copy()
     candidate[::2] = (4, 4)
     full = analysis._summarize(reference, reference, 4, range_timing(matrix, dates, (1, 49)), 0, None,
-                               tuple(range(1, 50)), 12)
+                               49, 12)
     good = analysis._summarize(candidate, reference, 4, range_timing(matrix, dates, (10, 40)), 0, (10, 40),
-                               tuple(range(10, 41)), 12)
+                               31, 12)
     assert good["adjusted_p"] < .05 and good["stable"] and good["phase"]["supports"]
     assert analysis._decision([full, good])[0] == (10, 40)
     for changed in ({"feasible_now": False}, {"infeasible": 1}, {"stable": False},
@@ -134,7 +181,7 @@ def test_joker_prizes_require_main_and_bonus_on_same_zone_and_hide_missing_bonus
     assert matches.tolist() == [1, 0, 1, -1, 0, 0]
     data = np.column_stack(([1, 1, 1, 2, 3, 0], [1, 1, 1, 2, 3, 0], matches))
     timing = range_timing(np.tile(np.arange(11, 16), (6, 1)), None, (10, 40))
-    row = analysis._summarize(data, data, 3, timing, 0, (10, 40), tuple(range(10, 41)), 10, True)
+    row = analysis._summarize(data, data, 3, timing, 0, (10, 40), 31, 10, True)
     assert row["successes"] == 3 and row["ticket_3plus"] == 1
     assert row["objective_evaluated"] == 5 and row["objective_missing"] == 1
 
@@ -162,7 +209,7 @@ def test_single_comparison_uses_reciprocal_of_paired_evidence():
     candidate[:6] = 4
     full[6:8] = 4
     timing = range_timing(np.tile(np.arange(11, 17), (10, 1)), None, (10, 40))
-    row = analysis._summarize(candidate, full, 4, timing, 0, (10, 40), tuple(range(10, 41)), 12)
+    row = analysis._summarize(candidate, full, 4, timing, 0, (10, 40), 31, 12)
     evidence = ((1.25 ** 6 * 0.75 ** 2) + (1.5 ** 6 * 0.5 ** 2)) / 2
     assert analysis.RANGES == (None, (10, 40))
     assert row["adjusted_p"] == pytest.approx(1 / evidence)
@@ -187,4 +234,4 @@ def test_real_int32_history_reproduces_random_guard_at_known_disagreement():
     normal = tuple(sorted(rank_by_score(base_scores, scheme.n)))
     assert tuple(pool(full)) == normal
     scores, _ = choose_dynamic_winner(matrix[:origin], bounds[:origin], scheme, excluded_numbers=normal)
-    assert pool(analysis._eligible(49, None, normal)).tolist() == sorted(rank_by_score(scores, scheme.n))
+    assert pool(tuple(n for n in full if n not in normal)).tolist() == sorted(rank_by_score(scores, scheme.n))

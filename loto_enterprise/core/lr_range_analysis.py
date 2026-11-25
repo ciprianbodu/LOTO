@@ -39,9 +39,9 @@ def _left(origin, lookback):
     return 0
 
 
-def _eligible(universe, limits, normal=()):
+def _eligible(universe, limits):
     low, high = limits or (1, universe)
-    return tuple(n for n in range(max(1, low), min(universe, high) + 1) if n not in normal)
+    return tuple(range(max(1, low), min(universe, high) + 1))
 
 
 def _budget_layout(plan, objective, scheme, joker_size):
@@ -192,7 +192,8 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
     indicators[np.arange(len(matrix))[:, None], matrix - 1] = 1
     variant_hits = subset_hit_table(scheme.n, masks)[1]
     positions = 1 << np.arange(scheme.n)
-    full = _eligible(lot.max_n, None)
+    bases = tuple(_eligible(lot.max_n, limits) for limits in RANGES)
+    required = 2 * scheme.n if inverse else scheme.n
     method = None
     if dynamic:
         prepare = _dynamic_predictor(matrix, bounds, days, scheme, lot.max_n, indicators, lookback)
@@ -207,11 +208,13 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
     for origin, end in zip(origins, (*origins[1:], len(matrix)), strict=True):
         predict = prepare(int(origin))
         bonus = prepare_bonus(int(origin)) if bonus_data else None
-        normal = set(predict(full)) if inverse else ()
-        for i, limits in enumerate(RANGES):
-            eligible = _eligible(lot.max_n, limits, normal)
-            if len(eligible) < scheme.n:
+        for i, base in enumerate(bases):
+            if len(base) < required:
                 continue
+            eligible = base
+            if inverse:
+                direct = set(predict(base))
+                eligible = tuple(n for n in base if n not in direct)
             pool = predict(eligible)
             scored_start = max(origin, start)
             matches = indicators[scored_start:end, pool - 1]
@@ -224,7 +227,7 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
     return start, len(origins), results, method, bonus_method
 
 
-def _summarize(data, reference, threshold, timing, start, limits, eligible, size, bonus_prize=False):
+def _summarize(data, reference, threshold, timing, start, limits, eligible_count, size, bonus_prize=False):
     pool, tickets = data[:, 0], data[:, 1]
     played = pool >= 0
     compared = played.copy()
@@ -257,7 +260,7 @@ def _summarize(data, reference, threshold, timing, start, limits, eligible, size
         "successes": int(success.sum()), "objective_evaluated": int(compared.sum()),
         "objective_missing": int((played & ~compared).sum()), "recent_successes": int(success[-RECENT_DRAWS:].sum()),
         "recent_evaluated": int(compared[-RECENT_DRAWS:].sum()), "paired_wins": wins, "paired_losses": losses,
-        "adjusted_p": adjusted, "eligible_now": len(eligible), "feasible_now": len(eligible) >= size,
+        "adjusted_p": adjusted, "eligible_now": eligible_count, "feasible_now": eligible_count >= size,
         "stable": bool(stable), "phase": phase, "chronology": timing,
     }
 
@@ -299,7 +302,6 @@ def compare_budget_ranges(
     engine = _forecast_engine(lot, source, 0, fingerprint)
     matrix = engine._draw_matrix
     dates = history_dates(engine.data)
-    normal = ()
     if inverse:
         current, = recommend_playable_games(
             budget_lei, objective, game_id, histories, pool_codes=pool_codes or {}, generated=generated,
@@ -307,7 +309,6 @@ def compare_budget_ranges(
         )
         if not current["tickets"]:
             raise ValueError(current.get("forecast_error", "Pool-ul normal nu poate fi determinat."))
-        normal = tuple(current["forecast"]["pool"])
         if lot.bench_key_urna2:
             bonus_size = len(current["forecast"]["jokers"])
             remaining = lot.geo.second.max_n - bonus_size
@@ -333,9 +334,11 @@ def compare_budget_ranges(
     rows = []
     for index, limits in enumerate(RANGES):
         timing = range_timing(matrix, dates, limits or (1, lot.max_n))
+        base_count = len(_eligible(lot.max_n, limits))
+        eligible_count = max(0, base_count - scheme.n) if inverse else base_count
         rows.append(_summarize(
             results[index], results[0], threshold, timing, start, limits,
-            _eligible(lot.max_n, limits, normal), scheme.n, bonus_prize,
+            eligible_count, scheme.n, bonus_prize,
         ))
     recommendation, reason = _decision(rows)
     protocol = (
@@ -343,6 +346,11 @@ def compare_budget_ranges(
         if dynamic else f"Estimare în mod fix. Metoda {method or 'indisponibilă'} a fost aleasă prin Re-Bench "
         "pe baza completă înaintea perioadei de test și folosită și pentru 10–40, cu scoruri actualizate la fiecare dată."
     )
+    if inverse:
+        protocol += (
+            " Înaintea fiecărei date, simularea calculează pool-ul direct separat pentru fiecare bază "
+            "și îl exclude din acea bază înainte de a alege pool-ul invers."
+        )
     metric = f"{threshold}+ numere principale pe cel puțin o variantă"
     if bonus_prize:
         metric = "Orice premiu Joker pe o variantă"
