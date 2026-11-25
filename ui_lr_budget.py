@@ -415,25 +415,26 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             ).classes("max-w-full").tooltip(
                 "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
             )
-            range_filter.bind_visibility_from(inverse, "value")
-            range_filter.bind_enabled_from(inverse, "value")
-            generate = ui.button(
-                "Generează recomandarea", icon="confirmation_number", color="positive",
-            ).props("no-caps aria-busy=false").classes("w-full sm:w-auto sm:ml-auto")
 
-        with ui.column().classes("gap-0"):
+        with ui.column().classes("w-full gap-1 border-l-4 border-primary pl-3"):
             low, high = _INVERSE_RANGE
             ui.label(
                 f"Șansa ca toate numerele principale extrase să fie între {low} și {high} inclusiv"
-            ).classes("text-body2 text-weight-medium")
+            ).classes("text-subtitle2 text-weight-bold")
             for lot in lotteries:
                 in_range = max(0, min(high, lot.max_n) - max(1, low) + 1)
-                chance = comb(in_range, lot.draw_n) / comb(lot.max_n, lot.draw_n)
-                percent = f"{100 * chance:.2f}%".replace(".", ",")
+                favorable = comb(in_range, lot.draw_n)
+                total = comb(lot.max_n, lot.draw_n)
+                percent = f"{100 * favorable / total:.2f}%".replace(".", ",")
                 numbers = f"{lot.draw_n} numere din prima urnă" if lot.geo.second else f"{lot.draw_n} numere"
-                ui.label(f"{lot.name} ({numbers}) · {percent}").classes("text-body2").bind_visibility_from(
+                ui.label(f"{lot.name} ({numbers}) · {percent}").classes("text-body2").tooltip(
+                    f"{favorable:,} combinații în interval din {total:,} combinații posibile.".replace(",", " ")
+                ).bind_visibility_from(
                     game, "value", backward=lambda selected, game_id=lot.game_id: selected in ("all", game_id),
                 )
+        generate = ui.button(
+            "Generează recomandarea", icon="confirmation_number", color="positive",
+        ).props("no-caps aria-busy=false").classes("w-full sm:w-auto sm:ml-auto")
 
     with ui.expansion("Bilete și analiză", value=False).classes("w-full min-w-0") as panel:
         output = ui.column().classes("w-full min-w-0 gap-2")
@@ -451,8 +452,7 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             return int(slider.value), objective.value, None if game.value == "all" else game.value
 
         def selected_method():
-            enabled = bool(inverse.value)
-            return enabled, bool(enabled and range_filter.value)
+            return bool(inverse.value), bool(range_filter.value)
 
         def clear_confirmation():
             nonlocal confirm_button

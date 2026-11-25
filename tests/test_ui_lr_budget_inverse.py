@@ -77,6 +77,10 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
                 node for node in host.descendants()
                 if isinstance(node, ui.switch) and node.text == "Metoda inversă"
             )
+            reduced = next(
+                node for node in host.descendants()
+                if isinstance(node, ui.switch) and node.text == "Doar numere principale între 10 și 40"
+            )
             odds = {
                 node.text: node for node in host.descendants()
                 if isinstance(node, ui.label) and node.text in {heading, *rates.values()}
@@ -90,9 +94,15 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
 
             assert set(odds) == {heading, *rates.values()}
             assert inverse.value is False
+            assert reduced.value is False
+            assert reduced.enabled and reduced.visible
+            assert all(parent.visible for parent in reduced.ancestors())
             assert visible_odds() == {heading, *rates.values()}
-            for enabled in (False, True):
+            reduced.value = True
+            for enabled in (True, False):
                 inverse.value = enabled
+                assert reduced.value is True
+                assert reduced.enabled and reduced.visible
                 for game_id, rate in rates.items():
                     game.value = game_id
                     assert visible_odds() == {heading, rate}
@@ -143,8 +153,6 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         refresh = budget.lr_budget_panel(slider, lambda game: {}, on_budget_plan=apply_budget)
         switch = view.switch_by_label["Metoda inversă"]
         filtered = view.switch_by_label["Doar numere principale între 10 și 40"]
-        filtered.bind_visibility_from.assert_called_once_with(switch, "value")
-        filtered.bind_enabled_from.assert_called_once_with(switch, "value")
         assert filtered.value is False
         panel = view.expansion.return_value
         button = view.button.return_value
@@ -175,6 +183,10 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         assert rendered[-1] == ([(200, True, (10, 40))], 200, budget.FOUR_PLUS)
         switch.value = False
         await switch.on_value_change.call_args.args[0]()
+        assert filtered.value is True
+        assert calls[-1] == (200, False, (10, 40))
+        filtered.value = False
+        await filtered.on_value_change.call_args.args[0]()
         assert calls[-1] == (200, False, None)
         assert len(settings) == 2
 
