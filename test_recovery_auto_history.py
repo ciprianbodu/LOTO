@@ -36,7 +36,7 @@ def test_recovery_loads_only_cached_data_even_for_new_job(recovered, monkeypatch
     assert app.STATE["results_recovered"].startswith("job #28")
     assert len(calls) == 1 and calls[0]["cache_only"] is True and calls[0]["use_cache"] is True
     assert calls[0]["df_source"] is frame
-    assert marks == ([] if taken else [28])
+    assert marks == []  # Redisplay cannot finalize actions owned by another UI.
     if rows:
         assert app.STATE["retro"]["history.csv_6/49"] == rows
         assert app.STATE["retro_meta"]["history.csv_6/49"]["partial"] == (cached == "partial")
@@ -117,13 +117,16 @@ def test_running_job_reattached_at_start_finishes_with_normal_actions(recovered,
     monkeypatch.setattr(app, "get_job_status", lambda _: {"id": 28, "status": "COMPLETED", "result_json": "{}"})
     monkeypatch.setattr(app, "decode_queue_result", lambda _: payload)
     monkeypatch.setattr(app, "_result_sources_from_job", lambda _: {"history.csv": frame})
-    monkeypatch.setattr(app, "_mark_job_finalized", lambda _: events.append("claimed"))
-    monkeypatch.setattr(app, "_maybe_send_results_email", lambda *args, **kwargs: events.append("mail"))
-    monkeypatch.setattr(app, "_start_walk_forward", lambda **_: events.append("wf"))
+    monkeypatch.setattr(app, "_mark_job_finalized", lambda _: events.append("finalized") or True)
+    monkeypatch.setitem(app.SETTINGS, "mail_on_complete", True)
+    monkeypatch.setattr(app, "claim_job_finalization_action", lambda jid, action: events.append("claim " + action) or True)
+    monkeypatch.setattr(app, "finish_job_finalization_action", lambda jid, action, state, detail: events.append("finish " + action))
+    monkeypatch.setattr(app, "get_job_finalization_actions", lambda jid: {"smtp": "done"})
+    monkeypatch.setattr(app, "_maybe_send_results_email", lambda *args, **kwargs: events.append("mail") or "done")
+    monkeypatch.setattr(app, "_start_walk_forward", lambda **_: (events.append("wf"), app._complete_job_stage(28, "shutdown")))
     monkeypatch.setattr(app, "_shutdown_banner", lambda: None)
-    with capture_ui():
-        app.status_panel.func()
-    assert events == ["worker", "claimed", "mail", "wf"]
+    app._read_ui_job(28)
+    assert events == ["worker", "claim smtp", "mail", "finish smtp", "wf", "finalized"]
     assert app.STATE["results_recovered"] is None
 
 

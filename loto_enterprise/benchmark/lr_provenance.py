@@ -1,0 +1,123 @@
+"""Reproducible identity of the rules used to select a budget ticket's scorer."""
+
+import ast
+import hashlib
+import json
+from dataclasses import asdict
+from functools import lru_cache
+from pathlib import Path
+from types import CodeType
+
+from loto_enterprise.benchmark import methods as registry
+
+
+def _digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+@lru_cache(maxsize=64)
+def _module_digest(source):
+    # AST excludes paths, comments, line endings and source locations.
+    return hashlib.sha256(ast.dump(ast.parse(source)).encode()).hexdigest()
+
+
+def _code_value(value):
+    if isinstance(value, CodeType):
+        return (value.co_code.hex(), value.co_names, value.co_varnames, value.co_freevars,
+                [_code_value(item) for item in value.co_consts])
+    if isinstance(value, (tuple, list)):
+        return [_code_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted((_code_value(item) for item in value), key=str)
+    if isinstance(value, dict):
+        return {str(k): _code_value(v) for k, v in value.items()}
+    if isinstance(value, bytes):
+        return value.hex()
+    if value is None or isinstance(value, (bool, str, int, float)):
+        return value
+    return type(value).__qualname__
+
+
+@lru_cache(maxsize=256)
+def _code_digest(code):
+    return _digest(_code_value(code))
+
+
+def _function_digest(fn):
+    import inspect
+
+    fn = inspect.unwrap(fn)
+    if not inspect.isfunction(fn):
+        return _digest((type(fn).__module__, type(fn).__qualname__))
+    constants = {key: _code_value(fn.__globals__[key]) for key in fn.__code__.co_names
+                 if key.isupper() and key in fn.__globals__}
+    # Mutable cells may hold telemetry, counters or memoized prior calls.
+    # Frozen scalar/tuple parameters are part of the formula.
+    closure = [value if isinstance(value, (type(None), bool, int, float, str, bytes, tuple, frozenset))
+               else type(value).__qualname__ for cell in fn.__closure__ or () if (value := cell.cell_contents) is not None]
+    return _digest((fn.__module__, fn.__qualname__, _code_digest(fn.__code__),
+                    _code_value(fn.__defaults__), _code_value(fn.__kwdefaults__),
+                    _code_value(closure), constants))
+
+
+def method_formulas(names):
+    """Include the executed callable and the numerical helpers in its module."""
+    import inspect
+    from loto_enterprise.benchmark import methods_common
+
+    files = {Path(methods_common.__file__)}
+    formulas = {}
+    for name in sorted(set(names)):
+        record = registry.METHODS.get(registry.resolve_method_name(name))
+        if record is None:
+            formulas[name] = None
+            continue
+        fn = inspect.unwrap(record[0])
+        formulas[name] = [_function_digest(fn)]
+        helpers = (fn.__globals__.get(key) for key in fn.__code__.co_names) if inspect.isfunction(fn) else ()
+        for function in (fn, *helpers):
+            if inspect.isfunction(function) and function.__module__.startswith("loto_enterprise."):
+                files.add(Path(inspect.getfile(function)))
+                if function is not fn:
+                    formulas[name].append(_function_digest(function))
+    return _digest((formulas, {file.name: _module_digest(file.read_bytes()) for file in files}))
+
+
+def lr_semantics(lot, scheme, hit_target, *, layout=None):
+    from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_ranking
+    from covering import lr_catalog_cache, lr_portfolio, lr_schemes, lr_selection, probability
+    from loto_enterprise.benchmark import decision, lr_budget_scoring, lr_hypotheses, restricted_decision, runner
+    from loto_enterprise.core import dynamic_pools, dynamic_winner, lr_budget_forecast, lr_range_analysis, ranking
+    from loto_enterprise.core import lr_played_portfolio, lr_ticket_experts, prize_categories
+
+    catalog = {key: tuple(lr_hypotheses._methods(key)) for key in lot.bench_keys}
+    selection_modules = (lr_hypotheses, decision, runner, restricted_decision, lr_pool_ranking,
+                         dynamic_winner, dynamic_pools, ranking, lr_range_analysis, lr_schemes, lr_selection,
+                         lr_played_portfolio, lr_ticket_experts, lr_budget_scoring, lr_budget_forecast,
+                         lr_budget, lr_pool_budget, lr_portfolio, lr_any_prize_649, lr_any_prize_joker,
+                         prize_categories, probability, lr_catalog_cache)
+    rules = {m.__name__: _module_digest(Path(m.__file__).read_bytes()) for m in selection_modules}
+    executed = [_function_digest(f) for f in (
+        lr_hypotheses.rank_lr_pool, lr_hypotheses.rank_by_score, lr_hypotheses._evaluate_fold,
+        decision.decide_optimal_config_for_pool, lr_played_portfolio.grade_plan, lr_played_portfolio.grade_draw,
+        lr_budget_scoring.evaluate_budget_recipes, lr_budget_scoring.restrict_to_pool,
+    )]
+    return {
+        "version": 1,
+        "catalog": _digest([(k, registry.catalog_version_for_game(k), v) for k, v in catalog.items()]),
+        "formulas": method_formulas({name for names in catalog.values() for name in names}
+                                    | set(dynamic_winner.CANDIDATES) | {"frequency", "random"}),
+        "selection": _digest((rules, executed, tuple(lr_hypotheses.VALIDATION_PERCENTILES),
+                              decision.game_hit_target(lot.bench_key, hit_target),
+                              lr_pool_ranking.LR_MAX_CONSECUTIVE_RUN)),
+        "geometry": _digest((lot.game_id, lot.bench_keys, asdict(lot.geo), lot.min_hit_target)),
+        "scheme": _digest(((scheme.code, scheme.n, scheme.variants), [
+            (s.code, s.n, s.variants) for s in lr_schemes.lr_schemes(scheme.game)
+        ])),
+        "layout": lr_played_portfolio.layout_identity(layout) if layout is not None else None,
+    }
+
+
+def dynamic_formulas():
+    from loto_enterprise.core import dynamic_winner
+    return method_formulas((*dynamic_winner.CANDIDATES, "frequency", "random"))

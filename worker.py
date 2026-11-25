@@ -88,6 +88,7 @@ logging.basicConfig(
 )
 
 from job_queue import (  # noqa: E402 — trebuie după logging.basicConfig (vezi mai jos)
+    DB_PATH,
     JOB_RUNNING,
     complete_job,
     fail_job,
@@ -961,31 +962,45 @@ def _process_one_job(job: dict) -> None:
 
 
 def main() -> None:
+    from process_lock import file_lock
+
+    # Exactly one process may recover or work this physical SQLite queue.
+    lock = file_lock(os.path.realpath(DB_PATH) + ".worker", timeout=0)
+    try:
+        lock.__enter__()
+    except TimeoutError:
+        logging.info("[worker] Coada are deja un worker activ.")
+        return
+    try:
+        _serve_queue()
+    finally:
+        lock.__exit__(None, None, None)
+
+
+def _serve_queue() -> None:
     atexit.register(_requeue_on_terminate)
     for _sig in (signal.SIGTERM, signal.SIGINT):
         try:
             signal.signal(_sig, lambda s, f: (_requeue_on_terminate(), sys.exit(1)))
         except ValueError, OSError:
             pass  # signal disponibil doar pe thread-ul principal
-    try:
-        recovered = requeue_running_jobs()
-        if recovered > 0:
-            print(
-                f"[worker] Recuperate {recovered} job(uri) RUNNING -> PENDING după restart.",
-                flush=True,
-            )
-    except Exception as exc:
-        logging.debug("Nu pot requeue joburile RUNNING la startup worker: %s", exc)
+    for attempt in range(_COMPLETE_ATTEMPTS):
+        try:
+            recovered = requeue_running_jobs()
+            if recovered:
+                logging.info("[worker] Recuperate %s joburi abandonate.", recovered)
+            break
+        except Exception:
+            logging.exception("[worker] Recuperarea cozii a eșuat (%s/%s)", attempt + 1, _COMPLETE_ATTEMPTS)
+            if attempt + 1 == _COMPLETE_ATTEMPTS:
+                return
+            time.sleep(_COMPLETE_BACKOFF_SEC * (attempt + 1))
     logging.info("[worker] Început loop principal - aștept job-uri...")
 
-    pending_failure = None
     while True:
         job = None  # reset per iterație: altfel un fetch care crapă la iterația
         # următoare vede jobul VECHI (deja COMPLETED) și fail_job i-ar distruge rezultatul
         try:
-            if pending_failure is not None:
-                fail_job(*pending_failure, worker_token=WORKER_TOKEN)
-                pending_failure = None
             job = fetch_pending_job(worker_token=WORKER_TOKEN)
             if not job:
                 job = fetch_running_job(worker_token=WORKER_TOKEN)
@@ -1002,9 +1017,17 @@ def main() -> None:
             tb = traceback.format_exc()
             logging.error(f"[worker] Eroare în job: {exc}\n{tb}")
             if isinstance(job, dict) and job.get("id"):
-                # Păstrăm cauza inițială și proprietarul dacă SQLite refuză
-                # temporar scrierea. Următoarea iterație reîncearcă marcarea.
-                pending_failure = (int(job["id"]), f"{exc}\n{tb}")
+                for attempt in range(_COMPLETE_ATTEMPTS):
+                    try:
+                        fail_job(int(job["id"]), f"{exc}\n{tb}", worker_token=WORKER_TOKEN)
+                        break
+                    except Exception:
+                        logging.exception("[worker] Marcarea erorii pentru jobul %s a eșuat (%s/%s)",
+                                          job["id"], attempt + 1, _COMPLETE_ATTEMPTS)
+                        if attempt + 1 == _COMPLETE_ATTEMPTS:
+                            # Leave ownership durable. The next singleton can recover this job.
+                            return
+                        time.sleep(_COMPLETE_BACKOFF_SEC * (attempt + 1))
             time.sleep(2)
 
 

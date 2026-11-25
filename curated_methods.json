@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "updated": "2026-11-21",
-    "criterion": "Catalogul compact plus markov_lag2 pentru jocurile Loteriei Române. Selecția se evaluează prin Re-Bench și walk-forward."
+    "updated": "2026-11-25",
+    "criterion": "Catalogul compact și Markov lag 2 pentru România. Modelele bayesian și de calibrare temporală intră în Re-Bench pentru evaluare."
   },
   "active": [
     "random",
@@ -9,7 +9,9 @@
     "compact_multiscale_shrink",
     "compact_transition_prior",
     "compact_renewal_hazard",
-    "markov_lag2"
+    "markov_lag2",
+    "bayes_runlength_shrink",
+    "temporal_stacked_calibration"
   ],
   "per_game": {}
 }

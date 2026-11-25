@@ -7,6 +7,7 @@ from nicegui import ui
 from covering.lr_budget import ANY_PRIZE
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
+from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_snapshot
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,9 @@ def _range_text(restricted):
 def _choices(settings):
     mode = "Metoda inversă" if settings.get("inverse") else "Metoda normală"
     goal = "orice premiu" if settings.get("objective") == ANY_PRIZE else "4+ pe o variantă"
+    policy = " · Fixed Share pe bilete" if settings.get("selection_policy") == ONLINE_TICKET_EXPERTS else ""
     return (f"{mode} · {_range_text(settings.get('restricted'))} · {settings['budget_lei']} lei · "
-            f"{goal} · fereastră de test {settings['depth']:g}%")
+            f"{goal} · fereastră de test {settings['depth']:g}%{policy}")
 
 
 def _numbers(values):
@@ -51,6 +53,8 @@ def _draw_table(draws, inverse, joker):
             fields.append(("excluded_jokers", "Bile Joker excluse"))
         fields.extend([("joker_hit", "Bila în pool"), ("ticket_joker_hit", "Bila pe bilet")])
     fields.append(("objective_hit", "Obiectiv atins"))
+    if any(draw.get("selected_method") for draw in draws):
+        fields.append(("selected_method", "Metodă folosită"))
     if any(draw.get("error") for draw in draws):
         fields.append(("error", "Motivul omiterii"))
     columns = [{"name": key, "field": key, "label": label, "align": "left"} for key, label in fields]
@@ -63,6 +67,8 @@ def _draw_table(draws, inverse, joker):
             draw = draws[index]
             row = {key: draw.get(key) if draw.get(key) is not None else "—" for key, _ in fields}
             row.update(id=index, date=_date(draw.get("date")))
+            if "selected_method" in row:
+                row["selected_method"] = (draw.get("selected_method") or {}).get("method", "—")
             for key in ("numbers", "pool", "excluded_pool", "jokers", "excluded_jokers"):
                 if key in row:
                     row[key] = _numbers(draw.get(key))
@@ -97,18 +103,27 @@ def _game_result(entry):
             price = f"{result['price_bani'] / 100:.2f}".replace(".", ",")
             variants = "1 variantă" if result["variants"] == 1 else f"{result['variants']} variante"
             code += f" · {variants} · cost total {price} lei"
-        ui.label(f"{code} · selector {selector} · istoric {lookback:g}% · "
-                 f"ținta Re-Bench {settings['hit_target']}+ în pool").classes("text-caption")
+        if settings.get("selection_policy") == ONLINE_TICKET_EXPERTS:
+            ui.label(f"{code} · Fixed Share · istoric pentru scoruri {lookback:g}%").classes("text-caption")
+        else:
+            ui.label(f"{code} · selector {selector} · istoric {lookback:g}% · "
+                     f"ținta Re-Bench {settings['hit_target']}+ în pool").classes("text-caption")
         if error := entry.get("error") or result.get("error"):
             ui.label(error).classes("text-warning").props('role="status"')
             return
         if result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
             ui.label("Raport anterior regulii de maximum două numere consecutive. "
                      "Pornește o nouă validare pentru selecția actuală.").classes("text-warning")
+        if (result.get("inverse") and result.get("replay_policy") != "daily"
+                and not result.get("inverse_references_checked")):
+            ui.label("Raport anterior verificării referinței directe. Reia validarea inversă pentru selecția actuală.").classes(
+                "text-warning"
+            )
         lot = require_lottery(entry["game"], "RO")
         summary = result["summary"]
         if result.get("requested_restricted") is None:
-            ui.label(f"Baza folosită în test · {_range_text(result['restricted'])}").classes("text-body2")
+            base_label = "Baza inițială" if result.get("replay_policy") == "daily" else "Baza folosită în test"
+            ui.label(f"{base_label} · {_range_text(result['restricted'])}").classes("text-body2")
         ui.label(
             f"Antrenare inițială până la {_date(result['training_end'])} · {summary['training_rows']} extrageri. "
             f"Test de la {_date(summary['first_date'])} până la {_date(summary['last_date'])} · "
@@ -161,13 +176,17 @@ def _game_result(entry):
                 _draw_table(draws, result["inverse"], bool(lot.bench_key_urna2))
 
 
-def lr_walk_forward_panel(scope_text, start, *, depth_control=None):
+def lr_walk_forward_panel(scope_text, start, *, depth_control=None, on_replay_change=None):
     with ui.card().classes("w-full min-w-0 gap-2").props('id="lr-walk-forward" tabindex="-1"') as panel:
         ui.label("Validare walk-forward pentru selecția LR").classes("text-h6 text-weight-bold")
         scope = ui.label(scope_text()).classes("text-body2")
         with ui.row().classes("w-full items-center gap-2"):
             if depth_control is not None:
                 depth_control()
+            if on_replay_change is not None:
+                ui.select({"fixed": "Metoda fixată înainte de test", "daily": "Refă selecția la fiecare zi"},
+                          value="fixed", label="Protocol de validare",
+                          on_change=lambda e: on_replay_change(e.value)).classes("min-w-60")
             launch = ui.button("Validează walk-forward", on_click=start).props("no-caps color=primary")
             cancel = ui.button("Anulează validarea", on_click=cancel_lr_walk_forward).props("outline no-caps")
         status = ui.label().classes("text-body2").props('role="status" aria-live="polite"')

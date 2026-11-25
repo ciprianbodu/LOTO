@@ -172,13 +172,9 @@ def uniform_urn2() -> list[np.ndarray]:
 
 def test_single_pick_previous_ball_class_is_archived(uniform_urn2) -> None:
     """Păstrează măsurarea clasei istorice pe extrageri uniforme."""
-    from loto_enterprise.benchmark.decision import (
-        EXCLUDED_FROM_PRODUCTION,
-        EXCLUDED_FROM_SINGLE_PICK,
-    )
+    from loto_enterprise.benchmark.decision import EXCLUDED_FROM_SINGLE_PICK
     from scripts.analysis.legacy_methods_2026_11_20 import METHODS as historical_methods
 
-    assert EXCLUDED_FROM_PRODUCTION == frozenset({"random"})
     assert EXCLUDED_FROM_SINGLE_PICK == frozenset()
 
     historical_names = {
@@ -192,5 +188,5 @@ def test_single_pick_previous_ball_class_is_archived(uniform_urn2) -> None:
         _urn2_repeat_share(historical_methods[name][0], uniform_urn2) >= 0.5
         for name in historical_names
     )
-    active = set(METHODS) - {"random"}
+    active = set(METHODS) - EXCLUDED_FROM_PRODUCTION
     assert all(_urn2_repeat_share(METHODS[name][0], uniform_urn2) < 0.5 for name in active)

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import psutil
 
+from process_lock import file_lock
 from runtime_paths import ENGINE_LOG_FILE, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -419,96 +420,7 @@ def atomic_write_json(
     atomic_write_text(path, json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii))
 
 
-class file_lock:
-    """Lock advisory cross-proces (Win+POSIX) prin lock-file O_EXCL, cu timeout.
-    Previne lost-updates când worker-ul și UI-ul fac read-modify-write pe același
-    fișier (ex. adaptive_state.json). La timeout continuă fără lock (anti-deadlock
-    pe lock-uri stale), pentru că scrierea în sine e oricum atomică.
 
-    Staleness pe VÂRSTA fișierului de lock (mtime), NU pe cât a așteptat acest
-    waiter: un waiter sosit TÂRZIU pe un lock proaspăt (deținător activ, secțiune
-    critică legitim mai lungă decât `timeout`) altfel îl considera stale după
-    PROPRIUL cronometru, deși deținătorul abia începuse — spărgea un lock VIU.
-    Token unic scris în fișier la creare, verificat la `__exit__` înainte de
-    unlink: dacă alt proces a spart și recreat lock-ul între timp (ambii treceau
-    de pragul de staleness aproape simultan), conținutul nu mai e al nostru și NU
-    îl ștergem — altfel am fi șters lock-ul VIU al noului proprietar."""
-
-    def __init__(self, target, timeout: float = 10.0):
-        self.lockpath = str(target) + ".lock"
-        self.timeout = timeout
-        self._fd = None
-        self._token: str | None = None
-
-    def _lock_age(self) -> float:
-        try:
-            return time.time() - os.stat(self.lockpath).st_mtime
-        except OSError:
-            return 0.0  # dispărut chiar acum — nu-l tratăm ca stale
-
-    def _create(self) -> bool:
-        token = f"{os.getpid()}:{uuid.uuid4().hex}"
-        try:
-            fd = os.open(self.lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except OSError:
-            return False
-        try:
-            os.write(fd, token.encode("ascii"))
-        except OSError:
-            pass
-        self._fd = fd
-        self._token = token
-        return True
-
-    def __enter__(self):
-        start = time.time()
-        while True:
-            if self._create():
-                return self
-            if self._lock_age() > self.timeout:
-                logger.debug(
-                    "[file_lock] lock stale pe %s (vârstă > %.1fs) — îl sparg",
-                    self.lockpath,
-                    self.timeout,
-                )
-                try:
-                    os.unlink(self.lockpath)
-                except OSError:
-                    pass
-                self._create()  # dacă eșuează din nou, continuăm fără lock mai jos
-                return self
-            if time.time() - start > self.timeout * 3:
-                # Plasă finală anti-deadlock: chiar dacă lock-ul pare mereu
-                # "proaspăt" (spart și recreat continuu de alți waiteri), nu
-                # așteptăm la nesfârșit — scrierea în sine e oricum atomică.
-                logger.debug(
-                    "[file_lock] renunț la %s după %.1fs fără lock",
-                    self.lockpath,
-                    self.timeout * 3,
-                )
-                return self
-            time.sleep(0.05)
-
-    def __exit__(self, *exc):
-        # Ștergem lock-file-ul DOAR dacă (a) l-am creat NOI (self._fd setat) ȘI
-        # (b) conținutul lui e ÎNCĂ tokenul nostru. Fără (b): un al doilea proces
-        # care a spart același lock stale aproape simultan (ambii treceau pragul
-        # de staleness) l-a putut recrea DUPĂ noi — am fi șters lock-ul VIU al
-        # noului proprietar, nu pe-al nostru (mutual exclusion spartă pentru toți
-        # următorii, exact bug-ul pe care verificarea (a) singură îl rata).
-        if self._fd is not None:
-            try:
-                os.close(self._fd)
-            except OSError:
-                pass
-            try:
-                with open(self.lockpath, "rb") as f:
-                    current = f.read().decode("ascii", errors="replace")
-                if current == self._token:
-                    os.unlink(self.lockpath)
-            except OSError:
-                pass
-        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -574,14 +486,19 @@ def is_worker_running() -> bool:
 
 
 # Cooldown: _tick cheamă ensure o dată pe secundă; fără pauză, un spawn lent
-# produce un al doilea worker al cărui requeue de startup fură jobul RUNNING.
+# poate crea procese temporare redundante înainte de revendicarea cozii.
 _WORKER_SPAWN_TS = 0.0
 _WORKER_SPAWN_COOLDOWN_S = 15.0
 
 
 def ensure_worker_running() -> None:
     global _WORKER_SPAWN_TS
-    if is_worker_running():
+    from job_queue import DB_PATH
+    target = os.path.realpath(DB_PATH) + ".worker"
+    try:
+        with file_lock(target, timeout=0):
+            pass
+    except TimeoutError:
         return
     now = time.time()
     if now - _WORKER_SPAWN_TS < _WORKER_SPAWN_COOLDOWN_S:

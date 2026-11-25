@@ -129,7 +129,7 @@ def test_540_official_tail_checks_sixth_ball_without_reordering_first_five(
         ("2026-11-22", (37, 12, 9, 20, 21, 6), None),
         ("2026-11-23", (1, 2, 3, 4, 5, 6), None),
     ]
-    stored = ["19-11-2026,17,9,19,20,33,37", stored_latest]
+    stored = ["19-11-2026,9,37,19,20,33,17", stored_latest]
     recent = "2026-11-19 37 9 19 20 33 17 2026-11-22 37 12 9 20 21 9"
     count, target, before = run_update(tmp_path, monkeypatch, "loto_5_40", stored, recent, official)
     status = capsys.readouterr().out

@@ -459,6 +459,7 @@ def read_csv(lottery, path: Path, today: dt.date | None = None) -> list[Draw]:
     if not rows or rows[0] != _header(lottery):
         raise SourceError(f"antet CSV neasteptat: {rows[0] if rows else 'gol'}")
     out: list[Draw] = []
+    seen = set()
     today = today or dt.date.today()
     for line, r in enumerate(rows[1:], start=2):
         if not r:
@@ -471,8 +472,10 @@ def read_csv(lottery, path: Path, today: dt.date | None = None) -> list[Draw]:
         if out:
             if day < out[-1].date:
                 raise SourceError(f"randul {line}: datele nu sunt in ordine cronologica")
-            if _key(lottery, draw.nums)[0] == _key(lottery, out[-1].nums)[0]:
-                raise SourceError(f"randul {line} repeta numerele randului anterior")
+        identity = day, _key(lottery, draw.nums)
+        if identity in seen:
+            raise SourceError(f"randul {line} repeta o extragere din aceeasi zi")
+        seen.add(identity)
         out.append(draw)
     if not out:
         raise SourceError("CSV fara extrageri")
@@ -533,19 +536,6 @@ def plan_update(lottery, have: list[Draw], src: list[Draw], today: dt.date) -> t
     if checked == 0:
         # Fără suprapunere nu putem dovedi că sursa e aceeași cu istoricul.
         raise SourceError(f"nicio extragere comuna cu CSV-ul (ultima din CSV: {last:%d-%m-%Y})")
-    # AGENTS.md §4.1, ca update_csv (regula 4) și verifica_istoric: aceleași
-    # numere principale ca rândul anterior (ultimul stocat sau rândul nou
-    # dinainte) sunt o copie, nu o extragere. Fără verificare, copia se scria,
-    # iar PushHistory refuza apoi tot fișierul la fiecare pornire (audit
-    # 2026-10-22).
-    prev = have[-1]
-    for d in new:
-        if _key(lottery, d.nums)[0] == _key(lottery, prev.nums)[0]:
-            raise SourceError(
-                f"extragerea din {d.date:%d-%m-%Y} repeta numerele randului anterior "
-                f"({prev.date:%d-%m-%Y}): copie, nu extragere"
-            )
-        prev = d
     return new, checked
 
 

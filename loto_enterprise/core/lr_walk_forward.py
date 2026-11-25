@@ -22,7 +22,8 @@ from loto_enterprise.benchmark.runner import fold_sizes
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
-from loto_enterprise.core.lr_budget_forecast import _forecast_engine, _profile_scores, budget_plan_scheme
+from loto_enterprise.core.lr_budget_forecast import _forecast_engine, _profile_scores, _same_profile_recipe, budget_plan_scheme
+from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw, layout_identity
 from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
 from loto_enterprise.core.ranking import rank_by_score
 
@@ -55,6 +56,13 @@ def _holdout(bounds, depth):
     return origins[0]
 
 
+def _frequency_profile(target, reason):
+    return {
+        "members": [{"method": "frequency", "weight": 1.0}], "target": target,
+        "fallback": True, "source": "training_frequency", "evaluated": 0, "folds": [], "reason": reason,
+    }
+
+
 def _fit(game, training, lot, *, inverse, cancel_path, **options):
     report = benchmark_lr_hypotheses(game, training, inverse=inverse, cancel_path=cancel_path, **options)
     fitted = {}
@@ -63,12 +71,8 @@ def _fit(game, training, lot, *, inverse, cancel_path, **options):
         if fit := urn["decision"]:
             fitted[key] = {**fit, "source": "training_rebench"}
         else:
-            fitted[key] = {
-                "members": [{"method": "frequency", "weight": 1.0}],
-                "target": game_hit_target(key, options["hit_target"]) if key == lot.bench_key else 1,
-                "fallback": True, "source": "training_frequency", "evaluated": 0, "folds": [],
-                "reason": urn.get("error", "Date insuficiente pentru alegerea metodei."),
-            }
+            target = game_hit_target(key, options["hit_target"]) if key == lot.bench_key else 1
+            fitted[key] = _frequency_profile(target, urn.get("error", "Date insuficiente pentru alegerea metodei."))
     return fitted
 
 
@@ -158,6 +162,9 @@ def _summary(draws, days, start):
         "all_main_in_10_40": sum(all(low <= n <= high for n in draw["numbers"]) for draw in draws),
         **{f"pool_{k}plus": sum(draw["pool_hits"] >= k for draw in scored) for k in range(3, 7)},
         **{f"ticket_{k}plus": sum(draw["ticket_hits"] >= k for draw in scored) for k in range(3, 7)},
+        "paid_winning_variants": sum(d.get("winning_variants", 0) for d in scored),
+        "draws_with_duplicates": sum(bool(d.get("duplicates")) for d in scored),
+        "fallback_draws": sum(bool((d.get("selected_method") or {}).get("fallback")) for d in scored),
         "objective_hits": sum(draw["objective_hit"] is True for draw in scored),
         "objective_evaluated": sum(draw["objective_hit"] is not None for draw in scored),
         "joker_hits": sum(draw["joker_hit"] is True for draw in scored),
@@ -169,7 +176,7 @@ def _summary(draws, days, start):
 
 def validate_lr_walk_forward(
     game_id, history, *, budget_lei, objective, scheme, inverse, restricted, dynamic, lookback,
-    hit_target, joker_size, depth, cancel_path=None, progress_cb=None,
+    hit_target, joker_size, depth, cancel_path=None, progress_cb=None, replay_policy="fixed", selection_policy=None,
 ):
     """Fit on the first chronological segment, then rerank on each prior-date prefix."""
     check = _cancellation(cancel_path)
@@ -178,6 +185,11 @@ def validate_lr_walk_forward(
         raise ValueError("Adâncimea validării trebuie să fie în intervalul (0, 100].")
     if not isfinite(lookback := float(lookback)) or not 0 <= lookback <= 100:
         raise ValueError("Procentul de istoric pentru scoruri trebuie să fie între 0 și 100.")
+    if selection_policy not in (None, "online_ticket_experts"):
+        raise ValueError("Politică LR necunoscută.")
+    if replay_policy not in ("fixed", "daily"):
+        raise ValueError("Protocolul walk-forward trebuie să fie fixed sau daily.")
+    daily = replay_policy == "daily" or selection_policy == "online_ticket_experts"
     lot = require_lottery(game_id, "RO")
     plan, = recommend_games(budget_lei, objective, game_id)
     scheme = resolve_lr_scheme(lot.geometry, getattr(scheme, "code", scheme))
@@ -248,11 +260,25 @@ def validate_lr_walk_forward(
     options = {
         "scheme": scheme.code, "restricted": bool(restricted), "dynamic": dynamic,
         "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
+        "budget_lei": budget_lei, "objective": objective,
     }
-    direct = _fit(game_id, training, lot, inverse=False, cancel_path=cancel_path, **options)
-    check(force=True)
-    tested = _fit(game_id, training, lot, inverse=True, cancel_path=cancel_path, **options) if inverse else direct
-    methods = {"direct": direct, "tested": tested}
+    methods = {}
+    mismatched_references = []
+    if not daily:
+        direct = _fit(game_id, training, lot, inverse=False, cancel_path=cancel_path, **options)
+        check(force=True)
+        tested = _fit(game_id, training, lot, inverse=True, cancel_path=cancel_path, **options) if inverse else direct
+        if inverse:
+            mismatched_references = [
+                key for key, profile in tested.items() if profile["source"] == "training_rebench"
+                and not _same_profile_recipe(direct[key]["members"], profile.get("reference_members"))
+            ]
+            if mismatched_references:
+                tested = {
+                    key: _frequency_profile(profile["target"], "Referința directă diferă de cea evaluată la Re-Bench invers.")
+                    for key, profile in tested.items()
+                }
+        methods = {"direct": direct, "tested": tested}
 
     days = tuple(dict.fromkeys(bounds[start:]))
     draws = []
@@ -260,14 +286,48 @@ def validate_lr_walk_forward(
         check()
         bonus_origin = int(np.searchsorted(valid_bonus_rows, origin))
         try:
-            pool, excluded, blocked_count, jokers, excluded_jokers = _day_forecast(
-                lot, matrix, bounds, origin, lookback, scheme, outside, inverse, methods,
-                bonus_matrix, bonus_bounds, bonus_origin, joker_size,
-            )
-            played = {
-                "pool": pool, "excluded_pool": excluded, "eligible_count": lot.max_n - blocked_count,
-                "jokers": jokers, "excluded_jokers": excluded_jokers,
-            }
+            if daily:
+                from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
+                prefix = {game_id: (training[0], frame.iloc[:origin])}
+                daily_restricted = restricted
+                if requested_restricted is None:
+                    ranges = compare_budget_ranges(budget_lei, objective, game_id, prefix, dynamic=dynamic,
+                                                   inverse=inverse, lookback=lookback, hit_target=hit_target,
+                                                   joker_size=joker_size)
+                    daily_restricted = ranges["recommended_range"] == _RANGE
+                if selection_policy == "online_ticket_experts":
+                    from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
+                    daily_plan = online_ticket_forecast(
+                        lot, plan, scheme, frame.iloc[:origin], inverse=inverse,
+                        number_range=_RANGE if daily_restricted else None, lookback=lookback,
+                        joker_size=joker_size, objective=objective, cancelled=check)
+                else:
+                    daily_plan, = recommend_playable_games(
+                        budget_lei, objective, game_id, prefix, pool_codes={game_id: scheme.code},
+                        lookback=lookback, dynamic=dynamic, joker_size=joker_size, inverse=inverse,
+                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None)
+                forecast = daily_plan.get("forecast")
+                if not forecast or not daily_plan["tickets"]:
+                    raise ValueError(daily_plan.get("forecast_error", "Bugetul nu produce bilete LR."))
+                pool, jokers = list(forecast["pool"]), list(forecast["jokers"])
+                played = {"pool": pool, "jokers": jokers, "eligible_count": forecast["eligible_count"],
+                          "excluded_pool": list(forecast.get("excluded_pool", ())),
+                          "excluded_jokers": list(forecast.get("excluded_jokers", ())),
+                          "selected_method": forecast["selection"], "restricted": daily_restricted}
+            else:
+                pool, excluded, blocked_count, jokers, excluded_jokers = _day_forecast(
+                    lot, matrix, bounds, origin, lookback, scheme, outside, inverse, methods,
+                    bonus_matrix, bonus_bounds, bonus_origin, joker_size,
+                )
+                daily_plan = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
+                daily_plan["forecast_pool"] = pool
+                played = {
+                    "pool": pool, "excluded_pool": excluded, "eligible_count": lot.max_n - blocked_count,
+                    "jokers": jokers, "excluded_jokers": excluded_jokers,
+                }
+            expanded = expand_plan(daily_plan)
+            played["layout_id"] = layout_identity(daily_plan)
+            played["tickets"] = daily_plan["tickets"]
         except (ValueError, ArithmeticError) as exc:
             played = {
                 "pool": [], "excluded_pool": [], "eligible_count": available, "jokers": [], "excluded_jokers": [],
@@ -279,7 +339,19 @@ def validate_lr_walk_forward(
             if "error" in played:
                 outcome = dict.fromkeys(("pool_hits", "ticket_hits", "joker_hit", "ticket_joker_hit", "objective_hit"))
             else:
+                # Missing official Joker still allows measurement of the main-urn hits.
                 outcome = _outcome(numbers, pool, joker, jokers, best_hits, bonus_touches, game_id, objective)
+                if game_id != "joker" or joker is not None:
+                    grade = grade_draw(expanded, numbers, joker, draw_date=day_labels[i])
+                    outcome.update(grade, ticket_hits=grade["max_hits"],
+                                   objective_hit=grade["any_prize" if objective == ANY_PRIZE else "hit4"])
+                    if game_id == "joker":
+                        outcome["ticket_joker_hit"] = any(
+                            bonus == joker and set(variant).intersection(numbers) for variant, bonus, _ in expanded.variants)
+                else:
+                    maximum = max(len(set(v).intersection(numbers)) for v, _, _ in expanded.variants)
+                    outcome.update(ticket_hits=maximum, objective_hit=(maximum >= 4 if objective != ANY_PRIZE else
+                                   True if maximum >= 3 else None if maximum else False))
             draws.append({
                 "date": day_labels[i], "numbers": numbers, "joker_drawn": joker, "training_rows": origin,
                 **played, **outcome,
@@ -303,17 +375,27 @@ def validate_lr_walk_forward(
         )
     if inverse:
         protocol += " În fiecare zi, pool-ul invers exclude pool-ul direct din aceeași bază."
+    if mismatched_references:
+        protocol += (
+            " Re-Bench invers a evaluat altă referință directă. "
+            "Validarea folosește frecvența pe complementul pool-ului direct fixat."
+        )
     if dynamic:
         protocol += " Selecția dinamică se folosește la antrenament. Modelele alese rămân fixe în perioada de test."
     if lot.bench_key_urna2:
         protocol += " Intervalul se aplică numai urnei principale. La Joker, potrivirea bonusului pentru premiu se verifică pe aceeași variantă."
+    if daily:
+        protocol = ("Generatorul real a refăcut selecția metodei, a pool-ului și a biletelor pentru fiecare zi, "
+                    "folosind exclusiv extragerile din zilele anterioare. Extragerile speciale au același prefix.")
     return {
         "game": game_id, "scheme_code": scheme.code, "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": day_labels[-1], "training_end": day_labels[start - 1], "depth": depth,
         "inverse": bool(inverse), "restricted": bool(restricted), "requested_restricted": requested_restricted,
         "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "dynamic": bool(dynamic), "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
-        "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
+        "selection_policy": selection_policy, "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
         "auto_reason": auto_reason, "summary": _summary(draws, len(days), start), "draws": draws,
-        "methods": methods, "protocol": protocol,
+        "methods": methods, "protocol": protocol, "replay_policy": "daily" if daily else "fixed",
+        "inverse_references_checked": bool(inverse and not daily),
+        "profile_reference_mismatch": mismatched_references,
     }

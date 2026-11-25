@@ -145,11 +145,13 @@ def test_completed_branch_guards_payload(monkeypatch):
     monkeypatch.setattr(app, "_mark_job_finalized", finalized.append)
     for name in ("_start_walk_forward", "_save_report_file", "_mail_snapshot_inputs", "_maybe_send_results_email"):
         monkeypatch.setattr(app, name, lambda *_a, **_k: pytest.fail("corrupt result dispatched follow-up work"))
+    monkeypatch.setattr(app, "get_job_finalization_actions", lambda jid: {})
+    app._read_ui_job(17)
     with capture_ui() as view:
         app.status_panel.func()
     assert app.STATE["active_job_id"] is None
     assert finalized == [17]
-    assert "rezultatul e ilizibil" in view.text()
+    assert "rezultat ilizibil" in view.text()
 
 
 # --------------------------------------------------------------------------
@@ -255,13 +257,16 @@ def test_curation_banner_includes_joker_urna2_quota():
     assert "Urna 2" in body
 
 
-def test_abandon_unstarted_scopes_to_active_job():
+def test_abandon_unstarted_scopes_to_active_job(monkeypatch):
     """Abandonul de 0% nu anulează un job aflat în lucru."""
-    src = open("app_nicegui.py", encoding="utf-8").read()
-    i = src.index("def _abandon_unstarted_ui_job")
-    body = src[i : src.index("def status_panel", i)]
-    assert "job_ids=" in body
-    assert "job_ids=[int(jid)]" in body.replace(" ", "")
+    import app_nicegui as app
+    calls = []
+    monkeypatch.setattr(app, "STATE", {"active_job_id": 17})
+    monkeypatch.setattr(app, "get_job_status", lambda jid: {"id": jid, "status": "PENDING"})
+    monkeypatch.setattr(app, "is_unstarted_job", lambda row: True)
+    monkeypatch.setattr(app, "cancel_unstarted_job", lambda job_id, reason: calls.append(job_id) or True)
+    app._read_ui_job(17)
+    assert calls == [17] and app.STATE["active_job_id"] is None
 
 
 def test_mail_body_contains_only_one_pool_per_game():
@@ -465,7 +470,7 @@ def test_fresh_start_recovery_is_display_only(monkeypatch):
     assert app_ui.STATE["active_job_id"] is None
     assert app_ui.STATE["results"] == ([], 0)
     assert "job #77" in app_ui.STATE["results_recovered"]
-    assert marked == [77]
+    assert marked == []  # Redisplay leaves the owner free to finish its actions.
 
 
 def test_freshness_signature_stamp_uses_atomic_writer(tmp_path, monkeypatch):

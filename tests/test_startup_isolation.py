@@ -241,3 +241,19 @@ def test_startup_requires_the_executed_script_to_belong_to_loto(tmp_path):
         assert cleanup.is_stale_proc(
             proc, venv_dir=venv, project_root=project, keep_pids=set()
         ) is owned, cmd
+
+
+def test_versioned_interpreter_requires_exact_posix_script_path():
+    root = "/var/local/loto"
+    exe = "/opt/python/bin/python3.15"
+    cases = [
+        ("python3.15", "/var/local/loto/worker.py", True),
+        ("python3.15", "/var/local/unrelated/worker.py", False),
+        ("python3.15", "worker.py", True),
+        ("python3.15-helper", "/var/local/loto/worker.py", False),
+    ]
+    for name, script, expected in cases:
+        process = cleanup.ProcView(23, name, exe, (exe, "-X", "utf8", script), root)
+        assert cleanup.is_stale_proc(
+            process, venv_dir="/var/local/loto-env", project_root=root, keep_pids=set(),
+        ) is expected

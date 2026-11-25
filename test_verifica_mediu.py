@@ -28,6 +28,7 @@ def test_main_exits_nonzero_when_istoric_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "upgrade_pip", lambda: None)
     monkeypatch.setattr(vm, "check_and_upgrade", lambda pkgs: None)
     monkeypatch.setattr(vm, "check_scoring_stack", lambda: None)
+    monkeypatch.setattr(vm, "_is_in_venv", lambda: True)
 
     try:
         vm.main()
@@ -37,7 +38,7 @@ def test_main_exits_nonzero_when_istoric_missing(tmp_path, monkeypatch):
         raised = True
         code = e.code
     assert raised is True
-    assert code != 0
+    assert code == 22
 
 
 def test_main_does_not_exit_when_istoric_present(tmp_path, monkeypatch):
@@ -46,6 +47,7 @@ def test_main_does_not_exit_when_istoric_present(tmp_path, monkeypatch):
     monkeypatch.setattr(vm, "upgrade_pip", lambda: None)
     monkeypatch.setattr(vm, "check_and_upgrade", lambda pkgs: None)
     monkeypatch.setattr(vm, "check_scoring_stack", lambda: None)
+    monkeypatch.setattr(vm, "_is_in_venv", lambda: True)
 
     try:
         vm.main()

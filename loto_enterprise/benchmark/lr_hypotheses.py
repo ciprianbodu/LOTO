@@ -14,6 +14,7 @@ import pandas as pd
 from covering.lr_selection import resolve_lr_scheme
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES, decision
+from loto_enterprise.benchmark.lr_provenance import lr_semantics
 from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
 from loto_enterprise.benchmark.methods import call_method, list_methods, method_meta
 from loto_enterprise.benchmark.restricted_decision import _lr_fold_pool, restricted_bench_scores
@@ -315,13 +316,22 @@ def _bench_urn(
 
 
 def benchmark_lr_hypotheses(
-    game_id, history, *, scheme, inverse, restricted, dynamic, lookback, hit_target, joker_size, cancel_path=None,
+    game_id, history, *, scheme, inverse, restricted, dynamic, lookback, hit_target, joker_size,
+    budget_lei=None, objective=None, cancel_path=None,
 ):
     """Evaluate curated Re-Bench methods for these choices without writing a production decision."""
     check = _cancellation(cancel_path)
     check(force=True)
     lot = require_lottery(game_id, "RO")
+    from covering import lr_schemes
+    from covering.lr_catalog_cache import refresh_catalog
+    refresh_catalog(lr_schemes.LR_DIR)
     scheme = resolve_lr_scheme(lot.geometry, getattr(scheme, "code", scheme))
+    layout = None
+    if budget_lei is not None or objective is not None:
+        from covering.lr_budget import recommend_games
+        layout, = recommend_games(budget_lei, objective, game_id)
+    semantics = lr_semantics(lot, scheme, hit_target, layout=layout)
     source = (Path(lot.csv).name, history) if isinstance(history, pd.DataFrame) else history
     engine = _forecast_engine(lot, source, 0)
     matrix = engine._draw_matrix
@@ -358,9 +368,26 @@ def benchmark_lr_hypotheses(
         if report["protocol"]:
             report["protocol"] += " Intervalul 10–40 privește numai urna principală. Urna 2 este evaluată la top-1."
         urns.append(report)
+    portfolio = None
+    if layout is not None:
+        from loto_enterprise.benchmark.lr_budget_scoring import evaluate_budget_recipes
+        portfolio = evaluate_budget_recipes(
+            layout, scheme, lot, engine.data, matrix, dates, main, urns,
+            restricted=restricted, inverse=inverse, dynamic=dynamic, lookback=lookback,
+            joker_size=joker_size, check=check,
+        )
+        if error := portfolio.get("error"):
+            # Preserve the pool diagnostics, but never publish them as a paid-ticket winner.
+            for urn in urns:
+                urn.update(decision=None, method=None)
+                urn.setdefault("error", error)
     check(force=True)
+    refresh_catalog(lr_schemes.LR_DIR)
+    if lr_semantics(lot, scheme, hit_target, layout=layout) != semantics:
+        raise ValueError("Regulile de selecție s-au schimbat în timpul calculului. Reia Re-Bench.")
     return {
         "game": game_id, "scheme_code": scheme.code,
+        "semantics": semantics, "portfolio": portfolio,
         "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(dates) else None,

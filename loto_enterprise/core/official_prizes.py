@@ -44,7 +44,7 @@ _ALIASES = {
 _HEADINGS = {"loto_6_49": "6/49", "loto_5_40": "5/40", "joker": "joker"}
 _CATEGORY_ORDER = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII")
 _MAX_RESPONSE_BYTES = 2_000_000
-_PARSER_CACHE_REVISION = 1
+_PARSER_CACHE_REVISION = 2
 _HTTP_SLOTS = threading.BoundedSemaphore(2)
 
 
@@ -201,8 +201,10 @@ def _selected_month(document: _Node) -> tuple[int, int] | None:
     return None
 
 
-def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeDraw]:
-    """Parse official draws, with the main draw before supplements on the same date."""
+def parse_month_html(
+    game: str, html: str, year: int, month: int, *, draw_dates: set[str] | None = None,
+) -> list[PrizeDraw]:
+    """Parse all draws or selected ISO dates, with main draws before supplements."""
     game = normalize_game(game)
     document = _Document(html).root
     if _selected_month(document) != (year, month):
@@ -227,6 +229,8 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
         supplementary = match["supplementary"] is not None
         if (draw_date.year, draw_date.month) != (year, month):
             raise ArchiveError("Official archive returned a draw from another month")
+        if draw_dates is not None and draw_date.isoformat() not in draw_dates:
+            continue
         number_blocks = [n for n in block.nodes("div") if n.has_class("numere-extrase")]
         if len(number_blocks) != 1:
             raise ArchiveError("Official drawn numbers are missing or ambiguous")
@@ -297,7 +301,7 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
             tuple(categories), ARCHIVE_URLS[game],
         )
         same_day = by_date.setdefault(draw.draw_date, {})
-        key = (tuple(sorted(draw.numbers)), draw.joker)
+        key = (_number_key(draw.numbers, game), draw.joker)
         previous = same_day.get(key)
         if previous is not None and previous[0] != draw:
             raise ArchiveError("Conflicting official tables for the same draw")
@@ -344,13 +348,15 @@ def _fetch_month_html(game: str, year: int, month: int, timeout: float = 10) -> 
     raise ArchiveError("Official archive unavailable")
 
 
-def _number_key(numbers) -> str:
+def _number_key(numbers, game=None) -> str:
     original = tuple(numbers)
     values = tuple(int(n) for n in original)
     if any(isinstance(n, bool) or converted != n for n, converted in zip(original, values)):
         raise ValueError("Draw numbers must be integers")
     if len(values) != len(set(values)):
         raise ValueError("Draw numbers must be distinct")
+    if game == "loto_5_40" and len(values) == 6:
+        return ",".join(map(str, sorted(values[:5]))) + "|" + str(values[-1])
     return ",".join(map(str, sorted(values)))
 
 
@@ -404,6 +410,15 @@ class PrizeCache:
                             if connection.execute("PRAGMA user_version").fetchone()[0] < _PARSER_CACHE_REVISION:
                                 # Older parsers ignored the special-draw heading. Make a missing
                                 # draw eligible for refresh while retaining every verified payout.
+                                legacy = connection.execute(
+                                    "SELECT rowid,payload FROM prize_draws WHERE game='loto_5_40' "
+                                    "AND instr(number_key,'|')=0"
+                                ).fetchall()
+                                connection.executemany(
+                                    "UPDATE prize_draws SET number_key=? WHERE rowid=?",
+                                    [(_number_key(json.loads(payload)["numbers"], "loto_5_40"), rowid)
+                                     for rowid, payload in legacy],
+                                )
                                 connection.execute("UPDATE prize_months SET retry_after=0 WHERE status='complete'")
                                 connection.execute(f"PRAGMA user_version = {_PARSER_CACHE_REVISION}")
                             connection.commit()
@@ -425,19 +440,38 @@ class PrizeCache:
 
         A request is ``(date, main_numbers, actual_joker_or_None)``. Unknown
         Joker is accepted only when exactly one official draw matches the main
-        number set on that date. Date-only fallback is deliberately forbidden.
+        number set on that date. An ascending legacy 5/40 row has no usable
+        sixth-ball position and likewise requires a unique official set.
         """
         game = normalize_game(game)
         requests = []
         for draw_date, numbers, joker in draws:
             if joker is not None and (isinstance(joker, bool) or int(joker) != joker):
                 raise ValueError("Joker number must be an integer")
-            requests.append((_date(draw_date).isoformat(), _number_key(numbers), joker))
+            numbers = tuple(numbers)
+            key = _number_key(numbers, game)
+            legacy_540 = game == "loto_5_40" and joker in (None, 0) and numbers == tuple(sorted(numbers))
+            requests.append((_date(draw_date).isoformat(), key, joker, _number_key(numbers) if legacy_540 else None))
         if not requests:
             return []
         results = []
+        legacy_by_date = {}
         with closing(self._connect()) as connection:
-            for draw_date, key, joker in requests:
+            for draw_date, key, joker, unordered in requests:
+                if unordered is not None:
+                    if draw_date not in legacy_by_date:
+                        rows = connection.execute(
+                            "SELECT payload FROM prize_draws WHERE game=? AND draw_date=? AND joker=0",
+                            (game, draw_date),
+                        ).fetchall()
+                        matching = {}
+                        for row in rows:
+                            official = self._decode(row[0])
+                            matching.setdefault(_number_key(official.numbers), []).append(official)
+                        legacy_by_date[draw_date] = matching
+                    draws_on_set = legacy_by_date[draw_date].get(unordered, ())
+                    results.append(draws_on_set[0] if len(draws_on_set) == 1 else None)
+                    continue
                 if joker is None:
                     rows = connection.execute(
                         "SELECT payload FROM prize_draws WHERE game=? AND draw_date=? AND number_key=?",
@@ -525,7 +559,7 @@ class PrizeCache:
                 )
                 connection.executemany(
                     "INSERT INTO prize_draws VALUES (?,?,?,?,?,?,?)",
-                    [(game, draw.draw_date, _number_key(draw.numbers), draw.joker or 0,
+                    [(game, draw.draw_date, _number_key(draw.numbers, game), draw.joker or 0,
                       json.dumps(asdict(draw), ensure_ascii=False), now, digest)
                      for draw in draws],
                 )

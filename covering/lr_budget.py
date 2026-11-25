@@ -17,6 +17,9 @@ ANY_PRIZE = "any_prize"
 
 def recommend_games(budget_lei: int, objective: str, game_id: str | None = None) -> list[dict]:
     """Rank playable Romanian LR plans by their exact per-draw probability."""
+    from covering import lr_schemes
+    from covering.lr_catalog_cache import refresh_catalog
+    refresh_catalog(lr_schemes.LR_DIR)
     if type(budget_lei) is not int or budget_lei < MIN_BUDGET_LEI:
         raise ValueError(f"Bugetul trebuie să fie de cel puțin {MIN_BUDGET_LEI} lei întregi.")
     if objective not in (FOUR_PLUS, ANY_PRIZE):

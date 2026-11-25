@@ -21,7 +21,6 @@ import io
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -105,21 +104,17 @@ def check_history(
             f"randul {lines[bad]}: numere invalide pentru {geo.name}: "
             f"{_shown(rows[bad])}"
         )
-    # AGENTS.md §4.1: aceleasi numere principale ca randul anterior = copie.
-    ordered = np.sort(drawn, axis=1)
-    repeats = np.flatnonzero((ordered[1:] == ordered[:-1]).all(axis=1))
-    if repeats.size:
-        copy = int(repeats[0]) + 1
-        return (
-            f"randul {lines[copy]} repeta numerele randului {lines[copy - 1]} "
-            "(copie, nu extragere)"
-        )
     # Actualizatoarele citesc numerele cu int(): "1.0" sau "1e0" trec de
     # valid_draw_matrix, dar ar opri update_externe/update_csv pe toate statiile.
+    seen = {}
     for row, line in zip(rows, lines):
         try:
-            for cell in row[1:]:
-                int(cell)
+            values = tuple(map(int, row[1:]))
+            split = 5 if lottery.game_id == "5/40" else geo.draw_n
+            key = (row[0], tuple(sorted(values[:split])), tuple(sorted(values[split:])))
+            if key in seen:
+                return f"randul {line} repeta numerele randului {seen[key]} din aceeasi zi"
+            seen[key] = line
         except ValueError:
             return f"randul {line}: numere invalide pentru {geo.name}: {_shown(row)}"
     return None

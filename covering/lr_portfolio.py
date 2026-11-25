@@ -6,9 +6,9 @@ affordable multisets of codes, including repetitions and arbitrary overlaps.
 """
 from __future__ import annotations
 
+from covering.lr_catalog_cache import catalog_cache
 from copy import deepcopy
 from dataclasses import dataclass
-from functools import lru_cache
 from itertools import combinations
 from math import comb
 from numbers import Integral
@@ -115,7 +115,7 @@ def _example_pools(pieces, maximum):
     return shared, pools
 
 
-@lru_cache(maxsize=3)
+@catalog_cache(maxsize=3)
 def _study(game):
     lot, schemes, exact = _catalog_data(game)
     unit = round(lot.price * 100)
@@ -165,7 +165,7 @@ def compare_portfolios(game, base_code):
     return [deepcopy(r) for r in _study(game) if r["base"] == base.code]
 
 
-@lru_cache(maxsize=128)
+@catalog_cache(maxsize=128)
 def _budget_record(game, budget, threshold):
     lot, schemes, exact = _catalog_data(game)
     if not 4 <= threshold <= lot.pick_n:

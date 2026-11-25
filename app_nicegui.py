@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -42,6 +43,11 @@ from nicegui import app, ui
 
 from job_queue import (
     cancel_pending_running_jobs,
+    cancel_unstarted_job,
+    claim_job_finalization_action,
+    finish_job_finalization_action,
+    get_job_finalization_actions,
+    get_job_finalization_details,
     get_active_job,
     get_job_status,
     get_latest_completed_job,
@@ -91,6 +97,7 @@ from ui_history_upload import (
     read_history_csv,
     validate_upload_batch,
 )
+from ui_job_status import JobStatusProbe
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
@@ -229,6 +236,40 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
     return json.dumps({"input_hash": h.hexdigest(), **config})
 
 
+def _queue_operation(operation, completed, failed):
+    """Use the caller's client for UI feedback, and a worker thread for SQLite."""
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            value = operation()
+        except Exception as exc:
+            failed(exc)
+        else:
+            completed(value)
+        return
+    from nicegui import background_tasks
+    try:
+        client = ui.context.client
+    except RuntimeError:
+        client = None
+
+    async def dispatch():
+        try:
+            value = await asyncio.to_thread(operation)
+        except Exception as exc:
+            callback, arg = failed, exc
+        else:
+            callback, arg = completed, value
+        if client:
+            with client:
+                callback(arg)
+        else:
+            callback(arg)
+    background_tasks.create(dispatch())
+
+
 def submit_generation(
     pure: bool = False, sim_depth_per_game: dict | None = None
 ) -> None:
@@ -247,38 +288,58 @@ def submit_generation(
             type="negative",
         )
         return
-    if STATE["active_job_id"]:
-        ui.notify("Există deja un job în rulare.", type="warning")
+    if STATE.get("_queue_boot_pending"):
+        ui.notify("Se restabilește legătura cu istoricul rulărilor. Reîncearcă după afișarea stării.", type="warning")
         return
+    if STATE["active_job_id"] or STATE.get("_submission_pending") or STATE.get("_cancellation_pending"):
+        ui.notify("Există deja o cerere de generare sau de anulare în curs.", type="warning")
+        return
+    epoch = STATE.get("_cancellation_epoch", 0)
+    STATE["_submission_pending"] = True
+
+    def failed(exc):
+        STATE["_submission_pending"] = False
+        logger.error("Nu am putut înregistra cererea de generare: %s", exc)
+        ui.notify("Cererea de generare nu a putut fi salvată. Rezultatul anterior rămâne disponibil.", type="negative")
+
     try:
         cfg = _build_config_json(sim_depth_per_game)
-        job_id = int(submit_job("pipeline", cfg))
     except Exception as exc:
-        logger.exception("Nu am putut înregistra cererea de generare: %s", exc)
-        ui.notify("Cererea de generare nu a putut fi salvată. Rezultatul anterior rămâne disponibil.", type="negative")
+        failed(exc)
         return
-    with STATE_LOCK:
-        # Un walk-forward încă în rulare aparține rezultatului vechi: îl facem
-        # „stale” (nu mai scrie în `retro`, nu rescrie raportul, nu oprește PC-ul).
-        STATE["wf_seq"] = int(STATE.get("wf_seq") or 0) + 1
-        STATE["wf_running"] = False
-        STATE["pure_bench"] = pure
-        STATE["results"] = None
-        STATE["result_sources"] = None
-        STATE["retro"] = {}
-        STATE["retro_meta"] = {}
-        STATE["wf_status"] = ""
-        STATE["active_job_id"] = job_id
-        STATE["job_start_time"] = time.time()
-        STATE["job_elapsed"] = None
-        STATE["wf_elapsed"] = None
-    ensure_worker_running()
-    missing = [game.name for game in selected if game.game_id not in available]
-    if missing:
-        ui.notify("Jocuri omise din generare pentru că lipsește istoricul: " + ", ".join(missing),
-                  type="warning", timeout=8000)
-    ui.notify(f"Job #{job_id} trimis.", type="positive")
-    _refresh_status()
+
+    def submitted(job_id):
+        STATE["_submission_pending"] = False
+        if STATE.get("_cancellation_epoch", 0) != epoch:
+            _queue_operation(lambda: cancel_pending_running_jobs("Oprit de utilizator", job_ids=[job_id]),
+                             lambda _: None, lambda exc: logger.error("Anulare job #%s: %s", job_id, exc))
+            return
+        with STATE_LOCK:
+            # Un walk-forward încă în rulare aparține rezultatului vechi: îl facem
+            # „stale” (nu mai scrie în `retro`, nu rescrie raportul, nu oprește PC-ul).
+            STATE["wf_seq"] = int(STATE.get("wf_seq") or 0) + 1
+            STATE["wf_running"] = False
+            STATE["pure_bench"] = pure
+            STATE["results"] = None
+            STATE["result_sources"] = None
+            STATE["retro"] = {}
+            STATE["retro_meta"] = {}
+            STATE["wf_status"] = ""
+            STATE["active_job_id"] = job_id
+            STATE["_result_job_id"] = None
+            STATE["_job_notice"] = None
+            STATE["job_start_time"] = time.time()
+            STATE["job_elapsed"] = None
+            STATE["wf_elapsed"] = None
+        ensure_worker_running()
+        missing = [game.name for game in selected if game.game_id not in available]
+        if missing:
+            ui.notify("Jocuri omise din generare pentru că lipsește istoricul: " + ", ".join(missing),
+                      type="warning", timeout=8000)
+        ui.notify(f"Job #{job_id} trimis.", type="positive")
+        _refresh_status()
+
+    _queue_operation(lambda: int(submit_job("pipeline", cfg)), submitted, failed)
 
 
 def _autopilot_evidence_note(config: dict) -> str:
@@ -1665,10 +1726,18 @@ def cancel_all() -> None:
         STATE.pop("_autopilot_after_virtual", None)
         STATE.pop("_bench_history_pending", None)
     cancel_marker_saved = _mark_bench_cancelled()
-    try:
-        cancel_pending_running_jobs("Oprit de utilizator")
-    except Exception as exc:  # noqa: BLE001
+    STATE["_cancellation_epoch"] = int(STATE.get("_cancellation_epoch", 0)) + 1
+    STATE["_cancellation_pending"] = True
+
+    def cancel_finished(_):
+        STATE["_cancellation_pending"] = False
+
+    def cancel_failed(exc):
+        cancel_finished(None)
         logger.warning("cancel jobs: %s", exc)
+        ui.notify("Coada este indisponibilă. Anularea joburilor nu a fost confirmată.", type="warning")
+
+    _queue_operation(lambda: cancel_pending_running_jobs("Oprit de utilizator"), cancel_finished, cancel_failed)
     # Kill bench (din .bench_pid) + fallback orice bench_all_methods.py din proiect
     from cleanup_old_processes import kill_pid_tree
     import psutil
@@ -2040,6 +2109,7 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
         ds_by_name = dict(sources) if sources is not None else dict(STATE.get("datasets", []))
         if isinstance(results, tuple) and len(results) == 2:
             _WF_CANCEL_REQUESTED.clear()
+            completing_job = STATE.get("_result_job_id") if post_completion_actions else None
             STATE["wf_user_cancel"] = False
             my_seq = int(STATE.get("wf_seq") or 0) + 1
             STATE["wf_seq"] = my_seq
@@ -2266,6 +2336,7 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
         finally:
             # Serializăm decizia de finalizare cu generarea nouă și anularea:
             # altfel o rulare veche putea salva raportul sau programa oprirea PC-ului.
+            skipped_shutdown = True
             with STATE_LOCK:
                 if STATE.get("wf_seq") == my_seq:
                     if STATE.get("job_start_time") and STATE.get("wf_elapsed") is None:
@@ -2288,9 +2359,12 @@ def _start_walk_forward(*, post_completion_actions: bool = True) -> None:
                             STATE["wf_status"] = "Finalizarea automată a fost oprită: Re-Bench este în curs."
                             logger.warning("[WF] Finalizare omisă: Re-Bench este în curs sau starea lui nu poate fi verificată.")
                         else:
+                            skipped_shutdown = False
                             _finalize_pipeline()
                     STATE["results_dirty"] = True
                     STATE["wf_running"] = False
+            if skipped_shutdown and completing_job is not None:
+                _complete_job_stage(completing_job, "shutdown")
 
     threading.Thread(target=_worker_wf, daemon=True).start()
 
@@ -2890,165 +2964,213 @@ _FAIL_MSG_MAX_CHARS = 800
 _UNSTARTED_WORKER_WAIT_S = 45.0
 
 
-def _abandon_unstarted_ui_job(reason: str) -> None:
-    """Scoate de pe ecran un job pe care worker-ul nu l-a preluat (0%, fără log)."""
+_JOB_PROBE = JobStatusProbe()
+_COMPLETION_LOCK = threading.Lock()
+_COMPLETION_STAGES = {}
+
+
+def _complete_job_stage(job_id, stage):
+    if job_id is None:
+        return
+    with _COMPLETION_LOCK:
+        stages = _COMPLETION_STAGES.setdefault(job_id, set())
+        if stage is not None:
+            stages.add(stage)
+        ready = {"smtp", "shutdown"} <= stages
+    if ready and (_mark_job_finalized(job_id) or (get_job_status(job_id) or {}).get("ui_finalized_at")):
+        with _COMPLETION_LOCK:
+            _COMPLETION_STAGES.pop(job_id, None)
+
+
+_PENDING_ACTIONS = {}
+_CLAIM_DELAYS = (1.0, 3.0)
+
+
+def _retry_job_claims():
+    """Called from a background timer and on polling. Only one caller takes a retry."""
+    with _COMPLETION_LOCK:
+        ready = [(key, attempt, operation) for key, (due, attempt, operation) in _PENDING_ACTIONS.items()
+                 if time.monotonic() >= due]
+        for key, _, _ in ready:
+            del _PENDING_ACTIONS[key]
+    for (job_id, action), attempt, operation in ready:
+        try:
+            if _perform_job_action(job_id, action, operation, attempt=attempt):
+                _complete_job_stage(job_id, action)
+        except Exception as exc:
+            logger.error("[JOB] confirmarea acțiunii %s pentru #%s: %s", action, job_id, exc)
+
+
+def _perform_job_action(job_id, action, operation, *, attempt=0):
+    """Retry a transient claim failure. A claimed external action is never replayed."""
     try:
-        jid = STATE.get("active_job_id")
-        if jid is not None:
-            cancel_pending_running_jobs(reason, job_ids=[int(jid)])
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("abandon unstarted: %s", exc)
-    STATE["active_job_id"] = None
-    STATE["job_start_time"] = None
+        claimed = claim_job_finalization_action(job_id, action)
+    except (sqlite3.OperationalError, OSError) as exc:
+        if attempt < len(_CLAIM_DELAYS):
+            delay = _CLAIM_DELAYS[attempt]
+            with _COMPLETION_LOCK:
+                _PENDING_ACTIONS[job_id, action] = time.monotonic() + delay, attempt + 1, operation
+            wake = threading.Timer(delay, _retry_job_claims)
+            wake.daemon = True
+            wake.start()
+            logger.warning("[JOB] revendicarea %s pentru #%s se reia în %.1f s: %s", action, job_id, delay, exc)
+            return False
+        message = f"Job #{job_id}: acțiunea {action} nu a pornit. Revendicarea a eșuat după {attempt+1} încercări: {exc}"
+        logger.error(message)
+        if STATE.get("_result_job_id") == job_id:
+            STATE.update(_job_notice=message, results_dirty=True)
+        return True
+    if not claimed:
+        return True
+    state, detail = "uncertain", None
+    try:
+        result = operation()
+        state, detail = result if isinstance(result, tuple) else (result or "done", None)
+    except Exception as exc:
+        detail = str(exc)
+        logger.exception("Job #%s: %s", job_id, action)
+    finish_job_finalization_action(job_id, action, state, detail)
+    return True
+
+
+def _job_action_snapshot(job_id):
+    actions = get_job_finalization_actions(job_id)
+    details = get_job_finalization_details(job_id) if any(s in ("failed", "uncertain") for s in actions.values()) else {}
+    return {"actions": actions, "details": details}
+
+
+def _complete_live_generation(job_id, row):
+    payload = decode_queue_result(str(row.get("result_json") or "{}"))
+    if not (isinstance(payload, tuple) and len(payload) == 2):
+        _mark_job_finalized(job_id)
+        with STATE_LOCK:
+            if STATE.get("active_job_id") == job_id:
+                STATE["active_job_id"] = None
+                STATE["_job_notice"] = f"Job #{job_id}: rezultat ilizibil. Verifică loto.log și regenerează."
+                STATE["results_dirty"] = True
+        return
+    sources = _result_sources_from_job(row)
+    with STATE_LOCK:
+        if STATE.get("active_job_id") != job_id:
+            return
+        if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
+            STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
+        generation_epoch = STATE.get("_cancellation_epoch", 0)
+        STATE.update(results=payload, result_sources=sources, results_recovered=None,
+                     active_job_id=None, results_dirty=True, _result_job_id=job_id, _job_notice=None)
+        try:
+            snapshot = _mail_snapshot_inputs(payload, sources)
+        except Exception as exc:
+            logger.error("[MAIL] datele mesajului pentru jobul #%s: %s", job_id, exc)
+            snapshot = None
+    try:
+        _save_report_file()
+    except Exception as exc:
+        logger.error("[JOB] salvare raport #%s: %s", job_id, exc)
+
+    if snapshot is not None and snapshot["enabled"]:
+        try:
+            _freeze_mail_ratings(snapshot)
+        except Exception as exc:
+            logger.error("[MAIL] rating indisponibil pentru jobul #%s: %s", job_id, exc)
+            snapshot = None
+
+    def send_snapshot():
+        try:
+            if snapshot is None or snapshot["enabled"]:
+                def send():
+                    if snapshot is None:
+                        return "failed"
+                    return _maybe_send_results_email(snapshot)
+                if not _perform_job_action(job_id, "smtp", send):
+                    return
+            _complete_job_stage(job_id, "smtp")
+        except Exception as exc:
+            logger.error("[MAIL] starea jobului #%s: %s", job_id, exc)
+            if STATE.get("_result_job_id") == job_id:
+                STATE["_job_notice"] = "Confirmarea trimiterii e-mailului este indisponibilă. Verifică loto.log."
+                STATE["results_dirty"] = True
+
+    if snapshot is not None and snapshot["enabled"]:
+        threading.Thread(target=send_snapshot, name="mail-results", daemon=True).start()
+    else:
+        send_snapshot()
+    with STATE_LOCK:
+        if (STATE.get("_result_job_id") == job_id and not STATE.get("active_job_id")
+                and STATE.get("_cancellation_epoch", 0) == generation_epoch):
+            _start_walk_forward()
+            return
+    _complete_job_stage(job_id, "shutdown")
+
+
+def _read_ui_job(job_id):
+    """Read the queue and publish any terminal transition on a background thread."""
+    _retry_job_claims()
+    if STATE.get("active_job_id") != job_id:
+        if job_id in _COMPLETION_STAGES:
+            _complete_job_stage(job_id, None)
+        return {"job": None, **_job_action_snapshot(job_id)}
+    row = get_job_status(job_id)
+    if STATE.get("active_job_id") == job_id and is_unstarted_job(row):
+        start = STATE.get("job_start_time")
+        if start is not None:
+            ensure_worker_running()
+        if start is None or (time.time() - start > _UNSTARTED_WORKER_WAIT_S and not is_worker_running()):
+            reason = f"Worker-ul nu a preluat jobul #{job_id}."
+            if cancel_unstarted_job(job_id, reason):
+                with STATE_LOCK:
+                    if STATE.get("active_job_id") == job_id:
+                        STATE.update(active_job_id=None, job_start_time=None, _job_notice=reason, results_dirty=True)
+            # The worker may have claimed or completed the job since the first read.
+            row = get_job_status(job_id)
+
+    if STATE.get("active_job_id") == job_id:
+        if row is not None and row.get("status") == "COMPLETED":
+            _complete_live_generation(job_id, row)
+        elif row is None or row.get("status") in ("FAILED", "CANCELLED"):
+            message = (str(row.get("result_json") or row.get("log_tail") or "Vezi loto.log.")[-_FAIL_MSG_MAX_CHARS:]
+                       if row else "Jobul nu mai există în coadă.")
+            with STATE_LOCK:
+                if STATE.get("active_job_id") == job_id:
+                    STATE.update(active_job_id=None, _job_notice=f"Job #{job_id}: {message}", results_dirty=True)
+        elif not is_unstarted_job(row):
+            ensure_worker_running()
+    actions = _job_action_snapshot(job_id) if row and row.get("status") == "COMPLETED" else {}
+    return {"job": row, **actions}
 
 
 @ui.refreshable
 def status_panel() -> None:
     job_id = STATE.get("active_job_id")
-    bench_on = _bench_running()
+    bench_on = STATE.get("_status_bench_running", False)
+    observed_id = job_id or STATE.get("_result_job_id")
+    snapshot, unavailable = _JOB_PROBE.view(observed_id)
+    boot_waiting = (STATE.get("_queue_boot_pending") and
+                    time.monotonic() - STATE.get("_queue_boot_start", time.monotonic()) > 1.5)
+    if unavailable or boot_waiting or STATE.get("_queue_boot_unavailable"):
+        ui.label("Starea cozii este temporar indisponibilă. Afișez ultimele date primite.").classes("text-warning")
+    if notice := STATE.get("_job_notice"):
+        ui.label(notice).classes("text-negative")
+    actions = (snapshot or {}).get("actions") or {}
+    for action, label in (("smtp", "E-mail"), ("shutdown", "Oprire PC")):
+        diagnostic = ((snapshot or {}).get("details") or {}).get(action)
+        if diagnostic:
+            ui.label(f"{label}: {diagnostic}").classes("text-caption")
+        if actions.get(action) in ("claimed", "uncertain"):
+            ui.label(f"{label}: rezultat încă neconfirmat. Acțiunea nu se repetă automat.").classes("text-warning")
+        elif actions.get(action) == "failed":
+            ui.label(f"{label}: acțiunea a eșuat.").classes("text-negative")
 
     if job_id:
-        stt = get_job_status(int(job_id))
+        stt = (snapshot or {}).get("job")
         if not stt:
-            STATE["active_job_id"] = None
-            ui.label("Job invalid / dispărut.").classes("text-negative")
+            ui.label(f"Se citește starea jobului #{job_id}…").classes("text-caption")
             return
         pct = int(stt.get("progress_pct") or 0)
-        state = str(stt.get("status") or "")
-        if state == "COMPLETED":
-            payload = decode_queue_result(str(stt.get("result_json") or "{}"))
-            if not (isinstance(payload, tuple) and len(payload) == 2):
-                # Payload gol/corupt (cursă cu cancel, pickle rupt, worker ucis între
-                # `complete_job` și scriere). ACEEAȘI gardă ca `_recover_completed_job`
-                # — până acum ramura LIVE n-o avea și mergea mai departe cu `None`:
-                # `STATE["results"] = None`, dar mail trimis, walk-forward pornit și
-                # jobul marcat finalizat, deci nu se mai putea relua.
-                # Marcăm văzut (altfel ecranul reintră aici la fiecare tick), dar
-                # FĂRĂ mail / WF / shutdown, și spunem de ce.
-                with STATE_LOCK:
-                    STATE["active_job_id"] = None
-                _mark_job_finalized(int(job_id))
-                logger.error(
-                    "[JOB] #%s COMPLETED cu payload invalid (%r) — "
-                    "fără mail/walk-forward/shutdown.",
-                    job_id,
-                    type(payload).__name__,
-                )
-                ui.label(
-                    f"⚠️ Job #{job_id} s-a terminat, dar rezultatul e ilizibil "
-                    "(payload gol sau corupt). Nu s-a trimis mail și nu s-a rulat "
-                    "walk-forward. Vezi loto.log și regenerează."
-                ).classes("text-negative")
-                return
-            # Claim ATOMIC: un SINGUR renderer duce jobul în finalize. Dacă două
-            # taburi/reconnect-uri intră aproape simultan în ramura COMPLETED, doar cel
-            # care încă vede active_job_id == job_id procesează (mail/shutdown o dată);
-            # ceilalți doar afișează. Și marcăm jobul ca finalizat ACUM (înainte de
-            # WF/mail/shutdown) → o repornire în timpul walk-forward-ului NU-l reia.
-            with STATE_LOCK:
-                claimed = STATE.get("active_job_id") == int(job_id)
-                if claimed:
-                    # Durata generării O SINGURĂ DATĂ (fixă) — altfel 'Rezultate (în X)'
-                    # creștea live cât rula walk-forward-ul.
-                    if STATE.get("job_start_time") and STATE.get("job_elapsed") is None:
-                        STATE["job_elapsed"] = time.time() - STATE["job_start_time"]
-                    STATE["results"] = payload
-                    STATE["result_sources"] = _result_sources_from_job(stt)
-                    STATE["results_recovered"] = (
-                        None  # rezultat PROASPĂT → fără marcaj „vechi"
-                    )
-                    STATE["active_job_id"] = None
-                    try:
-                        mail_snapshot = _mail_snapshot_inputs(payload, STATE["result_sources"])
-                    except Exception as exc:  # noqa: BLE001
-                        logger.error("[MAIL] snapshot indisponibil pentru job #%s: %s", job_id, exc)
-                        mail_snapshot = None
-            if not claimed:
-                ui.label("✅ Ultima generare e gata (vezi mai jos).").classes(
-                    "text-positive"
-                )
-                return
-            _mark_job_finalized(int(job_id))
-            _save_report_file()  # raport imediat (fără WF); rescris după walk-forward
-
-            # Pool-urile normal și invers se calculează din datele jobului, fără statistici WF →
-            # numerele sunt deja fixate acum; nu are rost să aștepte walk-forward-ul de
-            # raportare (poate dura minute/ore). Trimis o singură dată (claimed == True mai sus).
-            # SMTP (connect + STARTTLS + login, timeout 30s fiecare) NU pe event-loop:
-            # un server lent bloca UI-ul >60s → «connection lost».
-            if mail_snapshot is not None and mail_snapshot["enabled"]:
-                try:
-                    _freeze_mail_ratings(mail_snapshot)
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("[MAIL] snapshot rating indisponibil pentru job #%s: %s", job_id, exc)
-                    mail_snapshot = None
-
-            def _mail_bg(snapshot=mail_snapshot):
-                try:
-                    _maybe_send_results_email(snapshot)
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("[MAIL] trimitere imediată eșuată: %s", exc)
-
-            if mail_snapshot is not None:
-                threading.Thread(target=_mail_bg, name="mail-results", daemon=True).start()
-            _start_walk_forward()  # async; oprirea PC se face la FINALUL walk-forward-ului
-            results_panel.refresh()
-            try:
-                ui.run_javascript(SOUND_JS)  # beep de finalizare
-            except Exception:  # noqa: BLE001
-                pass
-            # _maybe_shutdown() NU aici — walk-forward-ul încă rulează în fundal.
-            # Oprirea se declanșează în _worker_wf (la final) sau pe ramura fără rezultate.
-            ui.label("✅ Generare finalizată — rulează walk-forward...").classes(
-                "text-positive text-lg"
-            )
-            _shutdown_banner()
-            return
-        if state in ("FAILED", "CANCELLED"):
-            STATE["active_job_id"] = None
-            # Mesajul de eroare NU e o coloană proprie: `job_queue.fail_job` îl scrie
-            # în `result_json` (întreg) și în `log_tail` (ultimii 6000 de octeți).
-            # `stt.get("error_msg")` era o cheie INEXISTENTĂ în schema `jobs` → panoul
-            # arăta mereu „Job FAILED:" și nimic, exact când utilizatorul are cea mai
-            # mare nevoie de motiv (CSV corupt, worker mort la import, disc plin).
-            _err = str(stt.get("result_json") or stt.get("log_tail") or "").strip()
-            if len(_err) > _FAIL_MSG_MAX_CHARS:
-                _err = _err[-_FAIL_MSG_MAX_CHARS:]
-            ui.label(
-                f"Job {state}: {_err or 'fără mesaj în coadă (vezi loto.log)'}"
-            ).classes("text-negative")
-            return
-        # 0% + fără log = worker-ul NU a preluat jobul. Nu ținem ecranul blocat
-        # pe «se inițializează...» la infinit. Leftover la boot (fără job_start_time)
-        # → scoatem imediat. Click Generează în sesiunea asta → așteptăm worker-ul
-        # câteva zeci de secunde, apoi abandonăm.
         if is_unstarted_job(stt):
             t0 = STATE.get("job_start_time")
-            if t0 is None:
-                _abandon_unstarted_ui_job(
-                    "Job nepornit la afișare (0%, fără log) — scos de pe ecran."
-                )
-                ui.label(
-                    "Generator disponibil."
-                ).classes("text-caption")
-                return
-            waited = time.time() - float(t0)
-            ensure_worker_running()
-            if waited > _UNSTARTED_WORKER_WAIT_S:
-                # Worker-ul e SECVENȚIAL și observă anularea doar în progress_cb:
-                # după «Anulează TOT» în timpul wheeling-ului, procesul mai calculează
-                # minute întregi jobul vechi, iar jobul nou stă PENDING legitim.
-                # Abandonăm doar când procesul chiar nu există.
-                if is_worker_running():
-                    current = "worker-ul termină jobul anterior; aștept..."
-                else:
-                    _abandon_unstarted_ui_job("Worker-ul nu a preluat jobul în 45s.")
-                    ui.label("Worker-ul nu a pornit. Reîncearcă Generează.").classes(
-                        "text-negative"
-                    )
-                    return
-            else:
-                current = "aștept worker-ul..."
+            waited = max(0.0, time.time() - float(t0)) if t0 else 0.0
+            current = "aștept worker-ul..." if waited <= _UNSTARTED_WORKER_WAIT_S else "worker-ul termină jobul anterior…"
             elapsed_txt = f" · scurs {_fmt_dur(waited)}"
             ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes(
                 "text-bold"
@@ -3067,7 +3189,6 @@ def status_panel() -> None:
                 )
             # Worker mort (kill -9 / crash) lăsa jobul RUNNING la infinit:
             # reatașarea de la startup cheamă ensure o dată; _tick nu o refăcea.
-            ensure_worker_running()
             ui.label(f"⏳ Job în rulare (#{job_id}) — {pct}%{elapsed_txt}").classes(
                 "text-bold"
             )
@@ -3544,19 +3665,19 @@ def _send_test_email() -> None:
         logger.error("[MAIL] test eșuat: %s", exc)
 
 
-def _maybe_send_results_email(snapshot: dict | None = None) -> None:
+def _maybe_send_results_email(snapshot: dict | None = None) -> str | tuple[str, str]:
     """Trimite rezultatele pe mail la finalul pipeline-ului, dacă e bifat
     'mail_on_complete' ȘI SMTP-ul e configurat (mail_config.json / env). Best-effort:
     orice eroare e logată, NU oprește restul (shutdown etc.)."""
     snapshot = _capture_mail_snapshot() if snapshot is None else snapshot
     if not snapshot["enabled"]:
-        return
+        return "failed"
     games = snapshot.get("games") or []
     if not snapshot.get("valid") or not games or any(
         not (record.get("data") or {}).get("hard_core") for record in games
     ):
         logger.warning("[MAIL] rezultat gol sau invalid — nu trimit mesaj de rezultate.")
-        return
+        return "failed"
     cfg = load_mail_config(PROJECT_ROOT)
     if not cfg:
         logger.warning(
@@ -3569,13 +3690,13 @@ def _maybe_send_results_email(snapshot: dict | None = None) -> None:
             )
         except Exception:  # noqa: BLE001
             pass
-        return
+        return "failed"
     try:
         body = _build_mail_body(snapshot)
         subject = f"🎰 Loto — numere pentru extragerea {_mail_subject_date(snapshot)}"
     except Exception as exc:  # noqa: BLE001
         logger.error("[MAIL] build body: %s", exc)
-        return
+        return "failed"
     try:
         send_email(cfg, subject, body)  # doar esențialul (data + pool), fără atașament
         logger.info("[MAIL] rezultate trimise la %s", cfg["mail_to"])
@@ -3591,6 +3712,8 @@ def _maybe_send_results_email(snapshot: dict | None = None) -> None:
             ui.notify(f"📧 Mail eșuat: {exc}", type="negative")
         except Exception:  # noqa: BLE001
             pass
+        return "uncertain", str(exc)
+    return "done"
 
 
 def _finalize_pipeline() -> None:
@@ -3603,45 +3726,68 @@ def _finalize_pipeline() -> None:
         "[FINALIZE] post-walk-forward: shutdown_on_complete=%s",
         SETTINGS.get("shutdown_on_complete"),
     )
-    try:
+    job_id = STATE.get("_result_job_id")
+    if job_id is None:
         _maybe_shutdown()
-    except Exception as exc:  # noqa: BLE001
-        logger.error("[SHUTDOWN] finalize a eșuat: %s", exc)
+        return
+    sequence = STATE.get("wf_seq")
+
+    def finish():
+        def eligible():
+            return (STATE.get("_result_job_id") == job_id and STATE.get("wf_seq") == sequence
+                    and not STATE.get("wf_user_cancel") and not _WF_CANCEL_REQUESTED.is_set())
+        try:
+            if SETTINGS.get("shutdown_on_complete") or (PROJECT_ROOT / ".shutdown_pending.flag").exists():
+                if not _perform_job_action(job_id, "shutdown", lambda: _maybe_shutdown(eligible)):
+                    return
+            _complete_job_stage(job_id, "shutdown")
+        except Exception as exc:
+            logger.error("[SHUTDOWN] starea jobului #%s: %s", job_id, exc)
+            if STATE.get("_result_job_id") == job_id:
+                STATE["_job_notice"] = "Confirmarea opririi este indisponibilă. Verifică loto.log."
+                STATE["results_dirty"] = True
+
+    threading.Thread(target=finish, name="finalize-generation", daemon=True).start()
 
 
-def _maybe_shutdown() -> None:
-    """Auto-shutdown PC la final dacă e cerut (bifă sau .shutdown_pending.flag)."""
+def _maybe_shutdown(eligible=None):
+    """Mark shutdown as scheduled only after Windows confirms the command."""
     flag = PROJECT_ROOT / ".shutdown_pending.flag"
     want = bool(SETTINGS.get("shutdown_on_complete")) or flag.exists()
-    if not want or STATE.get("_shutdown_initiated"):
-        return
-    STATE["_shutdown_initiated"] = True
-    STATE["_shutdown_at"] = time.time()
-    if os.name == "nt":
+    if not want or os.name != "nt":
+        return "failed", "Oprirea nu este activată pentru această stație."
+    with STATE_LOCK:
+        if eligible is not None and not eligible():
+            return "failed", "Rularea a fost anulată sau înlocuită."
+        if STATE.get("_shutdown_initiated") or STATE.get("_shutdown_launching"):
+            return "failed", "Există deja o cerere de oprire."
         try:
-            subprocess.Popen(
-                [
-                    "shutdown",
-                    "/s",
-                    "/t",
-                    "60",
-                    "/f",
-                    "/c",
-                    "Loto Enterprise: shutdown automat după job complete",
-                ]
-            )
-            logger.warning("[SHUTDOWN] shutdown /s /t 60 lansat (anulabil).")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("[SHUTDOWN] eșuat: %s", exc)
-            STATE["_shutdown_initiated"] = False
-    else:
-        logger.warning(
-            "[SHUTDOWN] cerut, dar OS non-Windows — sar peste comanda reală."
-        )
+            proc = subprocess.Popen(["shutdown", "/s", "/t", "60", "/f", "/c",
+                                     "Loto Enterprise: shutdown automat după job complete"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, errors="replace", creationflags=subprocess.CREATE_NO_WINDOW)
+        except OSError as exc:
+            return "failed", f"Comanda de oprire nu a pornit: {exc}"
+        started = time.time()
+        STATE["_shutdown_launching"] = True
     try:
-        flag.unlink(missing_ok=True)
-    except OSError:
-        pass
+        output, _ = proc.communicate(timeout=10)
+        if proc.returncode != 0:
+            message = f"Windows a respins comanda de oprire (cod {proc.returncode}): {(output or '').strip()[:500]}"
+            logger.error("[SHUTDOWN] %s", message)
+            return "failed", message
+        with STATE_LOCK:
+            STATE["_shutdown_initiated"] = True
+            STATE["_shutdown_at"] = started
+        try:
+            flag.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("[SHUTDOWN] marcajul local nu poate fi șters: %s", exc)
+        return "done"
+    except subprocess.TimeoutExpired:
+        return "uncertain", "Windows nu a confirmat comanda de oprire în 10 secunde."
+    finally:
+        STATE["_shutdown_launching"] = False
 
 
 def _cancel_shutdown() -> None:
@@ -4098,6 +4244,7 @@ def _lr_rebench_jobs(choices, amount):
             base = lr_base_choice(choices.get("base_choices", {}), game, inverse, choices["lr_restricted_val"])
             options = {
                 "scheme": budget_plan_scheme(plan).code,
+                "budget_lei": amount, "objective": choices["lr_budget_objective"],
                 "inverse": inverse, "restricted": base == "10–40",
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "lookback": _effective_lookback_pct(), "hit_target": _clamped_bench_target(),
@@ -4128,9 +4275,15 @@ async def _run_selected_lr_walk_forward(choices, amount):
     if lr_walk_forward_running():
         ui.notify("Validarea walk-forward pentru selecția LR este deja în curs.", type="info")
         return
+    from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
+
     depth = _int_setting("wf_depth_pct")
     jobs = _lr_rebench_jobs(choices, amount)
     for _, _, options in jobs:
+        if choices.get("lr_fixed_share_val"):
+            options["selection_policy"] = ONLINE_TICKET_EXPERTS
+        if choices.get("replay_policy") == "daily":
+            options["replay_policy"] = "daily"
         if options.pop("auto_budget", None) is not None:
             # The validator resolves Auto using only the period preceding the test.
             options["restricted"] = None
@@ -4193,11 +4346,13 @@ def main_page() -> None:
     ui.dark_mode().enable()
     refresh_budget = None
     budget_result = STATE.get("results")
+    last_completed = STATE.get("_result_job_id")
     lr_choices = {
         "lr_budget_game": SETTINGS.get("lr_budget_game", "all"),
         "lr_budget_objective": _budget_objective(),
         "lr_inverse_val": SETTINGS.get("lr_inverse_val") is True,
         "lr_restricted_val": SETTINGS.get("lr_restricted_val") is True,
+        "lr_fixed_share_val": SETTINGS.get("lr_fixed_share_val") is True,
         "base_choices": {},
     }
     if lr_choices["lr_budget_game"] not in ("all", *(g.game_id for g in _LOT.games_for_country(_LOT.RO))):
@@ -4762,6 +4917,8 @@ def main_page() -> None:
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
+                initial_fixed_share=lr_choices["lr_fixed_share_val"],
+                on_fixed_share_change=lambda checked: change_lr_choices(lr_fixed_share_val=bool(checked)),
                 on_method_change=lambda inverse, restricted: change_lr_choices(
                     lr_inverse_val=inverse, lr_restricted_val=restricted,
                 ),
@@ -4769,10 +4926,12 @@ def main_page() -> None:
                 on_objective_change=lambda goal: change_lr_choices(lr_budget_objective=goal),
                 base_choices=lr_choices["base_choices"], on_base_change=show_lr_scope,
             )
-            lr_report_anchor = lr_rebench_panel()
+            lr_report_anchor = lr_rebench_panel(lambda game: budget_forecast_inputs(game)["histories"].get(game))
             lr_walk_forward_panel(
-                lambda: f"{_lr_scope_text(lr_choices)} · {int(budget_slider.value)} lei",
+                lambda: f"{_lr_scope_text(lr_choices)} · {int(budget_slider.value)} lei"
+                + (" · Fixed Share pe bilete" if lr_choices["lr_fixed_share_val"] else ""),
                 lambda: _run_selected_lr_walk_forward(lr_choices, int(budget_slider.value)),
+                on_replay_change=lambda value: lr_choices.update(replay_policy=value),
                 depth_control=lambda: _walk_forward_depth_selector("Istoric pentru validarea walk-forward LR"),
             )
         results_panel()
@@ -4789,8 +4948,12 @@ def main_page() -> None:
     # rulează în io_bound (thread), ca event-loop-ul UI să NU se blocheze → fără
     # 'connection lost'. Doar refresh-ul UI (rapid, din cache STATE) e pe loop. ----
     async def _tick() -> None:
-        nonlocal budget_result
+        nonlocal budget_result, last_completed
         from nicegui import run as _nrun
+
+        job_to_observe = STATE.get("active_job_id") or STATE.get("_result_job_id")
+        if job_to_observe:
+            _JOB_PROBE.request(job_to_observe, _read_ui_job, interval=1.0 if STATE.get("active_job_id") else 3.0)
 
         def _blocking_probe():
             """Rulat în THREAD: pid bench + citiri loguri (lente OneDrive) → cache STATE."""
@@ -4809,6 +4972,7 @@ def main_page() -> None:
         except Exception:  # noqa: BLE001
             bench_now = False
 
+        STATE["_status_bench_running"] = bench_now
         _active = bool(
             STATE.get("active_job_id") or bench_now or STATE.get("wf_running") or STATE.get("virtual_wf_running")
         )
@@ -4828,7 +4992,14 @@ def main_page() -> None:
         if _active:
             logs_panel.refresh()
             status_panel.refresh()
+        if not _active and (job_to_observe or STATE.get("_queue_boot_pending")):
+            status_panel.refresh()
         current_result = STATE.get("results")
+        completed_id = STATE.get("_result_job_id")
+        if completed_id and last_completed != completed_id:
+            last_completed = completed_id
+            if not STATE.get("results_recovered"):
+                ui.run_javascript(SOUND_JS)
         bench_finished = bench_was_running and not STATE.get("bench_was_running")
         if refresh_budget is not None and (current_result is not budget_result or bench_finished):
             budget_result = current_result
@@ -4948,8 +5119,7 @@ def _recover_completed_job(*, allow_finalize: bool = True) -> None:
         STATE["results"] = payload
         STATE["result_sources"] = _result_sources_from_job(last)
         STATE["results_recovered"] = f"job #{jid} · {when}"
-    if not taken:
-        _mark_job_finalized(jid)
+        STATE["_result_job_id"] = jid
     try:
         _load_cached_walk_forward()
     except Exception as exc:  # noqa: BLE001
@@ -5007,8 +5177,7 @@ def _restore_rebench_history() -> bool:
 # --------------------------------------------------------------------------- #
 # Bootstrap
 # --------------------------------------------------------------------------- #
-def _startup() -> None:
-    init_job_queue()
+def _startup(*, schedule=None, deferred_queue=False) -> None:
     # NU marcăm joburile RUNNING ca eșuate: worker.py e proces separat care
     # supraviețuiește repornirii UI-ului → un job viu trebuie re-atașat, nu omorât.
     _load_settings()
@@ -5017,9 +5186,33 @@ def _startup() -> None:
     try:
         # Verificarea e ieftină; recalcularea, dacă trebuie, după pornirea serverului.
         if _decision_target_mismatch():
-            _after_server_start(_reconcile_decision_target_logged)
+            (schedule or _after_server_start)(_reconcile_decision_target_logged)
     except Exception as exc:  # noqa: BLE001
         logger.warning("verificare țintă decizie la pornire: %s", exc)
+    if deferred_queue:
+        STATE["_queue_boot_pending"] = True
+        STATE["_queue_boot_start"] = time.monotonic()
+        threading.Thread(target=_restore_queue_when_ready, name="restore-job-queue", daemon=True).start()
+    else:
+        _restore_queue_on_startup()
+
+
+def _restore_queue_when_ready():
+    while True:
+        try:
+            _restore_queue_on_startup()
+        except Exception as exc:
+            STATE["_queue_boot_unavailable"] = True
+            STATE["results_dirty"] = True
+            logger.warning("Coada este temporar indisponibilă la pornire: %s", exc)
+            time.sleep(3)
+        else:
+            STATE.update(_queue_boot_pending=False, _queue_boot_unavailable=False, results_dirty=True)
+            return
+
+
+def _restore_queue_on_startup():
+    init_job_queue()
     try:
         _migrate_legacy_finalized_marker()
     except Exception as exc:  # noqa: BLE001
@@ -5044,22 +5237,15 @@ def _startup() -> None:
             active = get_active_job()
             if active and is_unstarted_job(active):
                 jid = int(active["id"])
-                # DOAR jobul orfan identificat, nu tot ce e în zbor: fără
-                # `job_ids` UPDATE-ul prindea orice PENDING/RUNNING, deci un job
-                # aflat în lucru era anulat împreună cu orfanul.
-                cancel_pending_running_jobs(
-                    f"Job orfan #{jid} anulat la pornirea UI (0%, fără log).",
-                    job_ids=[jid],
-                )
-                logger.warning(
-                    "[STARTUP] job #%s nepornit → anulat (nu reatașez).",
-                    jid,
-                )
-            elif active:
+                if cancel_unstarted_job(jid, f"Job orfan #{jid} anulat la pornirea UI."):
+                    logger.warning("[STARTUP] job #%s nepornit → anulat (nu reatașez).", jid)
+                active = get_active_job()
+            if active and not is_unstarted_job(active):
                 STATE["active_job_id"] = int(active["id"])
                 ensure_worker_running()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_job startup: %s", exc)
+        raise
     # Job terminat cât UI-ul era COMPLET jos (get_active_job vede doar PENDING/RUNNING)
     # → reafișăm rezultatul și istoricul deja salvat, fără calcul sau acțiuni post-finalizare.
     try:
@@ -5067,6 +5253,7 @@ def _startup() -> None:
             _recover_completed_job(allow_finalize=not fresh_start)
     except Exception as exc:  # noqa: BLE001
         logger.warning("recover completed job startup: %s", exc)
+        raise
 
 
 # Star-import skips _-prefixed names; functions look up globals in the defining
@@ -5095,7 +5282,13 @@ def _sync_ui_namespace() -> None:
 _sync_ui_namespace()
 
 app.add_middleware(LimitHistoryUploadBody)
-app.on_startup(_startup)
+async def _startup_in_background():
+    import asyncio
+    loop = asyncio.get_running_loop()
+    await asyncio.to_thread(_startup, deferred_queue=True, schedule=lambda fn: loop.call_soon_threadsafe(_after_server_start, fn))
+
+
+app.on_startup(_startup_in_background)
 
 # Copiii ProcessPoolExecutor (spawn, Windows) sunt `__mp_main__`. Nu porni
 # UI-ul acolo: validarea walk-forward poate porni procese din acest

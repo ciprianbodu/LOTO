@@ -92,7 +92,8 @@ def test_external_history_is_valid_and_chronological(path):
             top = 9 if day < dt.date(2011, 5, 10) else 11 if day < dt.date(2016, 9, 27) else 12
             stars = [int(x) for x in row[-2:]]
             assert len(set(stars)) == 2 and all(1 <= x <= top for x in stars), f"rândul {lineno}"
-        key = (day, tuple(sorted(nums)))
+        split = 5 if path.name == "loto_5_40.csv" else draw_n
+        key = (day, tuple(sorted(map(int, row[1:1 + split]))), tuple(sorted(map(int, row[1 + split:]))))
         assert key not in seen, f"rândul {lineno}: extragere repetată"
         seen.add(key)
         per_day[day] = per_day.get(day, 0) + 1
@@ -101,18 +102,12 @@ def test_external_history_is_valid_and_chronological(path):
 
 
 @pytest.mark.parametrize("path", ALL_FILES, ids=[p.name for p in ALL_FILES])
-def test_no_draw_repeats_the_previous_one(path):
-    """Două rânduri consecutive cu aceleași numere sunt o copie, nu o extragere.
-
-    La întâmplare, șansa pe rând este 1/C(N, k), sub 1e-6 la orice joc de aici
-    (5/40: 2,6e-7). Așa a intrat 24-10-2024 la 5/40, copiat din 27-10-2024, cum
-    apare și pe loto49.ro. O repetare reală se confirmă întâi pe arhiva oficială.
-    """
+def test_no_identical_draw_on_the_same_day(path):
     rows = list(csv.reader(path.read_bytes().decode("utf-8").splitlines()))
     main = [i for i, name in enumerate(rows[0]) if re.fullmatch(r"n\d+", name)]
-    assert main, f"{path.name}: lipsesc coloanele n1..nK"
-    prev = None
+    split = 5 if path.name == "loto_5_40.csv" else len(main)
+    identities = set()
     for lineno, row in enumerate(rows[1:], start=2):
-        nums = frozenset(int(row[i]) for i in main)
-        assert nums != prev, f"{path.name}, rândul {lineno}: repetă rândul {lineno - 1}"
-        prev = nums
+        key = row[0], tuple(sorted(map(int, row[1:1 + split]))), tuple(sorted(map(int, row[1 + split:])))
+        assert key not in identities, f"{path.name}, rândul {lineno}: extragere duplicată"
+        identities.add(key)

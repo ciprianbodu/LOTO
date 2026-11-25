@@ -16,7 +16,9 @@ from loto_enterprise.core.lotteries import RO, lottery_by_bench_key, normalize_c
 
 logger = logging.getLogger(__name__)
 
-CATALOG_VERSION = "compact-v2"
+CATALOG_VERSION = "compact-v3"
+EVALUATION_METHODS = ("bayes_runlength_shrink", "temporal_stacked_calibration")
+_ROMANIAN_METHODS = frozenset(("markov_lag2", *EVALUATION_METHODS))
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +123,23 @@ def _load_extra_methods() -> None:
         "Tranziții la două extrageri distanță",
     )
 
+    try:
+        from .methods_online import score_bayes_runlength_shrink, score_temporal_stacked_calibration
+    except Exception as exc:
+        METHOD_LOAD_ERRORS["methods_online"] = f"{type(exc).__name__}: {exc}"
+        logger.exception("Nu s-a putut încărca modulul de scorare methods_online.")
+        return
+    METHODS.update({
+        "bayes_runlength_shrink": (
+            score_bayes_runlength_shrink, "regime", True,
+            "Posterior bayesian pe lungimea regimului, cu prior puternic.",
+        ),
+        "temporal_stacked_calibration": (
+            score_temporal_stacked_calibration, "calibration", True,
+            "Probabilități de includere calibrate pe predicții din zile anterioare.",
+        ),
+    })
+
 
 _load_extra_methods()
 
@@ -137,8 +156,8 @@ def list_methods() -> list[str]:
 
 
 def method_applies_to_game(name: str, game_key: str | None) -> bool:
-    """Limit the reintroduced scorer to the Romanian Lottery's draw streams."""
-    if resolve_method_name(name) != "markov_lag2":
+    """Limit Romanian catalog extensions to the local draw streams."""
+    if resolve_method_name(name) not in _ROMANIAN_METHODS:
         return True
     lottery = lottery_by_bench_key(game_key)
     return lottery is not None and lottery.is_romanian
@@ -154,10 +173,10 @@ def catalog_version_for_game(game_key: str) -> str:
 def require_complete_catalog(*, country: str = RO) -> None:
     """Check that the scorers needed in the selected country have loaded."""
     romanian = normalize_country(country) == RO
-    required = BASELINES.keys() | ({"markov_lag2"} if romanian else set())
+    required = BASELINES.keys() | (_ROMANIAN_METHODS if romanian else set())
     errors = {
         module: error for module, error in METHOD_LOAD_ERRORS.items()
-        if romanian or module != "methods_markov"
+        if romanian or module not in ("methods_markov", "methods_online")
     }
     if not errors and required <= METHODS.keys() and sum(
         name.startswith("compact_") for name in METHODS

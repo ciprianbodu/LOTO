@@ -19,6 +19,7 @@ Numai geometrie: o schemă nu schimbă rata pool-ului (hipergeometrică), ci fel
 
 from __future__ import annotations
 
+from covering.lr_catalog_cache import catalog_cache
 import json
 import logging
 import re
@@ -135,7 +136,7 @@ def _parse(path: Path, game: str, code: int) -> LRScheme:
     return LRScheme(game, code, n, tuple(rows))
 
 
-@lru_cache(maxsize=4)
+@catalog_cache(maxsize=4)
 def _load(directory: str) -> tuple[LRScheme, ...]:
     out = []
     base = Path(directory)
@@ -160,7 +161,7 @@ def _load(directory: str) -> tuple[LRScheme, ...]:
     return tuple(sorted(out, key=lambda s: (s.game, s.n, s.size, s.code)))
 
 
-@lru_cache(maxsize=4)
+@catalog_cache(maxsize=4)
 def _manifest(directory: str) -> tuple[tuple[str, int, int], ...]:
     """(joc, cod, numere) din `index_oficial.json`, scris de import."""
     labels = {key: label for label, (key, *_rest) in _GAMES.items()}
@@ -466,7 +467,7 @@ def bound_thresholds(scheme: LRScheme) -> tuple[int, ...]:
     )
 
 
-@lru_cache(maxsize=4)
+@catalog_cache(maxsize=4)
 def _offline(directory: str) -> dict:
     """{(joc, cod): {t: intrarea}} din `optimal_offline.json`, scris de
     `scripts/analysis/prove_lr_optimality.py`. Lipsă sau stricat: {}."""
@@ -506,7 +507,7 @@ def _offline_entry(scheme: LRScheme, t: int) -> dict | None:
     return None
 
 
-@lru_cache(maxsize=64)
+@catalog_cache(maxsize=64)
 def optimal_thresholds(scheme: LRScheme) -> tuple[int, ...]:
     """Pragurile la care nicio așezare cu tot atâtea variante pe aceleași numere
     nu prinde mai des: șansa exactă a schemei atinge marginea superioară
@@ -605,7 +606,7 @@ def improve_with_lr_scheme(
     return (best if audit["applied"] else wheel), audit
 
 
-@lru_cache(maxsize=4)
+@catalog_cache(maxsize=4)
 def _app_same_size(directory: str) -> dict:
     """{(joc, cod): [(garanție, variante, {t: P}, {k: {t: fracție}})]} din
     `app_same_size.json`.

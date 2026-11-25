@@ -327,21 +327,16 @@ def test_update_all_refuses_an_invalid_site_row_after_the_last_stored_draw(
         ),
     ],
 )
-def test_update_all_refuses_a_new_draw_that_copies_the_previous_row(
+def test_update_all_preserves_a_distinct_draw_on_a_new_date(
     tmp_path, monkeypatch, capsys, rows, page, previous
 ):
-    """AGENTS.md §4.1: verifica_istoric refuză fișierul abia după scriere, iar
-    CSV-ul local (citit de UI, bench, WF) rămânea cu copia."""
     added, before, istoric = _run(
         tmp_path, monkeypatch, {"loto_5_40": rows}, {"loto_5_40": page}
     )
-    out = capsys.readouterr().out
-    assert added == 0, out
-    assert _unchanged(istoric, before)
-    assert (
-        "EROARE verificare: extragerea din 07-10-2026 repetă numerele rândului "
-        f"din {previous} (copie, nu extragere)" in out
-    )
+    assert added == 3 - len(rows), capsys.readouterr().out
+    body = (istoric / "loto_5_40.csv").read_text().splitlines()
+    assert body[-1].startswith("07-10-2026,")
+    assert len(body) == 4
 
 
 def test_update_all_reports_an_error_when_the_page_has_no_draws(

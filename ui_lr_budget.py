@@ -1,8 +1,10 @@
 """Compare Romanian reduced-scheme tickets within the selected budget."""
 
 import logging
+import hashlib
+import json
 from collections import Counter
-from datetime import date
+from datetime import date, datetime
 from math import comb
 
 from nicegui import run, ui
@@ -11,6 +13,7 @@ from covering.lr_budget import ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUD
 from loto_enterprise.core.lr_budget_forecast import playable_plan_order, recommend_playable_games
 from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
 from loto_enterprise.core.lotteries import games_for_country
+from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 from loto_enterprise.core.ro_text import count
 from ui_lr_portfolio import _percent, _price
 from ui_lr_rebench import lr_rebench_decisions
@@ -30,6 +33,8 @@ def _columns(fields):
 
 def _bench_method(selection):
     method = selection["method"]
+    if selection.get("source") == ONLINE_TICKET_EXPERTS:
+        return "Frecvență · Urna 2 evaluată separat"
     if selection.get("source") == "lr_rebench":
         detail = " · metodă de rezervă" if selection.get("fallback") else ""
         return f"{method} · din Re-Bench pentru această selecție{detail}"
@@ -109,9 +114,20 @@ def _ticket_details(plan, *, expanded=False):
             date = f" · ultima extragere {forecast['date']}" if forecast["date"] else ""
             history = count(forecast["rows"], "extrageri folosite", "extragere folosită")
             ui.label(f"{forecast['filename']}{date}" + (f" · {history}" if forecast["rows"] else "")).classes("text-caption")
+            if mismatch := forecast.get("profile_reference_mismatch"):
+                urns = ", ".join("urna a doua Joker" if key == "joker_urna2" else "urna principală" for key in mismatch)
+                ui.label(
+                    f"Re-Bench invers folosea altă referință directă pentru {urns}. "
+                    "Metodele au fost recalculate pe complementul pool-urilor directe actuale."
+                ).classes("text-caption text-warning")
             selection = forecast["selection"]
             if selection.get("method"):
-                if selection.get("source") in ("lr_rebench", "lr_rebench_reference") or not forecast["dynamic"]:
+                if selection.get("source") == ONLINE_TICKET_EXPERTS:
+                    days = count(selection["training_days"], "zile evaluate", "zi evaluată")
+                    evidence = f"Fixed Share pe bilete · {selection['method']} · {days}"
+                elif mismatch:
+                    evidence = f"{selection['method']} · recalculată pe complementul actual"
+                elif selection.get("source") in ("lr_rebench", "lr_rebench_reference") or not forecast["dynamic"]:
                     evidence = _bench_method(selection)
                 elif selection.get("reason") == "insufficient_history":
                     evidence = f"{selection['method']} · istoric prea scurt pentru selecția walk-forward"
@@ -130,11 +146,12 @@ def _ticket_details(plan, *, expanded=False):
                         evidence += " · metodă de rezervă"
                 method_label = "Metoda pool-ului invers" if excluded is not None else "Metoda pool-ului"
                 ui.label(f"{method_label} · {evidence}").classes("text-caption")
-                if selection.get("source") not in ("lr_rebench", "lr_rebench_reference"):
+                if selection.get("source") not in ("lr_rebench", "lr_rebench_reference", ONLINE_TICKET_EXPERTS):
                     ui.label("Bilet calculat fără un rezultat Re-Bench LR pentru această selecție și acest istoric.").classes("text-caption")
             bonus = forecast["joker_selection"] or {}
             if bonus.get("method"):
-                ui.label(f"Urna 2 Joker · {_bench_method(bonus)}").classes("text-caption")
+                bonus_method = f"{bonus['method']} · recalculată" if mismatch else _bench_method(bonus)
+                ui.label(f"Urna 2 Joker · {bonus_method}").classes("text-caption")
 
 
 def _recommended_codes(tickets):
@@ -204,13 +221,14 @@ def _render_recommendations(records, budget_lei, objective):
             "variants": plan["variants"], "price": _price(plan["price_bani"]) if playable else "—",
             "chance": _percent(plan["attained"], plan["denominator"]) if playable else "—",
             "bound": "Maxim demonstrat" if playable and plan["optimal"] else (
-                _percent(upper, plan["denominator"]) if playable and upper is not None else "—"
+                ("Cea mai bună soluție găsită" + (f" · limită {_percent(upper, plan['denominator'])}"
+                                                if upper is not None else "")) if playable else "—"
             ),
         })
     if len(records) > 1:
         _responsive_table(fields, rows, row_key="game", label="Compararea jocurilor în buget")
     elif rows[0]["bound"] != "—":
-        ui.label(f"Limita superioară pentru acest buget · {rows[0]['bound']}").classes("text-caption")
+        ui.label(f"Demonstrația pentru acest buget · {rows[0]['bound']}").classes("text-caption")
 
 
 def _range_label(limits):
@@ -346,15 +364,54 @@ def _compare_games(amount, goal, games, inputs, inverse):
     return reports
 
 
-def _generate_selection(amount, goal, selections, inputs, inverse):
+def _budget_input_snapshot(forecast_inputs, game):
+    import pandas as pd
+    from covering import lr_schemes
+    from covering.lr_catalog_cache import refresh_catalog
+    from loto_enterprise.benchmark.lr_hypotheses import _methods
+    from loto_enterprise.benchmark.lr_provenance import method_formulas
+
+    inputs = forecast_inputs(game)
+    digest = hashlib.sha256(refresh_catalog(lr_schemes.LR_DIR).encode())
+    methods = {name for lot in games_for_country("RO") if not game or game == lot.game_id
+               for urn in lot.bench_keys for name in _methods(urn)}
+    digest.update(method_formulas(methods).encode())
+    for key, (name, frame) in sorted((inputs.get("histories") or {}).items()):
+        digest.update(json.dumps([key, name, list(frame.columns)], default=str).encode())
+        digest.update(pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes())
+    settings = {key: value for key, value in inputs.items() if key != "histories"}
+    digest.update(json.dumps(settings, sort_keys=True, default=str).encode())
+    return digest.hexdigest(), inputs
+
+
+def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_policy=None):
     decisions = lr_rebench_decisions()
     plans = []
     for game, limits in selections.items():
         plans.extend(recommend_playable_games(
             amount, goal, game, inverse=inverse, number_range=limits,
             lr_rebench_entries=decisions.get(game, ()), **inputs,
+            **({"selection_policy": selection_policy} if selection_policy else {}),
         ))
     return sorted(plans, key=playable_plan_order)
+
+
+def _register_live_plans(plans, inputs):
+    from loto_enterprise.core.lr_prospective import register_lr_recommendations
+    from loto_enterprise.core.history import history_dates
+
+    settings = {key: inputs[key] for key in ("lookback", "hit_target", "joker_size") if key in inputs}
+    known = {}
+    sources = inputs.get("histories") or {}
+    for plan in plans:
+        game = plan["game"]
+        if not plan.get("forecast") or game not in sources:
+            continue
+        _, frame = sources[game]
+        dates = history_dates(frame)
+        if dates is not None and len(dates) and dates.notna().any():
+            known[game] = dates.max().date()
+    return register_lr_recommendations(plans, settings=settings, known_days=known)
 
 
 def lr_base_choice(manual_choices, game, inverse, restricted):
@@ -389,7 +446,7 @@ def lr_budget_panel(
     on_budget_plan=None, initial_objective=FOUR_PLUS, on_objective_change=None,
     initial_game="all", on_game_change=None,
     initial_inverse=False, initial_restricted=False, on_method_change=None,
-    base_choices=None, on_base_change=None,
+    base_choices=None, on_base_change=None, initial_fixed_share=False, on_fixed_share_change=None,
 ):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
@@ -439,6 +496,12 @@ def lr_budget_panel(
             ).classes("max-w-full").tooltip(
                 "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
             )
+            selection_policy = ui.switch("Fixed Share pe bilete", value=initial_fixed_share is True).props(
+                'aria-label="Fixed Share pe bilete"'
+            ).tooltip(
+                "Alege metoda după rezultatele biletelor complete din ultimele 104 de zile cu extrageri. "
+                "Evaluările de până acum nu au demonstrat un avantaj predictiv."
+            )
         ui.label("Pool-ul principal permite perechi consecutive. Dacă un număr ar forma o serie de trei, "
                  "generatorul trece la următorul din clasament.").classes("text-caption")
 
@@ -473,12 +536,17 @@ def lr_budget_panel(
         manual_choices = {} if base_choices is None else base_choices
         confirm_button = None
         waiting_for_choice = False
+        registration = None
 
         def selected_budget():
             return int(slider.value), objective.value, None if game.value == "all" else game.value
 
         def selected_method():
             return bool(inverse.value), bool(range_filter.value)
+
+        def registration_settings():
+            return (selected_budget(), selected_method(), bool(selection_policy.value),
+                    tuple(sorted(manual_choices.items())), tuple(control.value for control in scoring_controls))
 
         def clear_confirmation():
             nonlocal confirm_button
@@ -498,7 +566,7 @@ def lr_budget_panel(
             clear_confirmation()
             with actions:
                 confirm_button = ui.button(
-                    "Generează cu baza aleasă", icon="confirmation_number", on_click=calculate,
+                    "Generează cu baza aleasă", icon="confirmation_number", on_click=confirm_generation,
                 ).props("no-caps").classes("w-full sm:w-auto")
             show_status(f"Confirmă baza aleasă lângă selectorul {game_options[game_id]} pentru a actualiza biletele.")
 
@@ -509,6 +577,7 @@ def lr_budget_panel(
 
         async def calculate():
             nonlocal revision, running, applied_budget, cached_analysis, displayed, waiting_for_choice
+            nonlocal registration
             revision += 1
             waiting_for_choice = False
             clear_confirmation()
@@ -528,10 +597,13 @@ def lr_budget_panel(
                     budget_settings, method_settings = selected_budget(), selected_method()
                     amount, goal, game_id = budget_settings
                     inverse_mode, forced = method_settings
+                    fixed_share = bool(selection_policy.value)
+                    settings_at_start = registration_settings()
 
                     def obsolete():
                         return (current != revision or not panel.value or output.is_deleted
-                                or selected_budget() != budget_settings or selected_method() != method_settings)
+                                or selected_budget() != budget_settings or selected_method() != method_settings
+                                or bool(selection_policy.value) != fixed_share)
 
                     try:
                         if on_budget_plan is not None and applied_budget != budget_settings:
@@ -542,10 +614,12 @@ def lr_budget_panel(
                                 raise RuntimeError("Planificarea bugetului a fost întreruptă.")
                             on_budget_plan(templates)
                             applied_budget = budget_settings
-                        analysis_key = (budget_settings, inverse_mode)
+                        fingerprint, inputs = await run.io_bound(_budget_input_snapshot, forecast_inputs, game_id)
+                        if obsolete():
+                            continue
+                        analysis_key = (budget_settings, inverse_mode, fingerprint)
                         if cached_analysis is None or cached_analysis[0] != analysis_key:
                             comparison.clear()
-                            inputs = forecast_inputs(game_id)
                             games = [game_id] if game_id else [key for key in game_options if key != "all"]
                             show_status(f"Se compară bazele de selecție pentru {amount} lei…")
                             reports = await run.io_bound(_compare_games, amount, goal, games, inputs, inverse_mode)
@@ -578,7 +652,8 @@ def lr_budget_panel(
                                 limits = None
                             selections[gid] = limits
                         show_status(f"Se generează biletele pentru {amount} lei…")
-                        plans = await run.io_bound(_generate_selection, amount, goal, selections, inputs, inverse_mode)
+                        options = {"selection_policy": ONLINE_TICKET_EXPERTS} if fixed_share else {}
+                        plans = await run.io_bound(_generate_selection, amount, goal, selections, inputs, inverse_mode, **options)
                         if plans is None:
                             raise RuntimeError("Generarea biletelor a fost întreruptă.")
                     except Exception:
@@ -588,8 +663,32 @@ def lr_budget_panel(
                         plans = None
                     if obsolete():
                         continue
+                    registered, registration_errors = [], {}
+                    if registration is not None:
+                        requested = registration
+                        registration = None
+                        if requested == settings_at_start == registration_settings() and plans is not None:
+                            try:
+                                stored = await run.io_bound(_register_live_plans, plans, inputs)
+                                if stored is None:
+                                    raise RuntimeError("Înregistrarea a fost întreruptă.")
+                                registered, registration_errors = stored
+                            except Exception:
+                                logging.getLogger(__name__).exception("Înregistrare prospectivă LR")
+                                registration_errors = {"": "Registrul local nu a putut salva generarea."}
+                    if obsolete():
+                        continue
                     output.clear()
                     with output:
+                        for entry in registered:
+                            created = datetime.fromisoformat(entry["captured_at"]).strftime("%d.%m.%Y %H:%M %z")
+                            target = date.fromisoformat(entry["target_day"]).strftime("%d.%m.%Y")
+                            ui.label(
+                                f"{game_options[entry['game']]} · înregistrat la {created} pentru {target}"
+                            ).props('role="status"').classes("text-caption")
+                        for game_key, error in registration_errors.items():
+                            label = game_options.get(game_key, "Registru prospectiv")
+                            ui.label(f"{label} · {error}").props('role="alert"').classes("text-warning")
                         if plans is None:
                             ui.label("Calculul recomandării a eșuat. Poți încerca din nou cu butonul verde.").props(
                                 'role="alert"'
@@ -613,6 +712,16 @@ def lr_budget_panel(
                 return
             await refresh()
 
+        async def generate_and_register():
+            nonlocal registration
+            registration = registration_settings()
+            await show_recommendation()
+
+        async def confirm_generation():
+            nonlocal registration
+            registration = registration_settings()
+            await calculate()
+
         def change_method(recalculate):
             if on_method_change is not None:
                 on_method_change(*selected_method())
@@ -624,9 +733,10 @@ def lr_budget_panel(
             return refresh()
 
         panel.on_value_change(refresh)
-        generate.on_click(show_recommendation)
+        generate.on_click(generate_and_register)
         inverse.on_value_change(lambda: change_method(refresh))
         range_filter.on_value_change(lambda: change_method(calculate))
+        selection_policy.on_value_change(lambda: change_selection(on_fixed_share_change, selection_policy))
         slider.on_value_change(show_recommendation)
         game.on_value_change(lambda: change_selection(on_game_change, game))
         objective.on_value_change(lambda: change_selection(on_objective_change, objective))

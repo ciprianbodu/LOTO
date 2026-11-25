@@ -245,9 +245,11 @@ class LotoEngine(PipelineMixin, ScoringMixin):
             # fișier dădeau trei hash-uri diferite (verificat), exact
             # nedeterminismul pe care comentariul de dinainte pretindea că l-a
             # rezolvat. `hash_pandas_object` hash-uiește valorile.
-            self.audit["hash"] = hashlib.sha256(
+            history_digest = hashlib.sha256(
                 pd.util.hash_pandas_object(self.data, index=True).values.tobytes()
-            ).hexdigest()[:16]
+            ).hexdigest()
+            self.audit["hash"] = history_digest[:16]
+            self.audit["history_sha256"] = history_digest
             # Un CSV care se PARSEAZĂ nu înseamnă date UTILIZABILE: pandas citește
             # fericit un fișier de text arbitrar ca DataFrame cu 1 rând, iar
             # `load_data` întorcea True. Pipeline-ul rula apoi până la capăt și

@@ -210,17 +210,17 @@ def _have():
     ]
 
 
-def test_a_foreign_source_repeating_the_last_draw_writes_nothing():
+def test_foreign_history_preserves_new_dates_and_rejects_exact_duplicates():
     # Înainte: copia se scria, iar PushHistory refuza apoi tot fișierul.
     lot = GAMES_BY_ID["at_lotto"]
     have = _have()
     copy = ue.Draw(dt.date(2026, 10, 8), (12, 11, 10, 9, 8, 7))
-    with pytest.raises(ue.SourceError, match="copie"):
-        ue.plan_update(lot, have, [*have, copy], TODAY)
+    assert ue.plan_update(lot, have, [*have, copy], TODAY) == ([copy], 2)
+    with pytest.raises(ue.SourceError, match="repeta extragerea"):
+        ue.plan_update(lot, have, [*have, copy, copy], TODAY)
     new = ue.Draw(dt.date(2026, 10, 8), (13, 14, 15, 16, 17, 18))
     again = ue.Draw(dt.date(2026, 10, 11), (18, 17, 16, 15, 14, 13))
-    with pytest.raises(ue.SourceError, match="copie"):
-        ue.plan_update(lot, have, [*have, new, again], TODAY)
+    assert ue.plan_update(lot, have, [*have, new, again], TODAY) == ([new, again], 2)
     assert ue.plan_update(lot, have, [*have, new], TODAY) == ([new], 2)
 
 

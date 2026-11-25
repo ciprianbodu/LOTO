@@ -48,6 +48,8 @@ def test_versioned_histories_pass(lottery):
         (STARS, "03-10-2026,50,1,13,22,30,1,2\n"),
         # Aceleasi numere ca un rand mai vechi, dar nu ca cel anterior.
         (L649, "05-10-2026,1,2,3,4,5,6\n"),
+        (JOKER, "02-10-2026,5,4,3,2,1,7\n"),
+        (L649, "05-10-2026,12,11,10,9,8,7\n"),
         # A doua extragere a aceleiasi zile.
         (L649, "04-10-2026,13,14,15,16,17,18\n"),
     ],
@@ -77,8 +79,8 @@ def test_appended_valid_rows_pass(tmp_path, name, row):
         (JOKER, "05-10-2026,1,2,3,4,5,21\n", "randul 3: numere invalide pentru joker"),
         (STARS, "03-10-2026,1,2,3,4,5,7,7\n", "randul 3: numere invalide pentru 5/50"),
         # §4.1: aceleasi numere principale ca randul anterior, in orice ordine.
-        (L649, "05-10-2026,12,11,10,9,8,7\n", "randul 4 repeta numerele randului 3"),
-        (JOKER, "05-10-2026,5,4,3,2,1,7\n", "randul 3 repeta numerele randului 2"),
+        (L649, "04-10-2026,12,11,10,9,8,7\n", "randul 4 repeta numerele randului 3"),
+        (JOKER, "02-10-2026,5,4,3,2,1,20\n", "randul 3 repeta numerele randului 2"),
         # Anul tastat gresit: ar deveni ultima extragere pe toate statiile.
         (L649, "27-09-2062,6,7,18,43,40,22\n", "randul 4: data e in viitor"),
         # strptime accepta ziua fara zero; actualizatoarele compara data scrisa.

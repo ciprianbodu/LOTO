@@ -153,6 +153,29 @@ def test_sorted_540_history_gets_original_draw_order(tmp_path):
     assert found.numbers == (26, 39, 40, 18, 1, 2)
 
 
+def test_sorted_540_history_declines_a_set_with_two_official_sixth_balls(tmp_path):
+    html = source("540_2026_10.html")
+    supplement = (
+        block(html)
+        .replace("/bile/40.png", "/bile/placeholder.png")
+        .replace("/bile/2.png", "/bile/40.png")
+        .replace("/bile/placeholder.png", "/bile/2.png")
+    )
+    cache = PrizeCache(tmp_path / "prizes.db", fetcher=lambda *a: html + supplement)
+    assert cache.ensure_month("5/40", 2026, 10).draws_count == 2
+    day = "29.10.2026"
+    known_first = (26, 39, 40, 18, 1, 2)
+    known_other = (26, 39, 2, 18, 1, 40)
+    sorted_history = [1, 2, 18, 26, 39, 40]
+    missing_sixth = (39, 18, 2, 40, 1, 26)
+    results = cache.get_draws("5/40", [(day, draw, None) for draw in (
+        sorted_history, known_first, known_other, missing_sixth,
+    )])
+    assert results[0] is None and results[3] is None
+    assert results[1].numbers == known_first
+    assert results[2].numbers == known_other
+
+
 def test_two_draws_on_same_date_are_matched_by_numbers(tmp_path):
     # Synthetic second draw: tests identity, not an asserted real-world payout.
     html = source()

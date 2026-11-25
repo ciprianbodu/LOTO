@@ -191,6 +191,17 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
             )
             """
         )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS job_finalization_actions (
+                job_id INTEGER NOT NULL, action TEXT NOT NULL, state TEXT NOT NULL,
+                started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TIMESTAMP, detail TEXT, PRIMARY KEY(job_id, action)
+            )
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS delete_finalization_actions AFTER DELETE ON jobs
+            BEGIN DELETE FROM job_finalization_actions WHERE job_id = OLD.id; END
+        """)
         # Migrare additivă: completed_at (joburile mai vechi NU o au). Folosită de UI
         # ca să știe DACĂ un job COMPLETED e recent (recuperare după repornire UI →
         # mail/shutdown DOAR pentru finalizări proaspete, fără surprize la joburi vechi).
@@ -251,13 +262,8 @@ def get_active_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
 
 
 def is_unstarted_job(job: dict | None) -> bool:
-    """PENDING/RUNNING cu ≤1% și fără log = worker-ul NU l-a preluat.
-
-    Ecranul «⏳ Job în rulare (#1) — 0% / se inițializează...» e exact starea
-    asta. La pornirea UI-ului e leftover, nu click pe Generează. Un job viu
-    are log_tail («Job preluat de worker.») și progress ≥ 2.
-    """
-    if not job:
+    """True only for a queued row without a claim or any worker progress."""
+    if not job or job.get("worker_token") is not None:
         return False
     status = str(job.get("status") or "")
     if status not in {JOB_PENDING, JOB_RUNNING}:
@@ -416,17 +422,57 @@ def get_latest_completed_job(db_path: str = DB_PATH) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def mark_job_finalized(job_id: int, db_path: str = DB_PATH) -> bool:
-    """Marchează jobul ca preluat de UI. Prima marcare rămâne; False = rând absent."""
+def claim_job_finalization_action(job_id: int, action: str, db_path: str = DB_PATH) -> bool:
+    """Claim an external effect once across all UI processes before attempting it."""
+    if action not in ("smtp", "shutdown"):
+        raise ValueError("Acțiune de finalizare necunoscută.")
     init_job_queue(db_path)
     with _conn(db_path) as conn:
-        cur = conn.execute(
-            "UPDATE jobs SET ui_finalized_at = COALESCE(ui_finalized_at, CURRENT_TIMESTAMP) "
-            "WHERE id = ?",
-            (int(job_id),),
+        result = conn.execute(
+            "INSERT OR IGNORE INTO job_finalization_actions(job_id, action, state) "
+            "SELECT id, ?, 'claimed' FROM jobs WHERE id=? AND status=? AND ui_finalized_at IS NULL",
+            (action, int(job_id), JOB_COMPLETED),
         )
-        conn.commit()
-        return cur.rowcount > 0
+        return result.rowcount == 1
+
+
+def finish_job_finalization_action(job_id: int, action: str, state: str, detail=None, db_path: str = DB_PATH) -> bool:
+    if state not in ("done", "uncertain", "failed"):
+        raise ValueError("Stare de finalizare necunoscută.")
+    init_job_queue(db_path)
+    with _conn(db_path) as conn:
+        result = conn.execute(
+            "UPDATE job_finalization_actions SET state=?, detail=?, finished_at=CURRENT_TIMESTAMP "
+            "WHERE job_id=? AND action=? AND state='claimed'",
+            (state, str(detail)[:1000] if detail else None, int(job_id), action),
+        )
+        return result.rowcount == 1
+
+
+def get_job_finalization_actions(job_id: int, db_path: str = DB_PATH) -> dict[str, str]:
+    init_job_queue(db_path)
+    with _conn(db_path) as conn:
+        return dict(conn.execute("SELECT action, state FROM job_finalization_actions WHERE job_id=?", (int(job_id),)))
+
+
+def get_job_finalization_details(job_id: int, db_path: str = DB_PATH) -> dict[str, str]:
+    """Diagnostics recorded by the owner of each claimed external action."""
+    init_job_queue(db_path)
+    with _conn(db_path) as conn:
+        return dict(conn.execute("SELECT action, detail FROM job_finalization_actions WHERE job_id=? AND detail IS NOT NULL",
+                                 (int(job_id),)))
+
+
+def mark_job_finalized(job_id: int, db_path: str = DB_PATH) -> bool:
+    """True if this UI placed the first durable finalization marker."""
+    init_job_queue(db_path)
+    with _conn(db_path) as conn:
+        result = conn.execute(
+            "UPDATE jobs SET ui_finalized_at=CURRENT_TIMESTAMP "
+            "WHERE id=? AND status=? AND ui_finalized_at IS NULL",
+            (int(job_id), JOB_COMPLETED),
+        )
+        return result.rowcount == 1
 
 
 def fail_job(
@@ -542,6 +588,8 @@ def cancel_pending_running_jobs(
     reason: str = "Oprit de utilizator",
     db_path: str = DB_PATH,
     job_ids: "list[int] | tuple[int, ...] | None" = None,
+    *,
+    require_unstarted: bool = False,
 ) -> int:
     """Soft cancel: marchează joburile PENDING/RUNNING drept CANCELLED (fără DELETE).
 
@@ -563,6 +611,13 @@ def cancel_pending_running_jobs(
             return 0
         where += f" AND id IN ({','.join('?' * len(ids))})"
         params += ids
+    if require_unstarted:
+        if job_ids is None:
+            raise ValueError("Anularea unui job nepornit necesită un ID explicit.")
+        where += (
+            " AND worker_token IS NULL AND CAST(progress_pct AS INTEGER) <= 1"
+            " AND trim(log_tail, ' ' || char(9) || char(10) || char(13)) = ''"
+        )
     with _conn(db_path) as conn:
         cur = conn.execute(
             f"""
@@ -574,6 +629,11 @@ def cancel_pending_running_jobs(
         )
         conn.commit()
         return cur.rowcount
+
+
+def cancel_unstarted_job(job_id: int, reason: str, db_path: str = DB_PATH) -> bool:
+    """Cancel the exact row only if still unclaimed and without progress."""
+    return bool(cancel_pending_running_jobs(reason, db_path, [job_id], require_unstarted=True))
 
 
 def is_job_cancelled(job_id: int, db_path: str = DB_PATH) -> bool:

@@ -1,0 +1,1249 @@
+{
+  "protocol": "Paired retrospective comparison at the same budget and paid price per game. Portfolios see only previous days. The live Fixed Share policy uses up to 104 prior dates with complete outcomes. The random scorer is a single reproducible comparator. These diagnostics are exploratory and cannot establish predictive advantage.",
+  "paired_inference": {
+    "date_unit": "All draws on the same date form one paired block.",
+    "p_raw": "Two-sided exact sign-flip under symmetric paired date-level differences.",
+    "p_holm": "Holm family-wide adjustment over applicable game/method/threshold comparisons.",
+    "comparisons": 42,
+    "ci": "Percentile date-cluster bootstrap for candidate minus comparator hit rates in percentage points.",
+    "ci_draws": 10000,
+    "ci_seed": 20261125,
+    "rare": "Fewer than 5 dates with different hit totals. Degenerate empirical intervals are possible."
+  },
+  "method_revisions": {
+    "bayes_runlength_shrink": "bayes-runlength-v1",
+    "temporal_stacked_calibration": "temporal-stack-v1"
+  },
+  "results": [
+    {
+      "game": "6/49",
+      "history_sha256": "3e7c437839ce97b0fa25a57b8254037ba97df9e3073619ee30b81a84f0a4f19e",
+      "training_draws": 2508,
+      "first_date": "2025-11-16",
+      "last_date": "2026-11-22",
+      "days": 104,
+      "draws": 108,
+      "budget_lei": 100,
+      "pool_size": 9,
+      "paid_variant_hits": {
+        "4+": {
+          "frequency": 1,
+          "compact_transition_prior": 2,
+          "markov_lag2": 3,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 2,
+          "bayes_dirichlet_forget": 2,
+          "ridge_pooled_feats": 4,
+          "hedge_experts_mixture": 0,
+          "random": 2,
+          "online_ticket_experts": 1
+        },
+        "5+": {
+          "frequency": 1,
+          "compact_transition_prior": 0,
+          "markov_lag2": 0,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 1,
+          "ridge_pooled_feats": 0,
+          "hedge_experts_mixture": 0,
+          "random": 0,
+          "online_ticket_experts": 0
+        },
+        "6+": {
+          "frequency": 0,
+          "compact_transition_prior": 0,
+          "markov_lag2": 0,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 0,
+          "ridge_pooled_feats": 0,
+          "hedge_experts_mixture": 0,
+          "random": 0,
+          "online_ticket_experts": 0
+        }
+      },
+      "mean_paid_bani": {
+        "frequency": 9650.0,
+        "compact_transition_prior": 9650.0,
+        "markov_lag2": 9650.0,
+        "bayes_runlength_shrink": 9650.0,
+        "temporal_stacked_calibration": 9650.0,
+        "bayes_dirichlet_forget": 9650.0,
+        "ridge_pooled_feats": 9650.0,
+        "hedge_experts_mixture": 9650.0,
+        "random": 9650.0,
+        "online_ticket_experts": 9650.0
+      },
+      "paired": {
+        "bayes_runlength_shrink/bayes_dirichlet_forget": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 2,
+            "wins": 0,
+            "losses": 2,
+            "ties": 106,
+            "net": -2,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 2,
+            "candidate_minus_baseline_percentage_points": -1.8518518518518516,
+            "date_bootstrap_ci95_pp": [
+              -4.672897196261682,
+              0.0
+            ],
+            "p_raw": 0.5,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.830862533692722,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        },
+        "temporal_stacked_calibration/ridge_pooled_feats": {
+          "4+": {
+            "candidate_hits": 2,
+            "baseline_hits": 4,
+            "wins": 1,
+            "losses": 3,
+            "ties": 104,
+            "net": -2,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 4,
+            "candidate_minus_baseline_percentage_points": -1.8518518518518516,
+            "date_bootstrap_ci95_pp": [
+              -5.660377358490566,
+              1.834862385321101
+            ],
+            "p_raw": 0.625,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        },
+        "online_ticket_experts/hedge_experts_mixture": {
+          "4+": {
+            "candidate_hits": 1,
+            "baseline_hits": 0,
+            "wins": 1,
+            "losses": 0,
+            "ties": 107,
+            "net": 1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": 0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              2.830188679245283
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        },
+        "bayes_runlength_shrink/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        },
+        "temporal_stacked_calibration/frequency": {
+          "4+": {
+            "candidate_hits": 2,
+            "baseline_hits": 1,
+            "wins": 2,
+            "losses": 1,
+            "ties": 105,
+            "net": 1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 3,
+            "candidate_minus_baseline_percentage_points": 0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -1.8867924528301887,
+              3.8461538461538463
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        },
+        "online_ticket_experts/frequency": {
+          "4+": {
+            "candidate_hits": 1,
+            "baseline_hits": 1,
+            "wins": 1,
+            "losses": 1,
+            "ties": 106,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 2,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              -2.7777777777777777,
+              2.7777777777777777
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          }
+        }
+      },
+      "inclusion_losses": {
+        "uniform": {
+          "brier": 0.10745522698875466,
+          "log_loss": 0.37177617994345274
+        },
+        "bayes_runlength_shrink": {
+          "brier": 0.10756716395427326,
+          "log_loss": 0.3722879942414346
+        },
+        "temporal_stacked_calibration": {
+          "brier": 0.10737810632553547,
+          "log_loss": 0.3714089664699884
+        }
+      },
+      "joker_urna2_inclusion_losses": {},
+      "fixed_share_days": {
+        "frequency": 9,
+        "temporal_stacked_calibration": 3,
+        "markov_lag2": 51,
+        "compact_transition_prior": 41
+      },
+      "fixed_share_version": "lr-ticket-fixed-share-v1",
+      "fixed_share_lookback_days": 104
+    },
+    {
+      "game": "5/40",
+      "history_sha256": "2a176c14010a477ab2ce7fac079ccb7b2ea4246a664424966d5f896a13fa13b0",
+      "training_draws": 2390,
+      "first_date": "2025-11-16",
+      "last_date": "2026-11-22",
+      "days": 104,
+      "draws": 108,
+      "budget_lei": 100,
+      "pool_size": 14,
+      "paid_variant_hits": {
+        "4+": {
+          "frequency": 1,
+          "compact_transition_prior": 0,
+          "markov_lag2": 2,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 0,
+          "ridge_pooled_feats": 1,
+          "hedge_experts_mixture": 1,
+          "random": 0,
+          "online_ticket_experts": 1
+        },
+        "5+": {
+          "frequency": 0,
+          "compact_transition_prior": 0,
+          "markov_lag2": 0,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 0,
+          "ridge_pooled_feats": 0,
+          "hedge_experts_mixture": 0,
+          "random": 0,
+          "online_ticket_experts": 0
+        },
+        "6+": {
+          "frequency": null,
+          "compact_transition_prior": null,
+          "markov_lag2": null,
+          "bayes_runlength_shrink": null,
+          "temporal_stacked_calibration": null,
+          "bayes_dirichlet_forget": null,
+          "ridge_pooled_feats": null,
+          "hedge_experts_mixture": null,
+          "random": null,
+          "online_ticket_experts": null
+        }
+      },
+      "mean_paid_bani": {
+        "frequency": 9050.0,
+        "compact_transition_prior": 9050.0,
+        "markov_lag2": 9050.0,
+        "bayes_runlength_shrink": 9050.0,
+        "temporal_stacked_calibration": 9050.0,
+        "bayes_dirichlet_forget": 9050.0,
+        "ridge_pooled_feats": 9050.0,
+        "hedge_experts_mixture": 9050.0,
+        "random": 9050.0,
+        "online_ticket_experts": 9050.0
+      },
+      "paired": {
+        "bayes_runlength_shrink/bayes_dirichlet_forget": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "temporal_stacked_calibration/ridge_pooled_feats": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.830188679245283,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "online_ticket_experts/hedge_experts_mixture": {
+          "4+": {
+            "candidate_hits": 1,
+            "baseline_hits": 1,
+            "wins": 1,
+            "losses": 1,
+            "ties": 106,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 2,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              -2.7777777777777777,
+              2.7777777777777777
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "bayes_runlength_shrink/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "temporal_stacked_calibration/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.857142857142857,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "online_ticket_experts/frequency": {
+          "4+": {
+            "candidate_hits": 1,
+            "baseline_hits": 1,
+            "wins": 1,
+            "losses": 1,
+            "ties": 106,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 2,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              -2.7777777777777777,
+              2.7777777777777777
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        }
+      },
+      "inclusion_losses": {
+        "uniform": {
+          "brier": 0.12749999999999995,
+          "log_loss": 0.42270908780599104
+        },
+        "bayes_runlength_shrink": {
+          "brier": 0.12752601081884485,
+          "log_loss": 0.4228131359656925
+        },
+        "temporal_stacked_calibration": {
+          "brier": 0.12767283670820806,
+          "log_loss": 0.4233818521436692
+        }
+      },
+      "joker_urna2_inclusion_losses": {},
+      "fixed_share_days": {
+        "compact_transition_prior": 21,
+        "markov_lag2": 81,
+        "frequency": 2
+      },
+      "fixed_share_version": "lr-ticket-fixed-share-v1",
+      "fixed_share_lookback_days": 104
+    },
+    {
+      "game": "joker",
+      "history_sha256": "a422274de861416f371d36407feb4493ec1fc158d0b7429ba0322de8a7f5d4ad",
+      "training_draws": 2102,
+      "first_date": "2025-11-16",
+      "last_date": "2026-11-22",
+      "days": 104,
+      "draws": 108,
+      "budget_lei": 100,
+      "pool_size": 10,
+      "paid_variant_hits": {
+        "4+": {
+          "frequency": 0,
+          "compact_transition_prior": 1,
+          "markov_lag2": 0,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 0,
+          "ridge_pooled_feats": 1,
+          "hedge_experts_mixture": 0,
+          "random": 1,
+          "online_ticket_experts": 0
+        },
+        "5+": {
+          "frequency": 0,
+          "compact_transition_prior": 0,
+          "markov_lag2": 0,
+          "bayes_runlength_shrink": 0,
+          "temporal_stacked_calibration": 0,
+          "bayes_dirichlet_forget": 0,
+          "ridge_pooled_feats": 0,
+          "hedge_experts_mixture": 0,
+          "random": 0,
+          "online_ticket_experts": 0
+        },
+        "6+": {
+          "frequency": null,
+          "compact_transition_prior": null,
+          "markov_lag2": null,
+          "bayes_runlength_shrink": null,
+          "temporal_stacked_calibration": null,
+          "bayes_dirichlet_forget": null,
+          "ridge_pooled_feats": null,
+          "hedge_experts_mixture": null,
+          "random": null,
+          "online_ticket_experts": null
+        }
+      },
+      "mean_paid_bani": {
+        "frequency": 9850.0,
+        "compact_transition_prior": 9850.0,
+        "markov_lag2": 9850.0,
+        "bayes_runlength_shrink": 9850.0,
+        "temporal_stacked_calibration": 9850.0,
+        "bayes_dirichlet_forget": 9850.0,
+        "ridge_pooled_feats": 9850.0,
+        "hedge_experts_mixture": 9850.0,
+        "random": 9850.0,
+        "online_ticket_experts": 9850.0
+      },
+      "paired": {
+        "bayes_runlength_shrink/bayes_dirichlet_forget": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "temporal_stacked_calibration/ridge_pooled_feats": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 1,
+            "wins": 0,
+            "losses": 1,
+            "ties": 107,
+            "net": -1,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 1,
+            "candidate_minus_baseline_percentage_points": -0.9259259259259258,
+            "date_bootstrap_ci95_pp": [
+              -2.830188679245283,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "rare",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "online_ticket_experts/hedge_experts_mixture": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "bayes_runlength_shrink/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "temporal_stacked_calibration/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        },
+        "online_ticket_experts/frequency": {
+          "4+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "5+": {
+            "candidate_hits": 0,
+            "baseline_hits": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 108,
+            "net": 0,
+            "days": 104,
+            "draws": 108,
+            "discordant_days": 0,
+            "candidate_minus_baseline_percentage_points": 0.0,
+            "date_bootstrap_ci95_pp": [
+              0.0,
+              0.0
+            ],
+            "p_raw": 1.0,
+            "status": "no_discordance",
+            "p_holm": 1.0
+          },
+          "6+": {
+            "status": "not_applicable"
+          }
+        }
+      },
+      "inclusion_losses": {
+        "uniform": {
+          "brier": 0.09876543209876545,
+          "log_loss": 0.3488320958430319
+        },
+        "bayes_runlength_shrink": {
+          "brier": 0.09875133699381625,
+          "log_loss": 0.3487577136666129
+        },
+        "temporal_stacked_calibration": {
+          "brier": 0.09878786397802698,
+          "log_loss": 0.34894705965263517
+        }
+      },
+      "joker_urna2_inclusion_losses": {
+        "uniform": {
+          "brier": 0.0475,
+          "log_loss": 0.19851524334587262
+        },
+        "bayes_runlength_shrink": {
+          "brier": 0.04751076302917112,
+          "log_loss": 0.19865124051572744
+        },
+        "temporal_stacked_calibration": {
+          "brier": 0.04759252446575835,
+          "log_loss": 0.19968017178168704
+        }
+      },
+      "fixed_share_days": {
+        "frequency": 36,
+        "compact_transition_prior": 68
+      },
+      "fixed_share_version": "lr-ticket-fixed-share-v1",
+      "fixed_share_lookback_days": 104
+    }
+  ],
+  "uniform_bocpd": {
+    "seed": 1872026,
+    "replicates_per_urn": 24,
+    "days_per_replicate": 450,
+    "warmup_days": 128,
+    "scored_per_urn": 7728,
+    "hazard": 0.019230769230769232,
+    "max_run_length": 104,
+    "prior_pseudodraws": 200.0,
+    "results": [
+      {
+        "urn": "6/49",
+        "universe": 49,
+        "draw_size": 6,
+        "max_inclusion_mass_error": 3.552713678800501e-15,
+        "losses": {
+          "brier": {
+            "bocpd": 0.10748920353130947,
+            "uniform": 0.10745522698875463,
+            "mean_excess": 3.397654255482445e-05,
+            "replicate_sd": 3.099531681230573e-05
+          },
+          "log_loss": {
+            "bocpd": 0.3719333933804048,
+            "uniform": 0.37177617994345274,
+            "mean_excess": 0.00015721343695200045,
+            "replicate_sd": 0.00014417149306680918
+          }
+        }
+      },
+      {
+        "urn": "5/40",
+        "universe": 40,
+        "draw_size": 6,
+        "max_inclusion_mass_error": 3.552713678800501e-15,
+        "losses": {
+          "brier": {
+            "bocpd": 0.12754733537645013,
+            "uniform": 0.12749999999999997,
+            "mean_excess": 4.73353764501327e-05,
+            "replicate_sd": 3.7841182193600544e-05
+          },
+          "log_loss": {
+            "bocpd": 0.422892855176377,
+            "uniform": 0.422709087805991,
+            "mean_excess": 0.00018376737038599023,
+            "replicate_sd": 0.00014737870757101768
+          }
+        }
+      },
+      {
+        "urn": "joker_urna1",
+        "universe": 45,
+        "draw_size": 5,
+        "max_inclusion_mass_error": 3.552713678800501e-15,
+        "losses": {
+          "brier": {
+            "bocpd": 0.0988069939482013,
+            "uniform": 0.09876543209876545,
+            "mean_excess": 4.1561849435855473e-05,
+            "replicate_sd": 3.479279121123278e-05
+          },
+          "log_loss": {
+            "bocpd": 0.34903936733047175,
+            "uniform": 0.34883209584303193,
+            "mean_excess": 0.00020727148743978054,
+            "replicate_sd": 0.00017813201424958926
+          }
+        }
+      },
+      {
+        "urn": "joker_urna2",
+        "universe": 20,
+        "draw_size": 1,
+        "max_inclusion_mass_error": 6.661338147750939e-16,
+        "losses": {
+          "brier": {
+            "bocpd": 0.04751630120823962,
+            "uniform": 0.04749999999999999,
+            "mean_excess": 1.6301208239630463e-05,
+            "replicate_sd": 2.346678099924842e-05
+          },
+          "log_loss": {
+            "bocpd": 0.19868345294272408,
+            "uniform": 0.1985152433458726,
+            "mean_excess": 0.0001682095968515206,
+            "replicate_sd": 0.00024174877941782698
+          }
+        }
+      }
+    ]
+  }
+}

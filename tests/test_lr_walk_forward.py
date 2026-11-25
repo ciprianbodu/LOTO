@@ -105,7 +105,8 @@ def test_auto_and_both_fitted_decisions_use_only_the_pre_holdout_source(monkeypa
         assert training[1].index.tolist() == list(range(15))
         assert options["restricted"] is True and options["scheme"] == 49
         calls.append(("fit", options["inverse"]))
-        return {"urns": [{"game_key": "loto_6_49", "decision": tested}]}
+        decision = {**tested, "reference_members": tested["members"]} if options["inverse"] else tested
+        return {"urns": [{"game_key": "loto_6_49", "decision": decision}]}
 
     monkeypatch.setattr(wf, "compare_budget_ranges", compare)
     monkeypatch.setattr(wf, "benchmark_lr_hypotheses", fit)
@@ -180,7 +181,8 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
     frame.loc[18, "date"] = frame.loc[17, "date"]
     decisions = {
         False: {"members": [{"method": "frequency", "weight": 1.0}], "target": 4, "fallback": False},
-        True: {"members": [{"method": "markov_lag2", "weight": 1.0}], "target": 4, "fallback": False},
+        True: {"members": [{"method": "markov_lag2", "weight": 1.0}], "target": 4, "fallback": False,
+               "reference_members": [{"method": "frequency", "weight": 1.0}]},
     }
 
     def fit(game, source, **options):
@@ -189,6 +191,9 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
     monkeypatch.setattr(wf, "benchmark_lr_hypotheses", fit)
     result = _run(frame, inverse=True, restricted=restricted, lookback=65)
     lot = wf.require_lottery("6/49", "RO")
+    from loto_enterprise.benchmark.lr_provenance import lr_semantics
+    template, = recommend_games(171, FOUR_PLUS, "6/49")
+    signature = lr_semantics(lot, wf.budget_plan_scheme(template), 4, layout=template)
     for row in result["draws"]:
         prefix = ("fixture.csv", frame.iloc[:row["training_rows"]])
         fingerprint = wf._forecast_engine(lot, prefix, 0).audit["hash"]
@@ -200,7 +205,7 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
                     "dynamic": True, "lookback": 65, "hit_target": 4,
                 },
                 "result": {
-                    "history_hash": fingerprint,
+                    "history_hash": fingerprint, "semantics": signature,
                     "max_consecutive_run": 2,
                     "urns": [{"game_key": "loto_6_49", "decision": winner}],
                 },
@@ -269,3 +274,42 @@ def test_cancellation_keeps_the_run_from_finishing(tmp_path):
     marker = tmp_path / "cancel"
     with pytest.raises(CancelledError):
         _run(_frame(), cancel_path=marker, progress_cb=lambda done, total: marker.touch() if done else None)
+
+
+@pytest.mark.parametrize("mismatch", ["joker_urna1", "joker_urna2"])
+def test_frozen_joker_validates_both_inverse_references_before_using_the_paid_winner(monkeypatch, mismatch):
+    frame = _frame(draw_size=5, maximum=45)
+    frame["joker"] = np.arange(len(frame)) % 20 + 1
+    urn_keys = ("joker_urna1", "joker_urna2")
+    direct_methods = ("frequency", "compact_transition_prior")
+    decision_days = []
+
+    def fit(game, source, **options):
+        decision_days.append(source[1]["date"].iloc[-1])
+        urns = []
+        for key, direct in zip(urn_keys, direct_methods, strict=True):
+            decision = {"target": 4 if key == urn_keys[0] else 1, "fallback": False}
+            if options["inverse"]:
+                method = "markov_lag2"
+                reference = [] if key == mismatch == urn_keys[0] else [{
+                    "method": "frequency" if key == mismatch else direct, "weight": 1.0,
+                }]
+                decision["reference_members"] = reference
+            else:
+                method = direct
+            decision["members"] = [{"method": method, "weight": 1.0}]
+            urns.append({"game_key": key, "decision": decision})
+        return {"urns": urns}
+
+    monkeypatch.setattr(wf, "benchmark_lr_hypotheses", fit)
+    report = _run(frame, "joker", inverse=True, budget_lei=100)
+    assert decision_days == [frame["date"].iloc[17]] * 2
+    assert report["inverse_references_checked"]
+    assert report["profile_reference_mismatch"] == [mismatch]
+    assert "altă referință" in report["protocol"]
+    assert all(report["methods"]["tested"][key]["source"] == "training_frequency" for key in urn_keys)
+    for draw in report["draws"]:
+        assert set(draw["pool"]).isdisjoint(draw["excluded_pool"])
+        assert set(draw["jokers"]).isdisjoint(draw["excluded_jokers"])
+        assert len(draw["excluded_jokers"]) == len(draw["jokers"]) == 5
+        assert draw["tickets"]

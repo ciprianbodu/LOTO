@@ -778,7 +778,8 @@ def test_another_stations_marker_does_not_hide_this_stations_job(tmp_path, monke
     app_nicegui._recover_completed_job(allow_finalize=False)
     assert app_nicegui.STATE["results"] == ([], 0)
     assert f"job #{jid}" in app_nicegui.STATE["results_recovered"]
-    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] is None
+    assert queue.get_job_finalization_actions(jid, db_path=database) == {}
 
 
 def test_legacy_marker_of_the_latest_job_is_migrated_once(tmp_path, monkeypatch):

@@ -135,7 +135,10 @@ ENSEMBLE_MAX_CORR = 0.99
 ENSEMBLE_MIN_SIGNATURE_POINTS = 5
 
 # Keep the empirical control in the fold table and outside the live candidates.
-EXCLUDED_FROM_PRODUCTION = frozenset({"random"})
+from .methods import EVALUATION_METHODS
+
+# Compare the new challengers without changing the live Auto-Pilot selection.
+EXCLUDED_FROM_PRODUCTION = frozenset(("random", *EVALUATION_METHODS))
 EXCLUDED_FROM_SINGLE_PICK = frozenset()
 
 # Geometria jocurilor cunoscute (max_num). Folosita cand apelantul nu poate da

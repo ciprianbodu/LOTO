@@ -21,7 +21,7 @@ def _history(game="6/49"):
 
 
 def _rebench_entry(history, members, *, game="6/49", inverse=False, dynamic=True, lookback=100,
-                   reference=(), joker_members=()):
+                   reference=(), joker_members=(), joker_reference=()):
     lot = forecast.require_lottery(game, "RO")
     code = 24 if game == "joker" else 49
     engine = forecast._forecast_engine(lot, ("current.csv", history), 0)
@@ -33,11 +33,13 @@ def _rebench_entry(history, members, *, game="6/49", inverse=False, dynamic=True
         }}
     urns = [decision(lot.bench_key, members, reference)]
     if joker_members:
-        urns.append(decision(lot.bench_key_urna2, joker_members))
+        urns.append(decision(lot.bench_key_urna2, joker_members, joker_reference))
+    plan, = recommend_games(100 if game == 'joker' else 171, FOUR_PLUS, game)
+    signature = forecast.lr_semantics(lot, resolve_lr_scheme(lot.geometry, code), 4, layout=plan)
     return {"game": game, "settings": {"inverse": inverse, "restricted": True, "dynamic": dynamic,
             "lookback": lookback, "hit_target": 4, "joker_size": 2, "scheme": code},
             "result": {"history_hash": engine.audit["hash"], "scheme_code": code, "urns": urns,
-                       "max_consecutive_run": 2}}
+                       "max_consecutive_run": 2, "semantics": signature}}
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
@@ -46,7 +48,7 @@ def test_saved_rebench_ranks_actual_tickets_and_excludes_current_direct_pool(mon
     direct_weights = [("frequency", .3), ("compact_transition_prior", .7)]
     direct = _rebench_entry(history, direct_weights, dynamic=dynamic)
     inverse = _rebench_entry(history, [("compact_renewal_hazard", 1)], inverse=True, dynamic=dynamic,
-                             reference=[("frequency", 1)])
+                             reference=direct_weights)
     def scores(method, matrix, maximum, **_):
         delta = {"frequency": 0, "compact_transition_prior": 2, "compact_renewal_hazard": 4}[method]
         return {n: n if delta == 0 else ((n + 7) % (3 + delta)) * 19 - n for n in range(1, maximum + 1)}, 0
@@ -87,11 +89,16 @@ def test_matching_inverse_reference_is_used_for_displayed_direct_and_exclusion(m
     assert direct["tickets"][0][0]["numbers"] == other["forecast"]["excluded_pool"]
 
 
-def test_inverse_only_dynamic_decision_preserves_verified_current_direct_job():
+@pytest.mark.parametrize("same_pool", [True, False])
+def test_inverse_only_dynamic_requires_same_reference_as_generated_direct_job(monkeypatch, same_pool):
     history = _history()
     inverse = _rebench_entry(history, [("frequency", 1)], inverse=True)
     inverse["settings"]["restricted"] = False
     direct_numbers = [2, 3, 5, 6, 8, 9, 11, 12, 14, 15]
+    dynamic_numbers = direct_numbers if same_pool else [n + 1 for n in direct_numbers]
+    def dynamic_scores(game, code, matrix, cuts, excluded=()):
+        return {n: int(n in dynamic_numbers) for n in range(1, 50) if n not in excluded}, {"method": "dynamic"}
+    monkeypatch.setattr(forecast, "_dynamic_scores", dynamic_scores)
     args = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, hit_target=4,
                 lr_rebench_entries=[inverse], generated={"6/49": ("current.csv", {
                     "hard_core": direct_numbers, "dynamic_method": True, "lr_scheme_code": 49,
@@ -100,8 +107,13 @@ def test_inverse_only_dynamic_decision_preserves_verified_current_direct_job():
     direct, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **args)
     other, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **args)
     assert direct["forecast"]["generated"] and direct["forecast"]["pool"] == direct_numbers
-    assert other["forecast"]["selection"]["source"] == "lr_rebench"
     assert other["forecast"]["excluded_pool"] == direct_numbers
+    if same_pool:
+        assert other["forecast"]["selection"]["source"] == "lr_rebench"
+        assert "profile_reference_mismatch" not in other["forecast"]
+    else:
+        assert other["forecast"]["selection"]["method"] == "dynamic"
+        assert other["forecast"]["profile_reference_mismatch"] == ["loto_6_49"]
 
 
 @pytest.mark.parametrize("mismatch", [
@@ -133,9 +145,10 @@ def test_stale_or_incompatible_saved_rebench_keeps_current_selector(monkeypatch,
 
 def test_joker_saved_winners_use_separate_urns_and_valid_bonus_lookback(monkeypatch):
     history = _history("joker")
-    args = dict(game="joker", lookback=50, joker_members=[("compact_transition_prior", 1)])
+    args = dict(game="joker", lookback=50, dynamic=False, joker_members=[("compact_transition_prior", 1)])
     direct = _rebench_entry(history, [("frequency", 1)], **args)
-    inverse = _rebench_entry(history, [("compact_renewal_hazard", 1)], inverse=True, **args)
+    inverse = _rebench_entry(history, [("compact_renewal_hazard", 1)], inverse=True, **args,
+                             reference=[("frequency", 1)], joker_reference=args["joker_members"])
     calls = []
     def score(method, matrix, maximum, **_):
         calls.append((method, maximum, matrix.tolist()))
@@ -143,7 +156,7 @@ def test_joker_saved_winners_use_separate_urns_and_valid_bonus_lookback(monkeypa
     monkeypatch.setattr(forecast, "call_method", score)
     plan, = forecast.recommend_playable_games(
         100, FOUR_PLUS, "joker", {"joker": ("joker.csv", history)}, pool_codes={}, hit_target=4,
-        number_range=(10, 40), lr_rebench_entries=[direct, inverse], lookback=50, joker_size=2, inverse=True,
+        number_range=(10, 40), lr_rebench_entries=[direct, inverse], lookback=50, joker_size=2, inverse=True, dynamic=False,
     )
     record = plan["forecast"]
     assert record["selection"]["method"] == "compact_renewal_hazard"
@@ -429,3 +442,58 @@ def test_legacy_dynamic_pool_is_rescored_before_use_even_when_already_without_tr
         assert direct["forecast"]["pool"] != legacy
     finally:
         forecast._dynamic_scores.cache_clear()
+
+
+@pytest.mark.parametrize(("dynamic", "both_profiles", "mismatch"), [
+    (False, True, ["joker_urna2"]),
+    (True, True, ["joker_urna1", "joker_urna2"]),
+    (True, False, []),
+])
+def test_inverse_paid_profile_requires_the_actual_reference_in_both_joker_urns(monkeypatch, dynamic, both_profiles, mismatch):
+    history = _history("joker")
+    args = dict(game="joker", dynamic=dynamic)
+    direct = _rebench_entry(history, [("frequency", 1)], **args, joker_members=[("compact_transition_prior", 1)])
+    inverse = _rebench_entry(
+        history, [("compact_renewal_hazard", 1)], inverse=True, **args,
+        reference=() if dynamic else [("frequency", 1)],
+        joker_members=[("compact_renewal_hazard", 1)], joker_reference=[("frequency", 1)],
+    )
+    calls = []
+
+    def scores(method, matrix, maximum, **_):
+        calls.append((method, maximum))
+        return {n: n if method == "compact_transition_prior" else maximum - n
+                for n in range(1, maximum + 1)}, 0
+
+    def fallback(matrix, cuts, urn, size, excluded, target, **_):
+        maximum = 20 if urn == "joker_urna2" else 45
+        return {n: maximum - n for n in range(1, maximum + 1) if n not in excluded}, {"method": "fallback"}
+
+    def dynamic_fallback(game, code, matrix, cuts, excluded=()):
+        return fallback(None, None, "joker_urna1", None, excluded, None)
+
+    monkeypatch.setattr(forecast, "call_method", scores)
+    monkeypatch.setattr(forecast, "_dynamic_scores", dynamic_fallback)
+    monkeypatch.setattr(forecast, "restricted_bench_scores", fallback)
+    inputs = dict(
+        histories={"joker": ("joker.csv", history)}, pool_codes={}, hit_target=4,
+        number_range=(10, 40), dynamic=dynamic, joker_size=2,
+        lr_rebench_entries=[direct, inverse] if both_profiles else [inverse],
+    )
+    normal, = forecast.recommend_playable_games(100, FOUR_PLUS, "joker", **inputs)
+    alternative, = forecast.recommend_playable_games(100, FOUR_PLUS, "joker", inverse=True, **inputs)
+    original, played = normal["forecast"], alternative["forecast"]
+    assert played["excluded_pool"] == original["pool"]
+    assert played["excluded_jokers"] == tuple(sorted(original["jokers"]))
+    assert set(played["pool"]).isdisjoint(original["pool"])
+    assert set(played["jokers"]).isdisjoint(original["jokers"])
+    assert played.get("profile_reference_mismatch", []) == mismatch
+    if mismatch:
+        assert original["jokers"] == (20, 19)
+        assert played["jokers"] == (1, 2)
+        assert played["selection"]["method"] == played["joker_selection"]["method"] == "fallback"
+        assert all(method != "compact_renewal_hazard" for method, _ in calls)
+    else:
+        assert original["jokers"] == (1, 2)
+        assert played["jokers"] == (3, 4)
+        assert played["selection"]["source"] == played["joker_selection"]["source"] == "lr_rebench"

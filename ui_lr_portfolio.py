@@ -52,7 +52,7 @@ def _render_portfolios(records):
                             "și cu toate celelalte numere distincte")
         else:
             construction = f"{len(r['codes'])} pooluri fără numere comune"
-        status = "Maxim demonstrat" if r["optimal"] else "Acoperire demonstrată"
+        status = "Maxim demonstrat" if r["optimal"] else "Cea mai bună soluție găsită"
         ui.label(f"{targets} · {status} cu {construction}.").classes("text-caption")
 
         side = r["certified_other_thresholds"]

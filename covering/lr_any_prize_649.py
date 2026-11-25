@@ -1,7 +1,7 @@
 """Exact 6/49 prize coverage for portfolios with disjoint official LR pools."""
 
+from covering.lr_catalog_cache import catalog_cache
 from dataclasses import dataclass
-from functools import lru_cache
 from itertools import combinations, combinations_with_replacement
 from math import comb
 from operator import index
@@ -20,7 +20,7 @@ class _Code:
     triples: int
 
 
-@lru_cache(maxsize=1)
+@catalog_cache(maxsize=1)
 def _catalogue():
     lot = require_lottery("6/49", country="RO")
     schemes = catalog.lr_schemes("6/49")

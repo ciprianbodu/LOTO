@@ -1,6 +1,11 @@
 """Rezultatele pe baza aleasă rămân independente de Re-Bench obișnuit."""
 import asyncio
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
 from concurrent.futures import CancelledError
 
 import pandas as pd
@@ -57,7 +62,8 @@ def test_reports_restore_after_navigation_and_show_both_urns_and_per_game_errors
 
     monkeypatch.setattr(panel.run, "io_bound", evaluate)
     # Timerul aparține clientului din browser. Prima redare execută codul real.
-    monkeypatch.setattr(panel.ui, "timer", lambda *_args: None)
+    timers = []
+    monkeypatch.setattr(panel.ui, "timer", lambda interval, callback, **kwargs: timers.append(callback))
 
     async def scenario():
         scheme = resolve_lr_scheme("joker", 24)
@@ -79,6 +85,7 @@ def test_reports_restore_after_navigation_and_show_both_urns_and_per_game_errors
         try:
             with client:
                 rendered = panel.lr_rebench_panel()
+                await timers[-1]()
             labels = {node.text for node in rendered.descendants() if isinstance(node, ui.label)}
             assert {"Urna principală", "Urna 2 Joker", "Fereastră indisponibilă.",
                     "Istoricul jocului este indisponibil."} <= labels
@@ -166,6 +173,7 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
         assert panel.cancel_lr_rebench()
         assert not panel.cancel_lr_rebench()
         assert panel.lr_rebench_running()
+        await panel._active["cancel_write"]
         resume.set()
         assert await asyncio.wait_for(pending, timeout=2)
         assert len(cancel_files) == 1 and not cancel_files[0].exists()
@@ -181,7 +189,8 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
 
 def _profile_result(game, scheme, fingerprint, *, partial=False):
     report = _result(game, scheme)
-    report.update(history_hash=fingerprint, history_rows=240, max_consecutive_run=2)
+    report.update(history_hash=fingerprint, history_rows=240, max_consecutive_run=2,
+                  semantics={"version": 1, "formulas": "fixture"})
     keys = {
         "joker": ("joker_urna1", "joker_urna2"),
         "6/49": ("loto_6_49",),
@@ -262,6 +271,91 @@ def test_legacy_report_is_visible_but_produces_no_reusable_decision():
     })
     assert panel.lr_rebench_decisions() == {}
     assert panel._last["entries"][0]["result"]["urns"][0]["method"] == "frequency"
+
+
+def test_two_independent_ui_processes_merge_results_and_preserve_unsigned_history(tmp_path):
+    finished = "2024-01-01T10:00:00+02:00"
+    legacy = _profile_result("6/49", 49, "a" * 16)
+    del legacy["semantics"]
+    legacy["urns"][0]["decision"]["members"] = [{"method": "former_method", "weight": 1.0}]
+    old = {"game": "6/49", "source": "six.csv", "name": "Loto 6/49", "settings": _settings(49), "result": legacy}
+    panel.atomic_write_json(panel._RESULT_PATH, {"schema": 1, "total": 1, "finished_at": finished,
+                                                "entries": [old], "decision_profiles": {}})
+    child = """
+import asyncio, pathlib, runpy, sys, time
+helpers = runpy.run_path(sys.argv[1])
+p = helpers['panel']
+p._RESULT_PATH = pathlib.Path(sys.argv[2])
+game, code, source, signal = sys.argv[3:7]
+control = pathlib.Path(signal)
+p._restore_report()
+assert p._last['entries'][0]['result']['history_hash'] == 'a'*16
+control.with_suffix('.ready').touch()
+for _ in range(400):
+    if control.with_name('go').exists(): break
+    time.sleep(.025)
+else: raise RuntimeError('timeout')
+async def complete(*args, **kwargs):
+    return helpers['_profile_result'](game, int(code), source[0]*16)
+p.run.io_bound = complete
+frame = helpers['pd'].DataFrame({'n1':[1]})
+asyncio.run(p.run_lr_rebench([(game, (source, frame), helpers['_settings'](int(code)))]))
+"""
+    children = []
+    env = {**os.environ, "LOTO_RUNTIME_DIR": str(tmp_path/"runtime"), "LOTO_JOBS_DB": str(tmp_path/"jobs.sqlite")}
+    try:
+        for i, (game, code, source) in enumerate([("6/49", "49", "six.csv"), ("joker", "24", "joker.csv")]):
+            children.append(subprocess.Popen(
+                [sys.executable, "-c", child, __file__, str(panel._RESULT_PATH), game, code, source, str(tmp_path/f"p{i}")],
+                cwd=Path(__file__).resolve().parents[1], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+        deadline = time.monotonic() + 30
+        while not all((tmp_path/f"p{i}.ready").exists() for i in range(2)):
+            assert time.monotonic() < deadline
+            time.sleep(.05)
+        (tmp_path/"go").touch()
+        for process in children:
+            output, _ = process.communicate(timeout=30)
+            assert process.returncode == 0, output
+    finally:
+        for process in children:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+    # This process still had the old file in memory. The next read sees both completions.
+    assert set(panel.lr_rebench_decisions()) == {"6/49", "joker"}
+    archive = panel._last["decision_history"]
+    old, = [d for d in archive if d["history_hash"] == "a" * 16]
+    assert old["signature"] is None and old["urns"][0]["members"][0]["method"] == "former_method"
+    client = Client(ui.page("/historical-rebench"))
+    try:
+        with client:
+            with ui.column() as view:
+                panel._historical_decision(old)
+        assert any("former_method" in node.text for node in view.descendants() if isinstance(node, ui.label))
+    finally:
+        client.delete()
+    latest = {k: v for k, v in panel._last.items() if k not in ("decision_history", "decision_profiles")}
+    for _ in range(3):
+        panel._persist_report(latest)
+    assert panel._last["decision_history"] == archive
+
+
+def test_new_formula_same_history_and_settings_preserves_previous_weights():
+    def finish(version, method, when):
+        result = _profile_result("6/49", 49, "d"*16)
+        result["semantics"]["formulas"] = version
+        result["urns"][0]["decision"]["members"] = [{"method": method, "weight": 1.0}]
+        entry = {"game": "6/49", "source": "six.csv", "settings": _settings(49), "result": result}
+        panel._persist_report({"schema": 1, "total": 1, "finished_at": when, "entries": [entry]})
+    finish("first", "frequency", "2026-11-25T17:00:00+02:00")
+    finish("second", "random", "2026-11-25T18:00:00+02:00")
+    latest, = panel.lr_rebench_decisions()["6/49"]
+    old, = panel._last["decision_history"]
+    assert latest["result"]["urns"][0]["decision"]["members"][0]["method"] == "random"
+    assert old["signature"] and old["urns"][0]["members"] == [{"method": "frequency", "weight": 1.0}]
+    assert old["history_hash"] == latest["result"]["history_hash"]
 
 
 @pytest.mark.parametrize("chosen", [None, (10, 40)])

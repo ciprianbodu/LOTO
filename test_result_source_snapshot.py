@@ -73,8 +73,10 @@ def test_live_completion_walk_forward_uses_the_submitted_queue_snapshot(
         received.append(kwargs["df_source"].copy())
         return [], {"partial": False, "n_test_draws": 0, "n_expected": 0}
     monkeypatch.setattr(wf, "run_honest_walk_forward", run_wf)
-    with capture_ui():
-        app.status_panel.func()
+    monkeypatch.setattr(app, "get_job_finalization_actions", functools.partial(queue.get_job_finalization_actions, db_path=database))
+    monkeypatch.setattr(app, "_finalize_pipeline", lambda: app._complete_job_stage(jid, "shutdown"))
+    monkeypatch.setitem(app.SETTINGS, "mail_on_complete", False)
+    app._read_ui_job(jid)
     expected = pd.read_json(
         io.StringIO(original.to_json(orient="split")), orient="split", convert_dates=False
     )
@@ -100,7 +102,7 @@ def test_recovered_result_keeps_source_even_after_another_upload(
     monkeypatch.setattr(app, "mark_job_finalized",
                         functools.partial(queue.mark_job_finalized, db_path=database))
     app._recover_completed_job(allow_finalize=False)
-    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"]
+    assert queue.get_job_status(jid, db_path=database)["ui_finalized_at"] is None
     monkeypatch.setitem(app.STATE, "datasets", [("loto_6_49.csv", pd.DataFrame({"n1": [49]}))])
     assert app._result_source("loto_6_49.csv")["n1"].tolist() == [1, 11]
     assert app._result_source("other.csv") is None

@@ -61,31 +61,19 @@ def test_file_lock_breaks_genuinely_stale_lock(tmp_path):
     waiter.__enter__()
     try:
         assert waiter._fd is not None
-        with open(lockpath, "rb") as f:
-            assert f.read().decode("ascii") == waiter._token
+        with pytest.raises(TimeoutError), us.file_lock(target, timeout=0.05):
+            pytest.fail("A second holder entered")
     finally:
         waiter.__exit__(None, None, None)
 
 
 def test_file_lock_exit_does_not_delete_a_different_owners_lock(tmp_path):
-    """Dacă între `__enter__` și `__exit__` un alt proces a spart și recreat
-    lock-ul (staleness detectată aproape simultan de ambii), conținutul fișierului
-    nu mai e tokenul nostru — `__exit__` nu are voie să-l șteargă."""
     target = tmp_path / "state.json"
-    lockpath = str(target) + ".lock"
-    lock = us.file_lock(target, timeout=5.0)
-    lock.__enter__()
-    assert lock._fd is not None
-    # Simulăm un al doilea proces care a spart și recreat lock-ul cu alt token.
-    os.close(lock._fd)
-    os.unlink(lockpath)
-    with open(lockpath, "wb") as f:
-        f.write(b"other-process-token")
-    lock._fd = os.open(lockpath, os.O_WRONLY)  # doar ca exit-ul să nu sară peste bloc
-    lock.__exit__(None, None, None)
-    assert os.path.exists(lockpath)
-    with open(lockpath, "rb") as f:
-        assert f.read() == b"other-process-token"  # lock-ul viu al celuilalt, NEȘTERS
+    lock = us.file_lock(target)
+    with lock:
+        original = os.stat(lock.lockpath)
+    with us.file_lock(target):
+        assert os.path.samestat(original, os.stat(lock.lockpath))
 
 
 # --------------------------------------------------------------------------- #

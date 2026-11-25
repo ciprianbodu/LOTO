@@ -87,4 +87,4 @@ jobs:
           --basetemp="$env:LOCALAPPDATA/Temp/loto-launchers-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           test_launcher_git.py test_launcher_ensure_git.py
           test_bat_windows_cmd.py test_bench_windows_launch_2026_11_02.py
-          test_cleanup_old_processes.py
+          test_cleanup_old_processes.py tests/test_process_ownership.py

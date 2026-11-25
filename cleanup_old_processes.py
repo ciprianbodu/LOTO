@@ -18,6 +18,7 @@ import argparse
 import ntpath
 import os
 import posixpath
+import re
 import socket
 import sys
 import time
@@ -38,16 +39,8 @@ SCRIPT_MARKERS = frozenset(
         "bench_all_methods.py",
     }
 )
-_PYTHON_NAMES = frozenset(
-    {
-        "python",
-        "python.exe",
-        "pythonw",
-        "pythonw.exe",
-        "python3",
-        "python3.exe",
-    }
-)
+# psutil uses the executable basename on Linux (for example python3.15).
+_PYTHON_NAME = re.compile(r"python(?:w|3(?:\.\d+)?)?(?:\.exe)?", re.ASCII)
 _SYSTEM_PIDS = frozenset({0, 4})
 
 
@@ -124,7 +117,7 @@ def is_stale_proc(
     if proc.pid in keep_pids or proc.pid in _SYSTEM_PIDS:
         return False
     name = (proc.name or "").lower()
-    if name and name not in _PYTHON_NAMES:
+    if name and not _PYTHON_NAME.fullmatch(name):
         return False
 
     dedicated_python = path_is_under(proc.exe, venv_dir)
@@ -132,7 +125,7 @@ def is_stale_proc(
     name = _basename(script)
     if name.lower() not in SCRIPT_MARKERS:
         return dedicated_python
-    if ntpath.isabs(script):
+    if posixpath.isabs(script) or ntpath.isabs(script):
         path = script
     elif proc.cwd:
         path = f"{proc.cwd}/{script}"

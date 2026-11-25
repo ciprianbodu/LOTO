@@ -43,7 +43,12 @@ def lookback_pct(lookback_percent) -> int | str:
 
 def method_cache_semantics(name) -> str:
     """Numerical revisions shared by method-specific cache namespaces."""
-    return "|hedge-center1" if name == "hedge_experts_mixture" else ""
+    revisions = {
+        "hedge_experts_mixture": "|hedge-center1",
+        "bayes_runlength_shrink": "|bayes-runlength-v1",
+        "temporal_stacked_calibration": "|temporal-stack-v1",
+    }
+    return revisions.get(name, "")
 
 
 def scorer_semantics(config: dict) -> str:
@@ -64,6 +69,5 @@ def scorer_semantics(config: dict) -> str:
     suffix = "|dmd-svd-ties1" if "dmd_forecast" in names else ""
     if "interval_extrema_k16" in names:
         suffix += "|interval-days1"
-    if "hedge_experts_mixture" in names:
-        suffix += method_cache_semantics("hedge_experts_mixture")
+    suffix += "".join(method_cache_semantics(name) for name in sorted(name for name in names if isinstance(name, str)))
     return suffix

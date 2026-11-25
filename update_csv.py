@@ -233,7 +233,8 @@ def _extract_draws(
                 _reject(d, m, f"Joker în afara 1..{joker_max}")
                 continue
 
-        key = (d, tuple(nums), joker_num)
+        ordered_sixth = num_main == 6 and max_num == 40 and not has_joker
+        key = (d, tuple(sorted(nums[:5])), nums[5]) if ordered_sixth else (d, tuple(sorted(nums)), joker_num)
         if key in seen:
             continue
         seen.add(key)
@@ -269,8 +270,8 @@ def _draw_key(row: list) -> tuple:
     return (cells[0], nums)
 
 
-def _draw_key_with_joker(row: list, has_joker: bool) -> tuple:
-    if not has_joker or len(row) < 2:
+def _draw_key_with_joker(row: list, has_joker: bool, ordered_sixth=False) -> tuple:
+    if not (has_joker or ordered_sixth) or len(row) < 2:
         return _draw_key(row)
     return (*_draw_key(row[:-1]), str(row[-1]).strip())
 
@@ -303,9 +304,9 @@ def _canonical_key(day: date, key: tuple) -> tuple:
     return (f"{day:%d-%m-%Y}", *rest)
 
 
-def _row_identity(row: list, has_joker: bool) -> tuple:
+def _row_identity(row: list, has_joker: bool, ordered_sixth=False) -> tuple:
     """Identitatea unui rând (stocat sau de pe site), cu data și Joker-ul canonice."""
-    key = _draw_key_with_joker(row, has_joker)
+    key = _draw_key_with_joker(row, has_joker, ordered_sixth)
     day = _csv_date_to_date(str(row[0]).strip()) if row else None
     return _canonical_key(day, key) if day is not None else key
 
@@ -318,13 +319,6 @@ def _shown_key(key: tuple) -> str:
     return ",".join(str(x) for x in key)  # rând stocat necitibil
 
 
-def _main_numbers(row: list, has_joker: bool) -> tuple | None:
-    try:
-        return tuple(sorted(int(x) for x in (row[1:-1] if has_joker else row[1:])))
-    except ValueError:
-        return None
-
-
 def _site_refusal(
     stored: list[list[str]],
     all_draws: list[dict],
@@ -332,6 +326,7 @@ def _site_refusal(
     new_draws: list[dict],
     last: date | None,
     has_joker: bool,
+    ordered_sixth: bool = False,
 ) -> str | None:
     """Motivul pentru care NU scriem nimic pentru joc, sau None.
 
@@ -370,13 +365,13 @@ def _site_refusal(
         end = min(last, all_draws[-1]["date"])
         site_days: dict[date, set] = {}
         for d in all_draws:
-            key = _draw_key_with_joker(_site_row(d, has_joker), has_joker)
+            key = _draw_key_with_joker(_site_row(d, has_joker), has_joker, ordered_sixth)
             site_days.setdefault(d["date"], set()).add(_canonical_key(d["date"], key))
         stored_days: dict[date, set] = {}
         for row in stored:
             day = _csv_date_to_date(row[0])
             if day is not None:
-                key = _draw_key_with_joker(row, has_joker)
+                key = _draw_key_with_joker(row, has_joker, ordered_sixth)
                 stored_days.setdefault(day, set()).add(_canonical_key(day, key))
         for day in sorted(set(site_days) | set(stored_days)):
             if not start <= day <= end:
@@ -393,24 +388,18 @@ def _site_refusal(
                 f"corectă, adaugă manual extragerile noi până când ziua iese din "
                 f"verificarea ultimelor {CHECK_DAYS} de zile"
             )
-    # 4. AGENTS.md §4.1: un rând nou cu aceleași numere principale ca rândul
-    # anterior (ultimul stocat sau rândul nou dinaintea lui) e o copie.
-    prev_main = _main_numbers(stored[-1], has_joker) if stored else None
-    prev_date = stored[-1][0] if stored else ""
-    for d in new_draws:
-        main = tuple(sorted(d["main"]))
-        if main == prev_main:
-            return (
-                f"extragerea din {d['date']:%d-%m-%Y} repetă numerele rândului din "
-                f"{prev_date} (copie, nu extragere). Verifică manual pe loto.ro"
-            )
-        prev_main, prev_date = main, f"{d['date']:%d-%m-%Y}"
     return None
 
 
 def _append_rows_atomic(
-    csv_path: Path, new_rows: list, has_joker: bool, num_main: int
+    csv_path: Path, new_rows: list, has_joker: bool, num_main: int, *, expected=None, source_rows=None
 ) -> int:
+    with history_write_lock():
+        return _merge_rows(csv_path, new_rows, has_joker, num_main, expected, source_rows)
+
+
+def _merge_rows(csv_path, new_rows, has_joker, num_main, expected, source_rows):
+    ordered_sixth = csv_path.name.casefold() == "loto_5_40.csv"
     """Citește CSV existent, adaugă rândurile noi, rescrie atomic (tmp + rename).
     Întoarce numărul de rânduri EFECTIV scrise (poate fi mai mic decât
     len(new_rows) dacă aceeași extragere — aceeași dată ȘI aceleași numere,
@@ -427,6 +416,15 @@ def _append_rows_atomic(
             header = rows[0]
             existing = rows[1:]
 
+    if expected is not None and [r for r in existing if r] != expected:
+        # Accept independent additions, but do not append onto a concurrently corrected
+        # prefix or disagree with the authoritative page on a date covered by both.
+        identities = {_row_identity(r, has_joker, ordered_sixth) for r in existing if r}
+        old = {_row_identity(r, has_joker, ordered_sixth) for r in expected}
+        source = {_row_identity(_site_row(r, has_joker), has_joker, ordered_sixth) for r in source_rows}
+        covered_days = {key[0] for key in source}
+        if not old <= identities or any(k[0] in covered_days and k not in source for k in identities - old):
+            raise OSError("Istoricul s-a modificat între timp și diferă de pagina verificată.")
     if header is None:
         header = ["date"] + [f"n{i + 1}" for i in range(num_main)]
         if has_joker:
@@ -436,11 +434,11 @@ def _append_rows_atomic(
     # o extragere deja stocată (dată + numere, în orice ordine). Zilele cu două
     # extrageri diferite rămân permise — istoricul le stochează deja, WF le
     # tratează separat.
-    seen = {_row_identity(row, has_joker) for row in existing if row}
+    seen = {_row_identity(row, has_joker, ordered_sixth) for row in existing if row}
     to_add = []
     for rec in new_rows:
         row = _site_row(rec, has_joker)
-        key = _row_identity(row, has_joker)
+        key = _row_identity(row, has_joker, ordered_sixth)
         if key not in seen:
             seen.add(key)
             to_add.append(row)
@@ -455,9 +453,18 @@ def _append_rows_atomic(
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f, lineterminator="\n")
             writer.writerow(header)
-            writer.writerows(existing)
-            writer.writerows(to_add)
+            merged = [row for row in existing if row] + to_add
+            merged.sort(key=lambda r: _csv_date_to_date(r[0]))
+            writer.writerows(merged)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp_path, csv_path)
+        if os.name == "posix":
+            directory_fd = os.open(dir_, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -485,7 +492,7 @@ def _complete_official_archive(game_key, primary, stored, last, rejected, publis
         else:
             checked.append(row)
     overlap_end = min(last, tip) if last is not None else None
-    reason = _site_refusal(stored, primary, checked, [], overlap_end, has_joker)
+    reason = _site_refusal(stored, primary, checked, [], overlap_end, has_joker, game_key == "loto_5_40")
     if reason:
         raise ValueError(f"arhiva secundară loto49.ro: {reason}")
     months = (published.year - tip.year) * 12 + published.month - tip.month + 1
@@ -533,7 +540,7 @@ def _complete_official_archive(game_key, primary, stored, last, rejected, publis
         _site_row(row, has_joker) for row in primary if row["date"] >= overlap_start
     ]
     official = [row for row in official if row["date"] >= overlap_start]
-    reason = _site_refusal(primary_rows, official, [], [], tip, has_joker)
+    reason = _site_refusal(primary_rows, official, [], [], tip, has_joker, game_key == "loto_5_40")
     if reason:
         raise ValueError(f"loto.ro și arhiva secundară: {reason}")
     if game_key == "loto_5_40":
@@ -652,9 +659,9 @@ def update_all() -> int:
                         f"loto.ro confirmă până la {all_draws[-1]['date']:%d-%m-%Y}."
                     )
                     site_last = all_draws[-1]["date"]
-            known = {_row_identity(r, cfg["has_joker"]) for r in stored}
+            known = {_row_identity(r, cfg["has_joker"], game_key == "loto_5_40") for r in stored}
             for d in all_draws:
-                key = _row_identity(_site_row(d, cfg["has_joker"]), cfg["has_joker"])
+                key = _row_identity(_site_row(d, cfg["has_joker"]), cfg["has_joker"], game_key == "loto_5_40")
                 if (last is None or d["date"] >= last) and key not in known:
                     known.add(key)
                     new_draws.append(d)
@@ -684,7 +691,7 @@ def update_all() -> int:
             continue
 
         refusal = _site_refusal(
-            stored, all_draws, rejected, new_draws, last, cfg["has_joker"]
+            stored, all_draws, rejected, new_draws, last, cfg["has_joker"], game_key == "loto_5_40"
         )
         if refusal:
             # „EROARE” în text: ACTUALIZARI.bat afișează atunci avertismentul.
@@ -697,12 +704,9 @@ def update_all() -> int:
 
         if new_draws:
             try:
-                with history_write_lock():
-                    if _stored_rows(csv_path) != stored:
-                        raise OSError("Istoricul s-a modificat între timp. Reia actualizarea.")
-                    written = _append_rows_atomic(
-                        csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
-                    )
+                written = _append_rows_atomic(
+                    csv_path, new_draws, cfg["has_joker"], cfg["num_main"], expected=stored, source_rows=all_draws
+                )
             except OSError as exc:
                 # Fișier deschis în alt program (Excel pe Windows) sau disc plin:
                 # celelalte jocuri continuă, iar scriptul iese tot cu 0.
@@ -735,6 +739,19 @@ def update_all() -> int:
         print(
             "[UPDATE-CSV] Toate jocurile sunt la zi (nicio extragere nouă în sursele verificate)."
         )
+
+    # Registrul prospectiv este local și consultă loto.ro numai dacă are
+    # predicții ajunse la termen. Un eșec aici nu anulează importul istoricului.
+    try:
+        from loto_enterprise.core.lr_prospective import refresh_official_evaluations
+
+        settled, problems = refresh_official_evaluations()
+        if settled:
+            print(f"[REGISTRU-LR] +{settled} evaluări oficiale.")
+        for problem in problems:
+            print(f"[REGISTRU-LR] EROARE la evaluare: {problem}")
+    except Exception as exc:
+        print(f"[REGISTRU-LR] EROARE la evaluare: {exc}")
 
     return total_added
 

@@ -180,6 +180,8 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
             settings.extend(plans)
 
         async def calculate(function, amount, objective, *args):
+            if function is budget._budget_input_snapshot:
+                return "unchanged", amount(objective)
             if function is budget.recommend_games:
                 return [(amount, objective, args[0])]
             if function is budget._compare_games:
@@ -249,7 +251,9 @@ def test_obsolete_or_closed_plan_does_not_update_benchmark_controls(monkeypatch)
     async def scenario():
         waiting, release = asyncio.Event(), asyncio.Event()
 
-        async def io_bound(function, amount, goal, game, *args):
+        async def io_bound(function, amount, goal, game=None, *args):
+            if function is budget._budget_input_snapshot:
+                return "unchanged", amount(goal)
             if function is budget.recommend_games:
                 if amount == 200:
                     waiting.set()
@@ -336,7 +340,9 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         callbacks[report["game"]] = on_change
     monkeypatch.setattr(budget, "_range_comparison", display)
     monkeypatch.setattr(budget, "_render_recommendations", lambda *args: None)
-    async def io_bound(fn, amount, goal, games, inputs, inverse):
+    async def io_bound(fn, amount, goal, games=None, inputs=None, inverse=None):
+        if fn is budget._budget_input_snapshot:
+            return "unchanged", amount(goal)
         if fn is budget._compare_games:
             analysed.append(tuple(games))
             return [
@@ -397,3 +403,79 @@ def test_range_evidence_displays_number_and_calendar_gaps(monkeypatch):
         "1 / 100","12.11.2026","2 / 7","N/D / N/D",
     )
     assert any("19.11.2026" in call.args[0] for call in view.label.call_args_list)
+
+
+def test_prospective_registration_requires_an_explicit_generate_click(monkeypatch):
+    view = _widgets(monkeypatch)
+    slider = MagicMock(value=200)
+    ledger_writes = []
+    rendered = []
+    monkeypatch.setattr(budget, "_render_recommendations", lambda *args: rendered.append(args))
+    monkeypatch.setattr(budget, "_range_comparison", lambda *args, **kwargs: None)
+
+    async def io_bound(function, *args, **kwargs):
+        if function is budget._budget_input_snapshot:
+            return ("same input", {})
+        if function is budget._compare_games:
+            return [{"game": "6/49", "ranges": [], "reason": "Fixture"}]
+        if function is budget._generate_selection:
+            return [{"game": "6/49"}]
+        assert function is budget._register_live_plans
+        ledger_writes.append(args)
+        return ([{"game": "6/49", "target_day": "2026-11-26",
+                  "captured_at": "2026-11-25T14:00:00+02:00"}], {})
+
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+
+    async def exercise():
+        budget.lr_budget_panel(slider, lambda _: {}, initial_game="6/49")
+        panel, button = view.expansion.return_value, view.button.return_value
+        panel.value = True
+        await panel.on_value_change.call_args.args[0]()
+        assert len(rendered) == 1 and not ledger_writes
+        await button.on_click.call_args.args[0]()
+        assert len(rendered) == 2
+        assert ledger_writes == [([{"game": "6/49"}], {})]
+        assert any("26.11.2026" in call.args[0] for call in view.label.call_args_list if call.args)
+        slider.value = 170
+        await slider.on_value_change.call_args.args[0]()
+        assert len(rendered) == 3 and len(ledger_writes) == 1
+
+    asyncio.run(exercise())
+
+
+
+def test_fixed_share_policy_is_forwarded_only_when_selected(monkeypatch):
+    view = _widgets(monkeypatch)
+    captured = []
+
+    async def io_bound(fn, *args, **kwargs):
+        if fn is budget._budget_input_snapshot:
+            return "fixed-history", {}
+        if fn is budget._compare_games:
+            return [{"game": "6/49", "recommended_range": None}]
+        assert fn is budget._generate_selection
+        captured.append(kwargs)
+        return []
+
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+    monkeypatch.setattr(budget, "_range_comparison", lambda *args, **kwargs: None)
+    monkeypatch.setattr(budget, "_render_recommendations", lambda *args: None)
+    choice = MagicMock()
+    refresh = budget.lr_budget_panel(
+        MagicMock(value=100), lambda game: {}, initial_game="6/49", on_fixed_share_change=choice,
+    )
+    toggle = view.switch_by_label["Fixed Share pe bilete"]
+    assert toggle.value is False
+
+    async def scenario():
+        view.expansion.return_value.value = True
+        await refresh()
+        toggle.value = True
+        await toggle.on_value_change.call_args.args[0]()
+        toggle.value = False
+        await toggle.on_value_change.call_args.args[0]()
+
+    asyncio.run(scenario())
+    assert captured == [{}, {"selection_policy": budget.ONLINE_TICKET_EXPERTS}, {}]
+    assert [call.args for call in choice.call_args_list] == [(True,), (False,)]

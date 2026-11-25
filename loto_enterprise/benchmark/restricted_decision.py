@@ -49,15 +49,18 @@ def restricted_bench_scores(matrix, cutoffs, game_key, pool_size, excluded_numbe
     target = 1 if bonus else decision.game_hit_target(
         game_key, decision.BENCH_HIT_TARGET if hit_target is None else hit_target,
     )
+    from loto_enterprise.benchmark.lr_provenance import method_formulas
     scores, selection = _restricted_decision(
         np.ascontiguousarray(draws, dtype=np.int32).tobytes(), bounds, game_key,
         draw_n, pick_n, maximum, pool_size, excluded, tuple(sorted(methods)), target, bool(strict_lr and not bonus),
+        method_formulas((*methods, "frequency", "random")),
     )
     return dict(scores), deepcopy(selection)
 
 
 @lru_cache(maxsize=24)
-def _restricted_decision(data, bounds, game_key, draw_n, pick_n, maximum, size, excluded, methods, target, strict_lr):
+def _restricted_decision(data, bounds, game_key, draw_n, pick_n, maximum, size, excluded, methods, target, strict_lr,
+                         formula_signature):
     draws = np.frombuffer(data, dtype=np.int32).reshape(-1, draw_n)
     game = GameDef(game_key, game_key, "", [], maximum, draw_n, pool_extra=size - pick_n,
                    is_single_pick=draw_n == 1, pick_n=pick_n, history_cutoffs=bounds)

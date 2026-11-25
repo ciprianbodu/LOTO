@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from covering.lr_catalog_cache import catalog_cache
+from loto_enterprise.benchmark.lr_provenance import lr_semantics
 from collections import defaultdict
 from copy import deepcopy
 from functools import lru_cache
@@ -179,8 +181,9 @@ def _matched_bonus(hit_masks, drawn, selected, touches):
     return np.where(drawn > 0, (hit_masks & zone_masks[drawn]) != 0, -1)
 
 
-@lru_cache(maxsize=8)
-def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target, bonus_data, touches):
+@catalog_cache(maxsize=8)
+def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target, bonus_data, touches,
+            semantic_signature=None):
     lot = require_lottery(game, "RO")
     scheme = resolve_lr_scheme(game, code)
     matrix = np.frombuffer(data, dtype=np.int32).reshape(-1, lot.draw_n)
@@ -351,6 +354,7 @@ def compare_budget_ranges(
     start, days, results, method, bonus_method = _replay(
         np.ascontiguousarray(matrix, dtype=np.int32).tobytes(), training_cutoffs(engine.data),
         game_id, scheme.code, masks, lookback, dynamic, inverse, hit_target, bonus_data, touches,
+        tuple(sorted(lr_semantics(lot, scheme, hit_target, layout=plan).items())),
     )
     threshold = 3 if objective == ANY_PRIZE and game_id != "5/40" else 4
     rows = []

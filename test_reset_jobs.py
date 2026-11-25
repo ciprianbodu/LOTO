@@ -417,7 +417,7 @@ def test_mark_job_finalized_keeps_the_first_mark(isolated_db):
     assert first
     with sqlite3.connect(isolated_db) as con:
         con.execute("UPDATE jobs SET ui_finalized_at = '2026-07-01 09:01:00'")
-    assert job_queue.mark_job_finalized(jid, db_path=isolated_db) is True
+    assert job_queue.mark_job_finalized(jid, db_path=isolated_db) is False
     assert (
         job_queue.get_job_status(jid, db_path=isolated_db)["ui_finalized_at"]
         == "2026-07-01 09:01:00"

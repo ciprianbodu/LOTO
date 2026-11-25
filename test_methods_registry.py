@@ -25,6 +25,8 @@ def test_registry_contains_only_compact_catalog():
         "compact_transition_prior",
         "compact_renewal_hazard",
         "markov_lag2",
+        "bayes_runlength_shrink",
+        "temporal_stacked_calibration",
     }
     assert set(methods.METHODS) == expected
     assert set(methods.list_methods()) == expected
@@ -40,13 +42,16 @@ def test_retired_method_in_saved_decision_triggers_fallback(caplog):
     assert "alternating_parity" in caplog.text
 
 
-def test_production_exclusions_and_markov_geography():
-    assert EXCLUDED_FROM_PRODUCTION == frozenset({"random"})
+def test_production_exclusions_and_romanian_catalog_geography():
+    evaluation = {"bayes_runlength_shrink", "temporal_stacked_calibration"}
+    assert set(methods.EVALUATION_METHODS) == evaluation
+    assert EXCLUDED_FROM_PRODUCTION == frozenset({"random", *evaluation})
     assert EXCLUDED_FROM_SINGLE_PICK == frozenset()
+    romanian_only = {"markov_lag2", *evaluation}
     for game in ("loto_6_49", "loto_5_40", "joker_urna1", "joker_urna2"):
-        assert methods.method_applies_to_game("markov_lag2", game)
-        assert methods.catalog_version_for_game(game) == "compact-v2"
-    assert not methods.method_applies_to_game("markov_lag2", "de_lotto")
+        assert all(methods.method_applies_to_game(name, game) for name in romanian_only)
+        assert methods.catalog_version_for_game(game) == "compact-v3"
+    assert not any(methods.method_applies_to_game(name, "de_lotto") for name in romanian_only)
     assert methods.catalog_version_for_game("de_lotto") == "compact-v1"
 
 

@@ -2434,11 +2434,10 @@ UI-ul face polling la o secunda, fara reload complet.
 ### 4.1 Date
 
 - O extragere valida are exact `draw_n` valori intregi, distincte si in interval.
-- Doua randuri consecutive cu aceleasi numere principale sunt o copie, nu o
-  extragere: `test_externe_history.py::test_no_draw_repeats_the_previous_one`
-  le respinge in toate CSV-urile din `_ISTORIC/` si `_ISTORIC/externe/`. O
-  repetare reala (sub 1e-6 pe rand la orice joc de acolo) se confirma intai pe
-  arhiva oficiala.
+- Păstrează fiecare extragere distinctă din aceeași zi, principală sau suplimentară.
+  Un duplicat are aceeași dată și aceleași numere în fiecare urnă. La 5/40
+  compară primele cinci ca mulțime și a șasea bilă separat. La Joker compară
+  și bila din urna a doua. Păstrează ordinea oficială în fișier.
 - Engine, benchmark si walk-forward folosesc `draw_validation.py`.
 - `update_csv.py` (loto49.ro, la fiecare pornire) nu scrie nimic pentru un joc,
   cu linia `EROARE verificare: <motiv>. NU scriu nimic.` si jocul la
@@ -2451,9 +2450,7 @@ UI-ul face polling la o secunda, fara reload complet.
   comune site-CSV din ultimele 60 de zile (`CHECK_DAYS`) difera (comparate pe
   data ZZ-LL-AAAA si Joker numeric; in ziua ultimei extrageri stocate site-ul
   poate avea in plus a doua extragere a zilei, dar un rand stocat schimbat pe
-  site nu mai intra drept a doua extragere); un rand nou repeta numerele
-  principale ale randului anterior (ultimul stocat sau randul nou dinainte);
-  pagina nu contine nicio extragere (nu mai e raportata „la zi”); CSV-ul
+  site nu mai intra drept a doua extragere); pagina nu contine nicio extragere (nu mai e raportata „la zi”); CSV-ul
   stocat nu are nicio data lizibila (trunchiat, gol, codare stricata; din
   2026-10-22, inainte jocul era sarit fara avertisment). Diferentele
   mai vechi de 60 de zile nu blocheaza (pagina 5/40 merge pana in 1995 si are
