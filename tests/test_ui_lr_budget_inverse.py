@@ -3,6 +3,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
+from nicegui import ui
 
 import ui_lr_budget as budget
 
@@ -53,6 +54,58 @@ def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatc
         panel.set_value.assert_not_called()
         await view.button.return_value.on_click.call_args.args[0]()
         panel.set_value.assert_called_once_with(True)
+
+    asyncio.run(scenario())
+
+
+def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(monkeypatch):
+    inputs, io_bound = MagicMock(), MagicMock()
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+    heading = "Șansa ca toate numerele principale extrase să fie între 10 și 40 inclusiv"
+    rates = {
+        "6/49": "Loto 6/49 (6 numere) · 5,27%",
+        "5/40": "Loto 5/40 (6 numere) · 19,18%",
+        "joker": "Joker (5 numere din prima urnă) · 13,91%",
+    }
+
+    async def scenario():
+        with ui.column() as host:
+            budget.lr_budget_panel(MagicMock(value=200), inputs)
+        try:
+            game = next(node for node in host.descendants() if isinstance(node, ui.select))
+            inverse = next(
+                node for node in host.descendants()
+                if isinstance(node, ui.switch) and node.text == "Metoda inversă"
+            )
+            odds = {
+                node.text: node for node in host.descendants()
+                if isinstance(node, ui.label) and node.text in {heading, *rates.values()}
+            }
+
+            def visible_odds():
+                return {
+                    text for text, node in odds.items()
+                    if node.visible and all(parent.visible for parent in node.ancestors())
+                }
+
+            assert set(odds) == {heading, *rates.values()}
+            assert inverse.value is False
+            assert visible_odds() == {heading, *rates.values()}
+            for enabled in (False, True):
+                inverse.value = enabled
+                for game_id, rate in rates.items():
+                    game.value = game_id
+                    assert visible_odds() == {heading, rate}
+                game.value = "all"
+                assert visible_odds() == {heading, *rates.values()}
+            game.value = "joker"
+            inverse.value = False
+            assert visible_odds() == {heading, rates["joker"]}
+            await asyncio.sleep(0)
+            inputs.assert_not_called()
+            io_bound.assert_not_called()
+        finally:
+            host.delete()
 
     asyncio.run(scenario())
 

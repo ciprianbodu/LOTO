@@ -3,6 +3,7 @@
 import logging
 from collections import Counter
 from datetime import date
+from math import comb
 
 from nicegui import run, ui
 
@@ -391,8 +392,9 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             }
         }
     """)
+    lotteries = games_for_country("RO")
     game_options = {"all": "Toate jocurile"}
-    game_options.update({lot.game_id: lot.name for lot in games_for_country("RO")})
+    game_options.update({lot.game_id: lot.name for lot in lotteries})
     with ui.card().props("flat bordered").classes("lr-recommendation-form w-full min-w-0 gap-3"):
         ui.label("Recomandare de bilete LR").classes("text-h6 text-weight-bold")
         with ui.row().classes("w-full items-end gap-x-6 gap-y-2"):
@@ -418,6 +420,20 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
             generate = ui.button(
                 "Generează recomandarea", icon="confirmation_number", color="positive",
             ).props("no-caps aria-busy=false").classes("w-full sm:w-auto sm:ml-auto")
+
+        with ui.column().classes("gap-0"):
+            low, high = _INVERSE_RANGE
+            ui.label(
+                f"Șansa ca toate numerele principale extrase să fie între {low} și {high} inclusiv"
+            ).classes("text-body2 text-weight-medium")
+            for lot in lotteries:
+                in_range = max(0, min(high, lot.max_n) - max(1, low) + 1)
+                chance = comb(in_range, lot.draw_n) / comb(lot.max_n, lot.draw_n)
+                percent = f"{100 * chance:.2f}%".replace(".", ",")
+                numbers = f"{lot.draw_n} numere din prima urnă" if lot.geo.second else f"{lot.draw_n} numere"
+                ui.label(f"{lot.name} ({numbers}) · {percent}").classes("text-body2").bind_visibility_from(
+                    game, "value", backward=lambda selected, game_id=lot.game_id: selected in ("all", game_id),
+                )
 
     with ui.expansion("Bilete și analiză", value=False).classes("w-full min-w-0") as panel:
         output = ui.column().classes("w-full min-w-0 gap-2")
