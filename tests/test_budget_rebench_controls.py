@@ -65,6 +65,37 @@ def test_scoped_rebench_respects_client_game_selection_and_keeps_missing_game(mo
     assert sources["joker"][0] == "joker.csv"
 
 
+@pytest.mark.parametrize("inverse", [False, True])
+@pytest.mark.parametrize(("force_range", "base", "expected"), [
+    (False, {}, False), (True, {}, True), (False, {"6/49": "auto"}, None),
+])
+def test_walk_forward_captures_selected_lr_settings(monkeypatch, inverse, force_range, base, expected):
+    choices = dict(lr_budget_game="6/49", lr_budget_objective=FOUR_PLUS,
+                   lr_inverse_val=inverse, lr_restricted_val=force_range,
+                   base_choices={(game, inverse): value for game, value in base.items()})
+    history = pd.DataFrame({"date": ["19-11-2026"], **{f"n{i}": [i] for i in range(1, 7)}})
+    monkeypatch.setitem(app.STATE, "datasets", [("loto_6_49.csv", history)])
+    monkeypatch.setitem(app.SETTINGS, "wf_depth_pct", 70)
+    monkeypatch.setattr(app, "_load_missing_bench_histories", lambda games: None)
+    monkeypatch.setattr(app, "lr_walk_forward_running", lambda: False)
+    jobs = []
+
+    async def record(selection):
+        jobs.extend(selection)
+
+    monkeypatch.setattr(app, "run_lr_walk_forward", record)
+    asyncio.run(app._run_selected_lr_walk_forward(choices, 171))
+    (game, (name, captured_history), settings), = jobs
+    assert (game, name) == ("6/49", "loto_6_49.csv")
+    assert settings["inverse"] is inverse and settings["restricted"] is expected
+    assert "auto_budget" not in settings
+    assert (settings["scheme"], settings["budget_lei"], settings["objective"], settings["depth"]) == (
+        49, 171, FOUR_PLUS, 70,
+    )
+    history.loc[0, "n1"] = 44
+    assert captured_history.loc[0, "n1"] == 1
+
+
 def test_other_country_uses_general_rebench_with_any_saved_lr_options(monkeypatch):
     calls = []
     monkeypatch.setattr(app, "_selected_country", lambda: "DE")

@@ -154,7 +154,8 @@ def nested_wfv_panel(country):
             f"extrageri cu {criterion}. Rândurile retrospective servesc comparației."
         ).classes("text-body2")
         if romanian:
-            ui.label("La Joker Urna 2 se numără bilele ghicite.").classes("text-caption")
+            ui.label("Raportul Re-Bench general. La Joker Urna 2 se numără bilele ghicite.").classes("text-caption")
+            ui.link("Validează metoda și baza alese pentru biletele LR", "#lr-walk-forward")
         else:
             ui.label("Variantele se simulează cu o schemă pe 10 numere.").classes("text-caption")
         game = ui.select(games, value=next(iter(games)), label="Joc sau urnă").classes(

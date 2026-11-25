@@ -2128,6 +2128,17 @@ Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport și d
 pentru fiecare ipoteză în `.nicegui/lr_rebench_latest.json` din directorul de
 rulare. Calculul general se pornește din „Re-Bench general și Auto-Pilot”.
 
+În panoul „Validare walk-forward pentru selecția LR”, butonul „Validează
+walk-forward” preia jocul, bugetul, obiectivul, metoda normală sau inversă și
+baza aleasă. Procentul de istoric stabilește perioada de test de la sfârșitul
+istoricului. Validarea alege metodele Re-Bench și, dacă este cazul, baza automată
+din perioada anterioară testului. La fiecare dată de test actualizează scorurile
+folosind numai extragerile din zilele precedente. În modul invers, tabelul arată
+pool-ul normal exclus și pool-ul jucat pe aceeași bază. Rezultatele numără
+separat potrivirile în pool și pe cea mai bună variantă oficială a biletelor.
+Raportul arată și la câte extrageri din perioada de test toate numerele
+principale au fost între 10 și 40, indiferent de metoda folosită.
+
 Pentru fiecare interval, panoul numără extragerile în care toate numerele
 principale au fost în interval, dintre ultimele 100 de extrageri valide. Arată
 data ultimei apariții cunoscute, pauza până la ultima extragere din istoric și

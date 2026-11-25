@@ -1,0 +1,220 @@
+"""Validate the LR ticket selection and inspect its historical tickets by draw."""
+import logging
+from datetime import date, datetime
+
+from nicegui import ui
+
+from covering.lr_budget import ANY_PRIZE
+from loto_enterprise.core.lotteries import require_lottery
+from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_snapshot
+
+logger = logging.getLogger(__name__)
+
+
+def _date(raw):
+    return date.fromisoformat(str(raw)[:10]).strftime("%d.%m.%Y") if raw else "—"
+
+
+def _range_text(restricted):
+    if restricted is None:
+        return "Bază aleasă automat"
+    return "Pool restrâns între 10 și 40" if restricted else "Baza completă"
+
+
+def _choices(settings):
+    mode = "Metoda inversă" if settings.get("inverse") else "Metoda normală"
+    goal = "orice premiu" if settings.get("objective") == ANY_PRIZE else "4+ pe o variantă"
+    return (f"{mode} · {_range_text(settings.get('restricted'))} · {settings['budget_lei']} lei · "
+            f"{goal} · fereastră de test {settings['depth']:g}%")
+
+
+def _numbers(values):
+    return ", ".join(map(str, values or ())) or "—"
+
+
+def _yes_no(value):
+    if value is None:
+        return "—"
+    return "Da" if value else "Nu"
+
+
+def _draw_table(draws, inverse, joker):
+    fields = [("date", "Extragere"), ("training_rows", "Extrageri anterioare"), ("numbers", "Numere extrase")]
+    if inverse:
+        fields.append(("excluded_pool", "Pool direct exclus"))
+    fields.extend([("pool", "Pool testat"), ("pool_hits", "Potriviri în pool"),
+                   ("ticket_hits", "Maxim pe o variantă LR")])
+    if joker:
+        fields.extend([("joker_drawn", "Bila Joker extrasă"), ("jokers", "Pool Urna 2")])
+        if inverse:
+            fields.append(("excluded_jokers", "Bile Joker excluse"))
+        fields.extend([("joker_hit", "Bila în pool"), ("ticket_joker_hit", "Bila pe bilet")])
+    fields.append(("objective_hit", "Obiectiv atins"))
+    if any(draw.get("error") for draw in draws):
+        fields.append(("error", "Motivul omiterii"))
+    columns = [{"name": key, "field": key, "label": label, "align": "left"} for key, label in fields]
+    page_size = 10
+
+    def rows(page):
+        start = len(draws) - (page - 1) * page_size
+        output = []
+        for index in range(start - 1, max(0, start - page_size) - 1, -1):
+            draw = draws[index]
+            row = {key: draw.get(key) if draw.get(key) is not None else "—" for key, _ in fields}
+            row.update(id=index, date=_date(draw.get("date")))
+            for key in ("numbers", "pool", "excluded_pool", "jokers", "excluded_jokers"):
+                if key in row:
+                    row[key] = _numbers(draw.get(key))
+            for key in ("objective_hit", "joker_hit", "ticket_joker_hit"):
+                if key in row:
+                    row[key] = _yes_no(draw.get(key))
+            output.append(row)
+        return output
+
+    table = ui.table(columns=columns, rows=rows(1), row_key="id", pagination={"rowsPerPage": 0})
+    table.props("dense flat hide-bottom").classes("w-full max-w-full")
+    pages = (len(draws) + page_size - 1) // page_size
+    if pages > 1:
+        def change_page(event):
+            table.rows = rows(int(event.value))
+
+        ui.pagination(1, pages, value=1, direction_links=True, on_change=change_page).props(
+            'max-pages=6 aria-label="Pagina extragerilor validate"'
+        )
+
+
+def _game_result(entry):
+    settings = entry["settings"]
+    with ui.column().classes("w-full min-w-0 gap-1"):
+        ui.label(entry["name"]).classes("text-subtitle1 text-weight-bold")
+        ui.label(f"{_choices(settings)} · {entry['source']}").classes("text-body2")
+        selector = "dinamic" if settings["dynamic"] else "fix"
+        lookback = settings["lookback"] or 100
+        result = entry.get("result") or {}
+        code = f"Cod LR {settings['scheme']}"
+        if "variants" in result and "price_bani" in result:
+            price = f"{result['price_bani'] / 100:.2f}".replace(".", ",")
+            variants = "1 variantă" if result["variants"] == 1 else f"{result['variants']} variante"
+            code += f" · {variants} · cost total {price} lei"
+        ui.label(f"{code} · selector {selector} · istoric {lookback:g}% · "
+                 f"ținta Re-Bench {settings['hit_target']}+ în pool").classes("text-caption")
+        if error := entry.get("error") or result.get("error"):
+            ui.label(error).classes("text-warning").props('role="status"')
+            return
+        lot = require_lottery(entry["game"], "RO")
+        summary = result["summary"]
+        if result.get("requested_restricted") is None:
+            ui.label(f"Baza folosită în test · {_range_text(result['restricted'])}").classes("text-body2")
+        ui.label(
+            f"Antrenare inițială până la {_date(result['training_end'])} · {summary['training_rows']} extrageri. "
+            f"Test de la {_date(summary['first_date'])} până la {_date(summary['last_date'])} · "
+            f"{summary['rows']} extrageri în {summary['days']} zile."
+        ).classes("text-caption")
+        if (in_range := summary.get("all_main_in_10_40")) is not None:
+            total = summary["rows"]
+            share = f"{100 * in_range / total:.2f}%".replace(".", ",")
+            ui.label(f"Toate cele {lot.draw_n} numere din urna principală au fost între 10 și 40 "
+                     f"în {share} dintre extragerile testate ({in_range} din {total}).").classes("text-body2")
+        evaluated = summary["objective_evaluated"]
+        hits = summary["objective_hits"]
+        if evaluated:
+            rate = f"{100 * hits / evaluated:.2f}%".replace(".", ",")
+            ui.label(f"Obiectiv atins la {hits} din {evaluated} extrageri evaluate ({rate}).").classes("text-weight-bold")
+        else:
+            ui.label("Obiectivul nu a putut fi evaluat la nicio extragere.").classes("text-warning")
+        if summary["infeasible"]:
+            ui.label(f"Extrageri fără bilet evaluabil · {summary['infeasible']}.").classes("text-warning")
+        pool_counts = [f"{k}+ · {summary[f'pool_{k}plus']}" for k in range(3, lot.draw_n + 1)]
+        ticket_counts = [f"{k}+ · {summary[f'ticket_{k}plus']}" for k in range(3, lot.pick_n + 1)]
+        ui.label("Extrageri cu potriviri în pool · " + " / ".join(pool_counts)).classes("text-body2")
+        ui.label("Extrageri cu potriviri pe aceeași variantă LR · " + " / ".join(ticket_counts)).classes("text-body2")
+        if lot.bench_key_urna2:
+            if summary.get("ticket_joker_evaluated") is not None:
+                ui.label(f"Urna 2 · bila extrasă în pool la {summary['joker_hits']} din {summary['joker_evaluated']} "
+                         f"extrageri, pe bilet la {summary['ticket_joker_hits']} din "
+                         f"{summary['ticket_joker_evaluated']}.").classes("text-body2")
+            else:
+                ui.label(f"Urna 2 · bila extrasă în pool la {summary['joker_hits']} din "
+                         f"{summary['joker_evaluated']} extrageri evaluate.").classes("text-body2")
+        if isinstance(result.get("protocol"), str) and result["protocol"]:
+            ui.label(result["protocol"]).classes("text-caption")
+        rules = result.get("methods") or {}
+        for key, label in ((lot.bench_key, "Urna principală"), (lot.bench_key_urna2, "Urna 2")):
+            for role, title in (("tested", label), ("direct", f"{label} · pool direct exclus")):
+                if role == "direct" and not result["inverse"]:
+                    continue
+                decision = (rules.get(role) or {}).get(key) or {}
+                members = decision.get("members", [])
+                if members:
+                    names = ", ".join(
+                        f"{m['method']} ({m['weight'] * 100:.0f}%)" if len(members) > 1 else m["method"]
+                        for m in members
+                    )
+                    fallback = " · metodă de rezervă" if decision.get("fallback") else ""
+                    ui.label(f"{title} · {names}{fallback}").classes("text-caption")
+        if draws := result.get("draws"):
+            with ui.expansion("Extrageri și bilete verificate").classes("w-full min-w-0"):
+                _draw_table(draws, result["inverse"], bool(lot.bench_key_urna2))
+
+
+def lr_walk_forward_panel(scope_text, start, *, depth_control=None):
+    with ui.card().classes("w-full min-w-0 gap-2").props('id="lr-walk-forward" tabindex="-1"') as panel:
+        ui.label("Validare walk-forward pentru selecția LR").classes("text-h6 text-weight-bold")
+        scope = ui.label(scope_text()).classes("text-body2")
+        with ui.row().classes("w-full items-center gap-2"):
+            if depth_control is not None:
+                depth_control()
+            launch = ui.button("Validează walk-forward", on_click=start).props("no-caps color=primary")
+            cancel = ui.button("Anulează validarea", on_click=cancel_lr_walk_forward).props("outline no-caps")
+        status = ui.label().classes("text-body2").props('role="status" aria-live="polite"')
+        results = ui.column().classes("w-full min-w-0 gap-2")
+    seen = None
+    showed_latest = False
+
+    def refresh():
+        nonlocal seen, showed_latest
+        if panel.is_deleted:
+            return
+        scope.set_text(scope_text())
+        snapshot = lr_walk_forward_snapshot(
+            since=seen, include_active_entries=False, include_previous=not showed_latest,
+        )
+        if snapshot is None:
+            return
+        seen, active, latest, notice = snapshot
+        launch.set_enabled(not active)
+        cancel.set_visibility(bool(active and not active["cancelled"]))
+        text = ""
+        if active:
+            if active["cancelled"]:
+                text = ("Validarea se va opri după jocul curent." if active.get("cancel_after_game")
+                        else "Se oprește validarea.")
+            elif current := active.get("current"):
+                text = f"Se validează {current[1]} · jocul {current[0]} din {active['total']}."
+                if captured := active.get("current_settings"):
+                    text += " " + _choices(captured)
+                progress = active.get("progress") or {}
+                if progress.get("total"):
+                    text += f" Progres · {progress['done']} din {progress['total']}."
+            else:
+                text = "Se pregătește validarea."
+        elif notice:
+            text = notice
+        status.set_text(text)
+        status.set_visibility(bool(text))
+        if latest and (not active or not showed_latest):
+            results.clear()
+            with results:
+                finished = datetime.fromisoformat(latest["finished_at"]).strftime("%d.%m.%Y, %H:%M")
+                ui.label(f"Ultima validare walk-forward · {finished}").classes("text-subtitle1 text-weight-bold")
+                for entry in latest["entries"]:
+                    try:
+                        _game_result(entry)
+                    except (KeyError, TypeError, ValueError) as exc:
+                        logger.warning("Raport walk-forward LR incomplet: %s", exc)
+                        ui.label("Rezultatul salvat pentru acest joc nu poate fi afișat.").classes("text-warning")
+            showed_latest = True
+
+    refresh()
+    ui.timer(.75, refresh)
+    return panel

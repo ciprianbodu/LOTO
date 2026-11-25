@@ -96,6 +96,8 @@ from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
 from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
+from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_running, run_lr_walk_forward
+from ui_lr_walk_forward import lr_walk_forward_panel
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
@@ -1636,6 +1638,7 @@ def _hw_telemetry_html() -> str:
 
 
 def cancel_all() -> None:
+    cancel_lr_walk_forward()
     cancel_lr_rebench()
     # Publicarea și finalizarea WF se serializează cu anularea, înainte de I/O.
     cancelled_identity = STATE.get("_bench_run_identity")
@@ -2852,15 +2855,20 @@ def _render_virtual_history(records=None, *, show_status: bool = True) -> None:
                     ui.label("Nu există extrageri cu 4+ în pool pentru această cerere." if flat else "Nu există extrageri validate pentru această cerere.").classes("text-caption")
 
 
-def _render_virtual_controls() -> None:
+def _walk_forward_depth_selector(label):
     options = {pct: f"Ultimele {pct}%" for pct in VALIDATION_PERCENTILES}
     options[100] = "Întreg istoricul evaluabil (100%)"
-    selector = ui.select(options, value=_int_setting("wf_depth_pct"),
-                         label="Istoric de validare pentru următoarea rulare").classes("w-full")
+    selector = ui.select(options, value=_int_setting("wf_depth_pct"), label=label).classes("w-full")
     selector.bind_value(SETTINGS, "wf_depth_pct")
     selector.on_value_change(lambda: _save_settings())
+
+
+def _render_virtual_controls() -> None:
+    _walk_forward_depth_selector("Istoric de validare pentru următoarea rulare")
+    if _selected_country() == _LOT.RO:
+        ui.link("Validare walk-forward pentru selecția LR", "#lr-walk-forward")
     ui.label(
-        "Istoricul hits se calculează automat după Re-Bench, pentru setările și istoricele curente. "
+        "Istoricul general se calculează automat după Re-Bench general, pentru setările și istoricele acelei rulări. "
         "Bugetul walk-forward poate opri calculul înainte de toate extragerile."
     ).classes("text-caption text-grey")
 
@@ -4097,6 +4105,35 @@ async def _run_selected_rebench(choices, amount, on_scoped):
     await run_lr_rebench(jobs)
 
 
+async def _run_selected_lr_walk_forward(choices, amount):
+    if lr_walk_forward_running():
+        ui.notify("Validarea walk-forward pentru selecția LR este deja în curs.", type="info")
+        return
+    depth = _int_setting("wf_depth_pct")
+    jobs = _lr_rebench_jobs(choices, amount)
+    for _, _, options in jobs:
+        if options.pop("auto_budget", None) is not None:
+            # The validator resolves Auto using only the period preceding the test.
+            options["restricted"] = None
+        options.update(budget_lei=amount, objective=choices["lr_budget_objective"], depth=depth)
+    await run_lr_walk_forward(jobs)
+
+
+def _lr_scope_text(choices):
+    game = choices["lr_budget_game"]
+    name = "Toate jocurile" if game == "all" else _LOT.require_lottery(game, _LOT.RO).name
+    method = "Metoda inversă" if choices["lr_inverse_val"] else "Metoda normală"
+    games = _LOT.games_for_country(_LOT.RO) if game == "all" else [_LOT.require_lottery(game, _LOT.RO)]
+    bases = {}
+    for lot in games:
+        value = lr_base_choice(choices["base_choices"], lot.game_id, choices["lr_inverse_val"], choices["lr_restricted_val"])
+        bases[lot.name] = {"auto": "Bază automată", "10–40": "Pool restrâns între 10 și 40"}.get(value, value)
+    base = next(iter(bases.values())) if len(set(bases.values())) == 1 else ", ".join(
+        f"{title} ({value})" for title, value in bases.items()
+    )
+    return f"{name} · {method} · {base}"
+
+
 def _align_budget_sources(histories, generated):
     """Use the same loaded draw history for Re-Bench and the next recommendation."""
     originals = STATE.get("result_sources") or {}
@@ -4593,20 +4630,7 @@ def main_page() -> None:
             scope_label = ui.label().classes("text-caption text-info")
 
             def show_lr_scope():
-                game = lr_choices["lr_budget_game"]
-                name = "Toate jocurile" if game == "all" else _LOT.require_lottery(game, _LOT.RO).name
-                method = "Metoda inversă" if lr_choices["lr_inverse_val"] else "Metoda normală"
-                games = _LOT.games_for_country(_LOT.RO) if game == "all" else [_LOT.require_lottery(game, _LOT.RO)]
-                labels = {"auto": "Bază automată", "10–40": "Pool restrâns între 10 și 40"}
-                bases = {}
-                for lot in games:
-                    value = lr_base_choice(lr_choices["base_choices"], lot.game_id, lr_choices["lr_inverse_val"],
-                                           lr_choices["lr_restricted_val"])
-                    bases[lot.name] = labels.get(value, value)
-                base = next(iter(bases.values())) if len(set(bases.values())) == 1 else ", ".join(
-                    f"{title} ({value})" for title, value in bases.items()
-                )
-                scope_label.set_text(f"Re-Bench · {name} · {method} · {base}")
+                scope_label.set_text(f"Re-Bench · {_lr_scope_text(lr_choices)}")
 
             show_lr_scope()
         bench_options = ui.expansion("Re-Bench general și Auto-Pilot").classes("w-full") if _cc == _LOT.RO else ui.column()
@@ -4716,6 +4740,11 @@ def main_page() -> None:
                 base_choices=lr_choices["base_choices"], on_base_change=show_lr_scope,
             )
             lr_report_anchor = lr_rebench_panel()
+            lr_walk_forward_panel(
+                lambda: f"{_lr_scope_text(lr_choices)} · {int(budget_slider.value)} lei",
+                lambda: _run_selected_lr_walk_forward(lr_choices, int(budget_slider.value)),
+                depth_control=lambda: _walk_forward_depth_selector("Istoric pentru validarea walk-forward LR"),
+            )
         results_panel()
         history_windows_panel()
         nested_wfv_panel(_cc)
