@@ -75,7 +75,10 @@ REM neactualizat (refuz, CSV deschis in Excel, eroare de retea) apare in consola
 if exist "%VENV_DIR%\Scripts\python.exe" (
     "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%update_csv.py" > "%LOGFILE%.update.tmp" 2>&1
     type "%LOGFILE%.update.tmp" >> "%LOGFILE%"
-    findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && echo [WARN] update_csv.py nu a actualizat un joc - motivul e in %LOGFILE%
+    findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && (
+        echo [WARN] Verificarea istoricului a raportat probleme:
+        findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp"
+    )
     del "%LOGFILE%.update.tmp" >nul 2>&1
 )
 
