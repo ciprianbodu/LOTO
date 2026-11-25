@@ -38,12 +38,16 @@ for _stream in (sys.stdout, sys.stderr):
 # Sursa unică pentru calea DB (în afara OneDrive — vezi job_queue._default_db_path).
 try:
     from job_queue import DB_PATH as DB, init_job_queue as _init_job_queue
-except Exception:  # noqa: BLE001
-    DB = "loto_jobs.db"
+except Exception as exc:  # noqa: BLE001
+    DB = None
     _init_job_queue = None
+    _queue_load_error = str(exc)
 
 
 def main() -> int:
+    if DB is None:
+        print(f"[EROARE] Nu pot identifica baza cozii de joburi: {_queue_load_error}")
+        return 1
     if not os.path.exists(DB):
         print(f"Nu există {DB} — coada e deja goală. Următorul job va fi #1.")
         return 0

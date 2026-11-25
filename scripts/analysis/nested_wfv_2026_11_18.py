@@ -236,14 +236,16 @@ def fold_decision(day, ends, raw_sums, event_sums, tie_sums, key, k, draw_n, uni
     return methods.index(response["scorer"])
 
 
-def summary(indices, choices, pool, tickets, threshold, *, methods, pool_max, ticket_max, primary_pool=False):
+def summary(indices, choices, pool, tickets, threshold, *, methods, pool_max, ticket_max, primary_pool=False,
+            scored_methods=None):
     row = np.arange(len(tickets))
     selected_tickets = tickets[row, indices]
     selected_pool = pool[row, indices]
+    scored_methods = indices if scored_methods is None else scored_methods
     counts = {
         "selection_count": len(choices),
         "changes": sum(a != b for a, b in itertools.pairwise(choices)),
-        "method_draws": dict(zip(methods, map(int, np.bincount(indices, minlength=len(methods))), strict=True)),
+        "method_draws": dict(zip(methods, map(int, np.bincount(scored_methods, minlength=len(methods))), strict=True)),
         "pool_5plus": int((selected_pool >= 5).sum()), "pool_4plus": int((selected_pool >= 4).sum()),
         "ticket_5plus": int((selected_tickets >= 5).sum()), "ticket_4plus": int((selected_tickets >= 4).sum()),
         "primary": int(((selected_pool if primary_pool else selected_tickets) >= threshold).sum()),
@@ -304,7 +306,7 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
     # The archived study used two for every main urn. Live LR games share the generator limit.
     max_run = (LR_MAX_CONSECUTIVE_RUN if official else 0) if active_catalog else 2
     score_options = {"max_run": max_run}
-    if live_dynamic:
+    if active_catalog:
         unavailable = np.zeros((len(days), len(methods)), dtype=bool)
         score_options["unavailable"] = unavailable
     raw, pools, tickets, ties = outcome_matrices(
@@ -367,9 +369,12 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
     primary_events = (test_pool if primary_pool else test_ticket) >= threshold
     control = primary_events[:, 0]
     result = {}
+    fallback_rows = np.repeat(unavailable[split_day:], np.diff(ends[split_day:]), axis=0) if active_catalog else None
     for name, (indices, choices) in entries.items():
+        scored_methods = np.where(fallback_rows[row, indices], 0, indices) if fallback_rows is not None else None
         metrics = summary(indices, choices, test_pool, test_ticket, threshold,
-                          methods=methods, pool_max=min(draw_n, k), ticket_max=ticket_max, primary_pool=primary_pool)
+                          methods=methods, pool_max=min(draw_n, k), ticket_max=ticket_max, primary_pool=primary_pool,
+                          scored_methods=scored_methods)
         if name != "frequency" and not name.endswith("_hindsight"):
             metrics["vs_frequency"] = paired(primary_events[row, indices], control)
         if active_catalog and name != "random" and not name.endswith("_hindsight"):
@@ -381,7 +386,7 @@ def study_game(key, *, scheme_code=None, hit_target=5, selection_basis="ticket",
     if active_catalog:
         report.update(catalog_version=registry.catalog_version_for_game(key), candidate_methods=list(candidates),
                       comparator="random", fallback_days=fallback_days, scored_days=len(days),
-                      max_consecutive_run=max_run)
+                      max_consecutive_run=max_run, method_draws_effective=True)
     return report
 
 

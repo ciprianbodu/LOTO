@@ -18,16 +18,18 @@ _spec.loader.exec_module(phe)
 
 
 @pytest.mark.parametrize("name", sorted(REG["datasets"]))
-def test_registered_prefix_of_each_file_is_unchanged(name):
+def test_frozen_input_matches_its_registered_prefix(name):
     info = REG["datasets"][name]
     assert phe.DATASETS[name][0] == info["file"]
-    assert phe.prefix_hash(ROOT / info["file"], info["rows"]) == info["prefix_sha256"]
+    assert phe.prefix_hash(phe.registered_path(name), info["rows"]) == info["prefix_sha256"]
+    assert len(phe.load(name)[0]) == info["rows"]
 
 
 def test_errata_touch_only_the_documented_rows():
     """Fisierul are deja randul corectat; experimentul vede randul inregistrat,
     numai pe liniile documentate si numai in prefixul inregistrat."""
-    registered_rows = {info["file"]: info["rows"] for info in REG["datasets"].values()}
+    registered_rows = {phe.registered_path(name).relative_to(ROOT).as_posix(): info["rows"]
+                       for name, info in REG["datasets"].items()}
     for rel, fixes in phe.ERRATA.items():
         current = phe._lines(ROOT / rel)
         registered = phe._registered_lines(ROOT / rel)
@@ -44,12 +46,11 @@ def test_errata_touch_only_the_documented_rows():
             assert registered[line_no - 1] == registered_row
 
 
-def test_load_rebuilds_the_registered_5_40_row(monkeypatch):
+def test_load_rebuilds_the_registered_5_40_row():
     """24-10-2024 a fost inregistrat ca o copie a extragerii din 27-10-2024."""
     rows = REG["datasets"]["ro_540"]["rows"]
     dates, registered, _, _ = phe.load("ro_540", rows)
-    monkeypatch.setattr(phe, "ERRATA", {})
-    fixed_dates, fixed, _, _ = phe.load("ro_540", rows)
+    fixed_dates, fixed, _, _ = phe.load("ro_540", rows, october_erratum=True)
     assert np.array_equal(dates, fixed_dates)
     changed = np.flatnonzero((registered != fixed).any(axis=1))
     assert [str(dates[i])[:10] for i in changed] == ["2024-10-24"]
@@ -57,6 +58,28 @@ def test_load_rebuilds_the_registered_5_40_row(monkeypatch):
     assert registered[i].tolist() == [13, 34, 11, 16, 10, 39]
     assert registered[i + 1].tolist() == registered[i].tolist()
     assert fixed[i].tolist() == [14, 15, 28, 10, 25, 26]
+
+
+def test_corrected_live_history_is_reported_separately_and_frozen_drift_is_rejected(tmp_path, monkeypatch):
+    name, rel = "ro_649", phe.DATASETS["ro_649"][0]
+    monkeypatch.setattr(phe, "ROOT", tmp_path)
+    archive = phe.registered_path(name)
+    current = tmp_path / rel
+    archive.parent.mkdir(parents=True)
+    current.parent.mkdir(parents=True)
+    header = "date,n1,n2,n3,n4,n5,n6\n"
+    original = "01-01-2000,1,2,3,4,5,6\n"
+    archive.write_text(header + original, encoding="utf-8")
+    info = {"file": rel, "rows": 1, "prefix_sha256": phe.prefix_hash(archive, 1)}
+    reg = {"datasets": {name: info}}
+    corrected = "01-01-2000,1,2,3,4,5,7\n"
+    current.write_text(header + corrected, encoding="utf-8")
+    assert not phe.compare_current(reg)[name]["current_prefix_matches"]
+    current.write_text(header + original + corrected, encoding="utf-8")
+    assert phe.compare_current(reg)[name]["current_prefix_matches"]
+    archive.write_text(header + corrected, encoding="utf-8")
+    with pytest.raises(ValueError, match="amprenta difera"):
+        phe._registered_prefix(name, info)
 
 
 def test_errata_refuse_an_undocumented_change(tmp_path, monkeypatch):

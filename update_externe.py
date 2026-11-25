@@ -39,6 +39,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from history_write_lock import history_write_lock
+
 # Consola Windows e cp1252 by default -> diacriticele arunca UnicodeEncodeError.
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -451,16 +453,27 @@ def _row_nums(lottery, source: Source, nums: tuple[int, ...]) -> list[int]:
     return main + list(nums[n:])
 
 
-def read_csv(lottery, path: Path) -> list[Draw]:
+def read_csv(lottery, path: Path, today: dt.date | None = None) -> list[Draw]:
     with open(path, encoding="utf-8", newline="") as fh:
         rows = list(csv.reader(fh))
     if not rows or rows[0] != _header(lottery):
         raise SourceError(f"antet CSV neasteptat: {rows[0] if rows else 'gol'}")
-    out = []
-    for r in rows[1:]:
+    out: list[Draw] = []
+    today = today or dt.date.today()
+    for line, r in enumerate(rows[1:], start=2):
         if not r:
             continue
-        out.append(Draw(dt.datetime.strptime(r[0], "%d-%m-%Y").date(), tuple(int(x) for x in r[1:])))
+        day = dt.datetime.strptime(r[0], "%d-%m-%Y").date()
+        draw = Draw(day, tuple(int(x) for x in r[1:]))
+        why = validate_draw(lottery, draw, today)
+        if why or r[0] != day.strftime("%d-%m-%Y"):
+            raise SourceError(f"randul {line}: {why or 'data nu e ZZ-LL-AAAA'}")
+        if out:
+            if day < out[-1].date:
+                raise SourceError(f"randul {line}: datele nu sunt in ordine cronologica")
+            if _key(lottery, draw.nums)[0] == _key(lottery, out[-1].nums)[0]:
+                raise SourceError(f"randul {line} repeta numerele randului anterior")
+        out.append(draw)
     if not out:
         raise SourceError("CSV fara extrageri")
     return out
@@ -566,9 +579,9 @@ def update_game(lottery, root: Path, today: dt.date, dry_run: bool = False) -> t
         return 0, f"  {name:<28}: fara sursa de actualizare — sar peste."
     path = root / lottery.csv
     try:
-        have = read_csv(lottery, path)
+        have = read_csv(lottery, path, today)
     except Exception as exc:
-        return 0, f"  {name:<28}: CSV ilizibil ({exc}) — SAR peste, nu scriu nimic."
+        return 0, f"  {name:<28}: EROARE: CSV ilizibil ({exc}) — SAR peste, nu scriu nimic."
     last = have[-1].date
     last_str = last.strftime("%d-%m-%Y")
     try:
@@ -592,7 +605,16 @@ def update_game(lottery, root: Path, today: dt.date, dry_run: bool = False) -> t
     if dry_run:
         return 0, f"  {name:<28}: CSV={last_str} -> {source.label}={site_str} | {len(new)} extrageri noi (dry-run, nescrise): {dates}"
     try:
-        write_atomic(lottery, source, path, new)
+        with history_write_lock():
+            current = read_csv(lottery, path, today)
+            if current != have:
+                if current[:len(have)] != have:
+                    raise SourceError("istoricul verificat s-a modificat; reia actualizarea")
+                new, checked = plan_update(lottery, current, src, today)
+                if not new:
+                    return 0, f"  {name:<28}: la zi ({checked} verificate)."
+                dates = ", ".join(d.date.strftime("%d-%m-%Y") for d in new)
+            write_atomic(lottery, source, path, new)
     except Exception as exc:
         return 0, f"  {name:<28}: EROARE la scriere ({type(exc).__name__}: {exc}) — fisierul ramane neschimbat."
     return len(new), f"  {name:<28}: CSV={last_str} -> {source.label}={site_str} | +{len(new)} extrageri noi: {dates}"

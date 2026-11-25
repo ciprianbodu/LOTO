@@ -238,8 +238,9 @@ def submit_generation(
     if not STATE["datasets"]:
         ui.notify("Încărcați cel puțin un fișier CSV!", type="negative")
         return
-    _selected = {g.game_id for g in _selected_games()}
-    if not any(_game_spec_for(fn).game_id in _selected for fn, _ in STATE["datasets"]):
+    selected = _selected_games()
+    available = {_game_spec_for(fn).game_id for fn, _ in STATE["datasets"]}
+    if not any(game.game_id in available for game in selected):
         ui.notify(
             f"Niciun istoric încărcat pentru {_country_label()} (jocurile bifate). "
             f"Folosește «📂 Încarcă istoricul {_country_label()}».",
@@ -248,6 +249,13 @@ def submit_generation(
         return
     if STATE["active_job_id"]:
         ui.notify("Există deja un job în rulare.", type="warning")
+        return
+    try:
+        cfg = _build_config_json(sim_depth_per_game)
+        job_id = int(submit_job("pipeline", cfg))
+    except Exception as exc:
+        logger.exception("Nu am putut înregistra cererea de generare: %s", exc)
+        ui.notify("Cererea de generare nu a putut fi salvată. Rezultatul anterior rămâne disponibil.", type="negative")
         return
     with STATE_LOCK:
         # Un walk-forward încă în rulare aparține rezultatului vechi: îl facem
@@ -260,13 +268,15 @@ def submit_generation(
         STATE["retro"] = {}
         STATE["retro_meta"] = {}
         STATE["wf_status"] = ""
+        STATE["active_job_id"] = job_id
+        STATE["job_start_time"] = time.time()
+        STATE["job_elapsed"] = None
+        STATE["wf_elapsed"] = None
     ensure_worker_running()
-    cfg = _build_config_json(sim_depth_per_game)
-    job_id = submit_job("pipeline", cfg)
-    STATE["active_job_id"] = int(job_id)
-    STATE["job_start_time"] = time.time()
-    STATE["job_elapsed"] = None  # reset; se fixează la COMPLETED
-    STATE["wf_elapsed"] = None  # reset; se fixează la finalul walk-forward
+    missing = [game.name for game in selected if game.game_id not in available]
+    if missing:
+        ui.notify("Jocuri omise din generare pentru că lipsește istoricul: " + ", ".join(missing),
+                  type="warning", timeout=8000)
     ui.notify(f"Job #{job_id} trimis.", type="positive")
     _refresh_status()
 
@@ -3231,12 +3241,17 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
             variants = primary.get("variants")
             if isinstance(variants, (list, tuple)):
                 data["generated_variant_count"] = len(variants)
+                if spec.game_id == "joker":
+                    _, missing, invalid = _joker_variant_balls(variants, spec.pick_n)
+                    data["incomplete_joker_count"] = missing + invalid
             data.update(game_id=spec.game_id, country=spec.country)
             audit = primary.get("audit") or {}
             data["audit"] = {key: deepcopy(audit[key]) for key in audit_fields if key in audit}
             code = _result_lr_scheme_code(primary)
             if code is not None:
                 data["lr_scheme_code"] = deepcopy(code)
+                if isinstance(variants, (list, tuple)) and _generated_system_identity(game, primary)[0] != "lr":
+                    data["lr_layout_mismatch"] = True
             record = {"fname": fname, "game": game, "spec": spec, "data": data}
             if spec.is_romanian:
                 frame = snapshot["sources"][fname]
@@ -3370,14 +3385,19 @@ def _build_mail_body(snapshot: dict | None = None) -> str:
         if spec.is_romanian and isinstance(alternatives, dict) and "inverse_reduced" in alternatives:
             pool_line += "  (pool normal)"
         lines.append(pool_line)
-        played_lr = primary.get("lr_scheme_code") is not None
+        mismatch = primary.get("lr_layout_mismatch")
+        played_lr = primary.get("lr_scheme_code") is not None and not mismatch
         generated_count = primary.get("generated_variant_count")
         if spec.is_romanian and not played_lr and generated_count is not None:
             price = spec.price if spec.price is not None else PRICES.get(spec.geometry)
             cost = (f" (≈ {_thousands(generated_count * price)} lei în variante; taxa pe bilet se adaugă separat)"
                     if price is not None else " (tarif necunoscut)")
             lines.append(f"VARIANTE GENERATE: {_thousands(generated_count)}{cost}")
-        schemes = _lr_schemes_for(spec.game_id, primary)
+            if incomplete := primary.get("incomplete_joker_count"):
+                lines.append(f"Variante fără bilă Joker validă: {incomplete}. Costul presupune completarea câmpului Joker.")
+        if mismatch:
+            lines.append(f"Codul LR {primary['lr_scheme_code']} din rezultat nu corespunde variantelor generate.")
+        schemes = [] if mismatch else _lr_schemes_for(spec.game_id, primary)
         if schemes:
             price = spec.price if spec.price is not None else PRICES.get(spec.geometry, 8.0)
             prefix = "SCHEMĂ LR: " if played_lr else "REFERINȚĂ LR: "
@@ -4146,6 +4166,28 @@ def _align_budget_sources(histories, generated):
             del generated[game]
 
 
+def _generation_games_selector(country, refresh):
+    games = _LOT.games_for_country(country)
+
+    def on_games(event):
+        if not event.value:
+            # An empty saved preference means every game in the current country.
+            event.sender.set_value([game.game_id for game in games])
+            return
+        SETTINGS["games_val"] = list(event.value)
+        _save_settings()
+        _, errors = _autoload_histories(_selected_games())
+        for error in errors:
+            ui.notify(f"Istoric respins: {error}", type="negative", timeout=8000)
+        refresh()
+
+    return ui.select(
+        {g.game_id: g.name + (" (doar antrenament)" if g.training_only else "") for g in games},
+        value=[g.game_id for g in _selected_games()],
+        multiple=True, label="Jocuri", on_change=on_games,
+    ).classes("w-full")
+
+
 @ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
@@ -4286,26 +4328,15 @@ def main_page() -> None:
             on_change=_on_country,
         ).classes("w-full")
 
-        def _on_games(e) -> None:
-            SETTINGS["games_val"] = [str(v) for v in (e.value or [])]
-            _save_settings()
+        def refresh_game_settings() -> None:
             datasets_label.refresh()
             _render_large_pool_warning()
 
-        ui.select(
-            {
-                g.game_id: g.name + (" (doar antrenament)" if g.training_only else "")
-                for g in _LOT.games_for_country(_cc)
-            },
-            value=[g.game_id for g in _selected_games()],
-            multiple=True,
-            label="Jocuri",
-            on_change=_on_games,
-        ).classes("w-full")
+        _generation_games_selector(_cc, refresh_game_settings)
         if any(g.training_only for g in _LOT.games_for_country(_cc)):
             ui.label(
-                f"„Doar antrenament”: {_TRAINING_ONLY_NOTE}; bench-ul, walk-forward-ul "
-                "și analizele funcționează."
+                "Jocurile marcate „doar antrenament” nu se joacă online din România. Re-Bench, validarea walk-forward "
+                "și analizele sunt disponibile."
             ).classes("text-caption text-grey")
 
         _BTN = "w-full"

@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from loto_engine import LotoEngine
 from loto_enterprise.benchmark.hit_target import current_bench_hit_target, fixed_replay_target
 from loto_enterprise.core.draw_validation import valid_draw_matrix
+from loto_enterprise.core.pool_selection import playable_lr_limit
 from loto_enterprise.core.history import (
     chronological_history,
     training_cutoffs,
@@ -993,6 +994,9 @@ class LotoBacktester:
             if virtual_full_system:
                 raise ValueError("O schemă LR nu poate fi validată ca sistem complet virtual")
             lr_scheme_code = scheme.code
+            max_consecutive_run = playable_lr_limit(
+                int(self.params["max_n"]), scheme.n, restrict_base_min, restrict_base_max, max_consecutive_run,
+            )
             guarantee, wheel_condition, max_variants = 4, 4, scheme.size
         if len(self.draws) < 10:
             logger.warning("[BACKTEST] Prea puține date pentru backtesting retroactiv")

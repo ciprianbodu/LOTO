@@ -90,6 +90,8 @@ def check_history(
             lines.append(reader.line_num)
     except csv.Error as exc:
         return f"CSV ilizibil la randul {reader.line_num}: {exc}"
+    if not rows:
+        return "CSV fara extrageri"
     df = pd.DataFrame(rows, columns=header)
     drawn, valid = valid_draw_matrix(df, main, draw_n=geo.draw_n, max_num=geo.max_n)
     if geo.second:

@@ -426,14 +426,30 @@ def _app_with_dataset(monkeypatch, rows=40):
     return app
 
 
-def test_new_ui_jobs_ignore_the_retired_consecutive_setting(monkeypatch):
+@pytest.mark.parametrize(
+    ("country", "game", "filename", "limit"),
+    [("RO", "6/49", "loto_6_49.csv", 2), ("DE", "de_lotto", "germania_lotto_6aus49.csv", 0)],
+)
+def test_new_ui_jobs_ignore_the_retired_consecutive_setting(monkeypatch, country, game, filename, limit):
+    import ui_runtime
+
     app = _app_with_dataset(monkeypatch)
+    monkeypatch.setattr(ui_runtime, "STATE", app.STATE)
+    frame = app.STATE["datasets"][0][1]
+    monkeypatch.setitem(app.STATE, "datasets", [(filename, frame)])
+    monkeypatch.setitem(app.STATE, "dataset_game", {filename: game})
+    monkeypatch.setitem(app.SETTINGS, "country_val", country)
+    monkeypatch.setitem(app.SETTINGS, "games_val", [])
+    monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", False)
     baseline = json.loads(app._build_config_json())
     monkeypatch.setitem(app.SETTINGS, "max_consecutive_run_enabled_val", True)
     generated = json.loads(app._build_config_json())
     assert generated["input_hash"] == baseline["input_hash"]
-    value = generated["datasets"][0]["tasks"][0]["max_consecutive_run"]
-    assert value == 0 and type(value) is int
+    task = generated["datasets"][0]["tasks"][0]
+    assert task["game_label"] == game
+    assert ("lr_scheme_code" in task) == (country == "RO")
+    value = task["max_consecutive_run"]
+    assert value == limit and type(value) is int
 
 
 def test_retired_consecutive_setting_is_ignored_on_restart(tmp_path, monkeypatch):
@@ -619,14 +635,29 @@ def test_wf_history_names_the_limit_it_used():
 
 
 # --- E2E: sidebar → coadă → worker → rezultat decodat → opțiuni WF -------------
-def test_legacy_worker_result_and_wf_options_preserve_an_explicit_limit(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("official_lr", "requested", "limit"),
+    [(False, 2, 2), (False, None, 0), (True, None, 2), (True, 0, 2)],
+)
+def test_legacy_worker_result_and_wf_options_preserve_an_explicit_limit(
+    tmp_path, monkeypatch, official_lr, requested, limit,
+):
     app = _app_with_dataset(monkeypatch, rows=400)
+    monkeypatch.setitem(app.SETTINGS, "country_val", "RO")
+    monkeypatch.setitem(app.SETTINGS, "games_val", [])
     monkeypatch.setitem(app.SETTINGS, app._POOL_KEYS["6/49"], 12)
+    monkeypatch.setitem(app.SETTINGS, "dynamic_method_enabled_val", False)
+    monkeypatch.setattr(LotoEngine, "_get_timesfm_scores", lambda *_args, **_kwargs: LINEAR)
     legacy = json.loads(app._build_config_json())
     task = legacy["datasets"][0]["tasks"][0]
-    for key in ("lr_scheme_code", "dynamic_method"):
-        task.pop(key, None)
-    task.update(max_consecutive_run=2, guarantee=3, max_variants=4, wheel_condition=3)
+    if not official_lr:
+        task.pop("lr_scheme_code")
+        task.update(guarantee=3, max_variants=4, wheel_condition=3)
+    if requested is None:
+        task.pop("max_consecutive_run")
+    else:
+        task["max_consecutive_run"] = requested
+
     db = str(tmp_path / "jobs.db")
     jid = jq.submit_job("pipeline", json.dumps(legacy), db_path=db)
     job = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
@@ -648,23 +679,17 @@ def test_legacy_worker_result_and_wf_options_preserve_an_explicit_limit(tmp_path
     rb, _ = decode_queue_result(jq.get_job_status(jid, db_path=db)["result_json"])
     ((_fname, outs),) = rb
     data = outs["6/49"]
-    assert data["max_consecutive_run"] == 2
-    assert data["audit"]["consecutive_limit"]["requested"] == 2
-    assert longest_consecutive_run(data["hard_core"]) <= 2
-    assert app._wf_generation_options(data)["max_consecutive_run"] == 2
-
-    # Un job din coada veche, fără cheie, rulează fără limită.
-    old_cfg = json.loads(app._build_config_json())
-    for ds in old_cfg["datasets"]:
-        for task in ds["tasks"]:
-            task.pop("max_consecutive_run")
-    jid_old = jq.submit_job("pipeline", json.dumps(old_cfg), db_path=db)
-    job_old = jq.fetch_pending_job(db_path=db, worker_token=worker.WORKER_TOKEN)
-    rb_old, _ = decode_queue_result(worker._run_pipeline_job(job_old))
-    data_old = rb_old[0][1]["6/49"]
-    assert job_old["id"] == jid_old
-    assert data_old["max_consecutive_run"] == 0
-    assert "consecutive_limit" not in data_old["audit"]
+    assert ("lr_scheme_code" in data) == official_lr
+    assert data["max_consecutive_run"] == limit
+    assert app._wf_generation_options(data)["max_consecutive_run"] == limit
+    context_limit = data["context"]["max_consecutive_run"]
+    assert context_limit == {"requested": limit, "applied": limit}
+    if limit:
+        assert data["audit"]["consecutive_limit"]["requested"] == limit
+        assert longest_consecutive_run(data["hard_core"]) <= limit
+    else:
+        assert "consecutive_limit" not in data["audit"]
+        assert data["hard_core"] == list(range(38, 50))
 
 
 @pytest.mark.parametrize(

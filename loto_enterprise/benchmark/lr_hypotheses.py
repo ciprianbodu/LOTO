@@ -63,7 +63,7 @@ def _training(matrix, bounds, origin, lookback):
 
 
 def _blocked_by_date(
-    matrix, bounds, game, scheme, origins, base, reference_size, dynamic, lookback, target, check,
+    matrix, bounds, game, scheme, origins, base, reference_size, dynamic, lookback, target, check, *, calendar,
 ):
     """Compute the direct reference once at each date, before scoring candidates."""
     check(force=True)
@@ -72,6 +72,7 @@ def _blocked_by_date(
         return dict.fromkeys(origins, outside_base), "", []
 
     reference_members = []
+    each_origin = "fiecărei zile" if calendar else "fiecărei extrageri"
     if dynamic and scheme is not None:
         limits = np.asarray(bounds, dtype=np.intp)
         days = np.flatnonzero(limits == np.arange(len(limits)))
@@ -82,7 +83,7 @@ def _blocked_by_date(
         )
         def direct_pool(origin):
             return prepare(origin)(base)
-        protocol = "Pool-ul direct este ales de selectorul dinamic, separat înaintea fiecărei zile."
+        protocol = f"Pool-ul direct este ales de selectorul dinamic, separat înaintea {each_origin}."
     else:
         initial, cutoffs = _training(matrix, bounds, origins[0], lookback)
         _, selection = restricted_bench_scores(
@@ -102,7 +103,8 @@ def _blocked_by_date(
 
         protocol = (
             f"Pool-ul direct folosește metoda {method}, fixată pe datele disponibile "
-            "înaintea primei zile evaluate, cu scoruri actualizate înaintea fiecărei zile."
+            f"înaintea primei {'zile' if calendar else 'extrageri'} evaluate, "
+            f"cu scoruri actualizate înaintea {each_origin}."
         )
 
     blocked = {}
@@ -206,7 +208,7 @@ def _reusable_decision(config, records, target, history_rows, reference_members)
 
 
 def _bench_urn(
-    name, matrix, game, size, base, reference_size, required, scheme, dynamic, lookback, target, cancel_path,
+    name, matrix, game, size, base, reference_size, required, scheme, dynamic, lookback, target, cancel_path, *, calendar,
 ):
     check = _cancellation(cancel_path)
     check(force=True)
@@ -238,7 +240,7 @@ def _bench_urn(
         return output
     blocked, reference_protocol, reference_members = _blocked_by_date(
         matrix, game.history_cutoffs, game, scheme, origins, base, reference_size,
-        dynamic, lookback, target, check,
+        dynamic, lookback, target, check, calendar=calendar,
     )
     coverage = ""
     if not game.is_single_pick and reference_size:
@@ -247,7 +249,7 @@ def _bench_urn(
         if skipped:
             cutoffs = game.history_cutoffs[earliest:]
             missing = sum(day in skipped for day in cutoffs)
-            output.update(infeasible_days=len(skipped), infeasible_draws=missing,
+            output.update(infeasible_days=len(skipped) if calendar else None, infeasible_draws=missing,
                           playable_draws=len(cutoffs) - missing, test_draws=len(cutoffs))
             if len(skipped) == len(origins):
                 output["error"] = (
@@ -259,9 +261,10 @@ def _bench_urn(
                 blocked[origin] = None
             windows = [(pct, start) for pct, start in windows
                        if any(day not in skipped for day in game.history_cutoffs[start:])]
+            omitted = f"În {len(skipped)} zile ({missing} extrageri)" if calendar else f"La {missing} extrageri"
             coverage = (
                 f" În cea mai lungă fereastră au fost disponibile bilete la {len(cutoffs) - missing} din "
-                f"{len(cutoffs)} extrageri. În {len(skipped)} zile ({missing} extrageri), pool-ul invers nu "
+                f"{len(cutoffs)} extrageri. {omitted}, pool-ul invers nu "
                 "a încăput fără trei numere consecutive. Aceleași extrageri au fost omise pentru toate metodele."
             )
     methods = _methods(game.key)
@@ -293,13 +296,16 @@ def _bench_urn(
     widest.sort(key=lambda row: (-row["hit_rate"], -row["avg_hits"], row["method"]))
     reusable = _reusable_decision(config, records, target, len(matrix), reference_members)
     method = " + ".join(member["method"] for member in reusable["members"]) if reusable else None
+    chronology = (
+        "Metodele folosesc numai extragerile disponibile înaintea fiecărei zile. "
+        if calendar else "Istoricul nu are date calendaristice. Metodele folosesc numai rândurile anterioare, în ordinea fișierului. "
+    )
     output.update(
         rows=widest, method=method, fallback=bool(reusable and reusable["fallback"]), decision=reusable,
         folds=[pct for pct, _ in windows],
         protocol=(
             "Clasamentul arată fereastra cea mai lungă. Decizia folosește toate ferestrele disponibile. "
-            "Metodele folosesc numai extragerile disponibile înaintea fiecărei zile. "
-            "Extragerile cu numere în afara bazei sunt incluse. "
+            + chronology + "Extragerile cu numere în afara bazei sunt incluse. "
             + reference_protocol + coverage
         ).rstrip(),
     )
@@ -330,6 +336,7 @@ def benchmark_lr_hypotheses(
         _bench_urn(
             "Urna principală", matrix, main, scheme.n, tuple(range(first, last + 1)),
             scheme.n if inverse else 0, scheme.n, scheme, dynamic, lookback, main_target, cancel_path,
+            calendar=dates is not None,
         ),
     ]
     if lot.bench_key_urna2:
@@ -346,6 +353,7 @@ def benchmark_lr_hypotheses(
         report = _bench_urn(
             "Urna 2 Joker", bonus_draws, bonus, 1, tuple(range(1, maximum + 1)),
             joker_size if inverse else 0, joker_size, None, False, lookback, 1, cancel_path,
+            calendar=dates is not None,
         )
         if report["protocol"]:
             report["protocol"] += " Intervalul 10–40 privește numai urna principală. Urna 2 este evaluată la top-1."

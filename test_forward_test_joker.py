@@ -37,7 +37,8 @@ ft = fj.ft
 frozen_ens = fj.frozen_ens
 sprt_operating = _load("sprt_operating_dmd", DMD / "sprt_operating.py")
 REG = json.loads((HERE / "preregistration_2026-10-11.json").read_text(encoding="utf-8"))
-ISTORIC = ROOT / "_ISTORIC" / "joker.csv"
+CURRENT_HISTORY = ROOT / "_ISTORIC" / "joker.csv"
+REGISTERED_HISTORY = ROOT / "testdata" / "preregistration" / CURRENT_HISTORY.name
 
 
 def test_frozen_method_is_the_registered_file():
@@ -62,8 +63,10 @@ def test_registration_parameters_are_the_published_ones():
 
 
 def test_frozen_method_reproduces_the_registered_ranking_and_scores():
-    dates, draws = fj.load_history(ISTORIC)
+    dates, draws = fj.load_history(REGISTERED_HISTORY)
     n = REG["history_rows_at_registration"]
+    assert len(draws) == n
+    assert dates[-1].isoformat() == REG["history_last_date_at_registration"]
     assert ft.history_hash(dates, draws, n) == REG["history_sha256"]
     assert frozen_ens.ranking(dates[:n], draws[:n], 45)[:12] == REG["golden_top12_at_registration"]
     got = frozen_ens.scores(dates[:n], draws[:n], 45)
@@ -171,7 +174,7 @@ def test_a_repeated_draw_stops_the_evaluation(tmp_path):
 def test_a_late_row_before_the_start_date_is_reported(tmp_path):
     """Un rând datat 09-10 sau 10-10-2026, când nu era extragere, e semnalat."""
     path = tmp_path / "real.csv"
-    text = ISTORIC.read_text(encoding="utf-8").rstrip("\n")
+    text = REGISTERED_HISTORY.read_text(encoding="utf-8").rstrip("\n")
     path.write_text(text + "\n10-10-2026,7,8,9,10,11,3\n", encoding="utf-8")
     dates, draws = fj.load_history(path)
     warnings = ft.integrity_warnings(REG, dates, draws, HERE / "frozen_ens.py")
@@ -179,10 +182,17 @@ def test_a_late_row_before_the_start_date_is_reported(tmp_path):
     assert not any("s-a schimbat" in w for w in warnings)
 
 
-def test_the_real_history_before_registration_is_unchanged():
-    dates, draws = fj.load_history(ISTORIC)
-    warnings = ft.integrity_warnings(REG, dates, draws, HERE / "frozen_ens.py")
-    assert warnings == []
+def test_registered_history_matches_the_recorded_fingerprint():
+    dates, draws = fj.load_history(REGISTERED_HISTORY)
+    assert ft.integrity_warnings(REG, dates, draws, HERE / "frozen_ens.py") == []
+
+
+def test_current_history_reports_corrections_to_the_registered_prefix(capsys):
+    dates, draws = fj.load_history(CURRENT_HISTORY)
+    assert ft.history_hash(dates, draws, REG["history_rows_at_registration"]) != REG["history_sha256"]
+    assert fj.main(["--csv", str(CURRENT_HISTORY)]) == 0
+    out = capsys.readouterr().out
+    assert "ca la înregistrare" in out or "istoricul de dinaintea înregistrării s-a schimbat" in out
 
 
 def test_operating_table_matches_the_protocol():
@@ -212,18 +222,8 @@ def test_script_reports_without_writing_anything(tmp_path, capsys):
     assert sorted(p.name for p in HERE.iterdir() if p.name != "__pycache__") == before
 
 
-def test_no_next_pool_before_the_first_evaluated_draw(tmp_path, capsys):
-    # Istoricul real crește după înregistrare. Scenariul fără extrageri viitoare
-    # folosește prefixul înregistrat, nu presupune că CSV-ul curent se oprește acolo.
-    n = REG["history_rows_at_registration"]
-    lines = ISTORIC.read_text(encoding="utf-8").splitlines()
-    csv = tmp_path / "registered_history.csv"
-    csv.write_text("\n".join(lines[: n + 1]) + "\n", encoding="utf-8")
-    dates, draws = fj.load_history(csv)
-    assert len(draws) == n
-    assert ft.history_hash(dates, draws, n) == REG["history_sha256"]
-    assert dates[-1].isoformat() == REG["history_last_date_at_registration"]
-    assert fj.main(["--csv", str(csv)]) == 0
+def test_no_next_pool_before_the_first_evaluated_draw(capsys):
+    assert fj.main(["--csv", str(REGISTERED_HISTORY)]) == 0
     out = capsys.readouterr().out
     assert "Extrageri evaluate (după 2026-10-11): 0" in out
     assert "prima extragere evaluată" in out

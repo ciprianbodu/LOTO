@@ -1,11 +1,16 @@
 """Strict LR pools preserve rank whenever a full admissible selection exists."""
 
 from itertools import combinations
+from pathlib import Path
 from random import Random
 
+import pandas as pd
 import pytest
 
 from covering.lr_pool_ranking import lr_pool_capacity, rank_lr_pool, select_ranked_lr_pool
+from loto_engine import LotoEngine
+from loto_enterprise.core.backtesting import LotoBacktester
+from loto_enterprise.core.walk_forward_adapter import run_honest_walk_forward
 
 
 def _no_triple(numbers):
@@ -60,3 +65,70 @@ def test_dense_and_gapped_windows_match_exhaustive_rank_order():
         else:
             with pytest.raises(ValueError):
                 select_ranked_lr_pool(ranked, k)
+
+
+def test_main_engine_and_ordinary_walk_forward_refuse_an_unplayable_lr_interval():
+    frame = pd.read_csv(Path(__file__).resolve().parents[1] / "_ISTORIC" / "loto_6_49.csv").tail(40)
+    engine = LotoEngine("6/49")
+    engine.data = frame
+    settings = {
+        "pool_size": 9, "lr_scheme_code": 48, "restrict_base_min": 10, "restrict_base_max": 20,
+        "max_consecutive_run": 2,
+    }
+    calls = (
+        lambda: engine.run_institutional_pipeline(track_pool_variation=False, **settings),
+        lambda: LotoBacktester(frame, "6/49").run_retroactive_backtest(**settings),
+        lambda: run_honest_walk_forward(frame, "6/49", use_cache=False, **settings),
+    )
+    for call in calls:
+        with pytest.raises(ValueError, match="10–20.*cel mult 8 numere fără trei consecutive.*necesită 9"):
+            call()
+
+
+def test_default_main_lr_job_and_ordinary_replay_keep_the_rule_with_enough_capacity():
+    frame = pd.read_csv(Path(__file__).resolve().parents[1] / "_ISTORIC" / "loto_6_49.csv").tail(40)
+    engine = LotoEngine("6/49")
+    engine.data = frame
+    settings = {"pool_size": 9, "lr_scheme_code": 48, "restrict_base_min": 10, "restrict_base_max": 40}
+    lines, *_, _, audit = engine.run_institutional_pipeline(track_pool_variation=False, **settings)
+    assert len(lines) == 12
+    assert audit["consecutive_limit"]["applied"] == 2
+    assert len(engine.hard_core) == 9 and _no_triple(engine.hard_core)
+
+    rows, metadata = run_honest_walk_forward(
+        frame, "6/49", backtest_depth_percent=5, use_cache=False, **settings,
+    )
+    assert rows and metadata["max_consecutive_run"] == 2
+    for row in rows:
+        pool = row.ticket_context["hard_core"]
+        assert len(pool) == 9 and _no_triple(pool)
+        assert all(10 <= number <= 40 for number in pool)
+
+
+@pytest.mark.parametrize(
+    ("options", "generic_limit", "lr_limit"),
+    [
+        ({}, 0, 2),
+        ({"max_consecutive_run": 0}, 0, 2),
+        ({"max_consecutive_run": 4}, 4, 2),
+        ({"max_consecutive_run": 1}, 1, 1),
+    ],
+)
+def test_worker_applies_the_lr_limit_to_old_queue_options(options, generic_limit, lr_limit):
+    from loto_enterprise.core.lotteries import require_lottery
+    from worker import _task_norm
+
+    lot = require_lottery("6/49", "RO")
+    task = {"pool_size": 9, **options}
+    assert _task_norm(task, lot)["max_consecutive_run"] == generic_limit
+    assert _task_norm({**task, "lr_scheme_code": 48}, lot)["max_consecutive_run"] == lr_limit
+
+
+def test_worker_refuses_an_infeasible_lr_base_during_normalization():
+    from loto_enterprise.core.lotteries import require_lottery
+    from worker import _task_norm
+
+    lot = require_lottery("6/49", "RO")
+    task = {"pool_size": 9, "lr_scheme_code": 48, "restrict_base_min": 10, "restrict_base_max": 20}
+    with pytest.raises(ValueError, match="cel mult 8 numere fără trei consecutive"):
+        _task_norm(task, lot)

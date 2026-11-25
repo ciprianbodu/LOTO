@@ -26,6 +26,11 @@ if ($Mode -eq 'Cleanup') {
         $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([char[]]@('\', '/'))
         if ((Split-Path $snapshot) -eq $tempRoot -and
             (Split-Path $snapshot -Leaf) -match '^loto-launch-\d+-\d+$') {
+            $snapshotItem = Get-Item -LiteralPath $snapshot -Force -ErrorAction SilentlyContinue
+            if (-not $snapshotItem -or -not $snapshotItem.PSIsContainer -or
+                ($snapshotItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                exit 0
+            }
             # Remove only our known files; never recursively delete extras.
             foreach ($name in @('START_8000.bat', 'ACTUALIZARI.bat', 'launcher_git.ps1', 'git-checked')) {
                 $file = Join-Path $snapshot $name

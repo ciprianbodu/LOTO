@@ -396,21 +396,19 @@ def test_launchers_sync_only_from_immutable_copy():
 
 
 
-def test_start8000_kills_old_processes_without_project_path_cmdline_filter():
-    """Bench-ul UI e pornit relativ; filtrul `CommandLine like %~dp0` nu-l vedea.
-
-    Copiii ProcessPool trebuie omorâți explicit (taskkill /T / Python tree-kill):
-    pe Windows uciderea părintelui NU omoară descendenții.
-    """
+def test_start8000_checks_cleanup_before_resetting_queue():
+    """The Python cleanup owns the LOTO tree and checks the local UI address."""
     text = (ROOT / "START_8000.bat").read_text(encoding="utf-8")
     launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
-    assert "cleanup_old_processes.py" in launch
-    assert "--venv" in launch
+    cleanup_pos = launch.index('cleanup_old_processes.py" --venv')
+    reset_pos = launch.index('reset_jobs.py" --force')
+    cleanup_guard = launch[cleanup_pos:reset_pos]
+    assert "--port 8000" in cleanup_guard
+    assert "if errorlevel 1" in cleanup_guard.lower()
+    assert "exit /b" in cleanup_guard.lower()
     assert "CommandLine -like '*%~dp0*'" not in launch
     assert "Stop-Process" not in launch
-    compact = " ".join(launch.lower().split())
-    assert "taskkill /f /t /pid" in compact
-    assert 'findstr /c:":8000 "' in compact
+    assert "taskkill" not in launch.lower()
 
 
 def test_history_commit_is_scoped_and_guarded():

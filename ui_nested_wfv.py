@@ -119,7 +119,7 @@ def _nested_results(result, *, game_key=None):
             f"{method} ({draws})" for method, draws in result["arms"][best].get("method_draws", {}).items()
             if draws
         ]
-        if usage:
+        if usage and (not fallbacks or result.get("method_draws_effective") is True):
             ui.label("Extrageri evaluate cu fiecare metodă a regulii selectate · " + ", ".join(usage)).classes("text-caption")
     else:
         ui.label(
@@ -170,11 +170,17 @@ def nested_wfv_panel(country):
             output.clear()
             key = game.value
             with output:
-                if result := document.get("results", {}).get(key):
+                if key in document.get("results", {}):
                     ui.label(f"Sursa · {lottery_by_bench_key(key).csv}").classes(
                         "text-caption"
                     )
-                    _nested_results(result, game_key=key)
+                    with ui.column().classes("w-full gap-1") as details:
+                        try:
+                            _nested_results(document["results"][key], game_key=key)
+                        except (AttributeError, KeyError, TypeError, ValueError):
+                            details.clear()
+                            ui.label("Rezultatul salvat pentru acest joc este incomplet. "
+                                     "Poți repeta Re-Bench.").classes("text-warning")
                 elif error := document.get("errors", {}).get(key):
                     ui.label(f"Validarea nu a putut fi finalizată. {error}").classes(
                         "text-warning"
@@ -199,6 +205,10 @@ def nested_wfv_panel(country):
                     if version is not None
                     else {}
                 )
+                if not isinstance(document, dict) or not all(
+                    isinstance(document.get(section, {}), dict) for section in ("results", "errors")
+                ):
+                    raise ValueError("Format de raport necunoscut")
             except OSError, ValueError:
                 document = {
                     "errors": dict.fromkeys(

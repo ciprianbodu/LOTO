@@ -260,9 +260,13 @@ def test_submit_worker_result_panel_and_wf_options_at_19(tmp_path, monkeypatch):
     ((_fname, outs),) = rb
     data = outs["5/40"]
     assert data["pool_size"] == data["pool_size_requested"] == 19
-    assert data["hard_core"] == list(range(22, 41))
+    expected_pool = [n for n in range(13, 41) if n % 3 != 2]
+    assert data["hard_core"] == expected_pool
+    assert data["variants"] == lr.scheme_tickets(_scheme(48), expected_pool)
     assert len(data["variants"]) == 930 and data["context"]["coverage_pct"] == 100.0
-    assert app._wf_run_kwargs("5/40", data)["pool_size"] == 19
+    assert data["max_consecutive_run"] == data["audit"]["consecutive_limit"]["applied"] == 2
+    options = app._wf_run_kwargs("5/40", data)
+    assert (options["pool_size"], options["lr_scheme_code"], options["max_consecutive_run"]) == (19, 48, 2)
 
     assert [s.code for s in app._lr_schemes_for("5/40", data)] == [48]
     with capture_ui() as ui:

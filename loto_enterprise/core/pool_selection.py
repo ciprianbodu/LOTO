@@ -31,6 +31,23 @@ from loto_enterprise.core.ranking import (
 )
 
 
+def playable_lr_limit(maximum: int, pool_size: int, lower: int, upper: int, requested: int = 0) -> int:
+    """Validate the candidate interval and enforce the LR ceiling on its pool."""
+    from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
+
+    low = max(1, int(lower or 0))
+    high = int(upper or 0)
+    high = min(maximum, high) if high > 0 else maximum
+    capacity = lr_pool_capacity(range(low, high + 1))
+    if capacity < pool_size:
+        raise ValueError(
+            f"În baza {low}–{high} se pot alege cel mult {capacity} numere fără trei consecutive. "
+            f"Schema LR necesită {pool_size}."
+        )
+    requested = int(requested or 0)
+    return min(requested, LR_MAX_CONSECUTIVE_RUN) if requested > 0 else LR_MAX_CONSECUTIVE_RUN
+
+
 def apply_consecutive_limit(
     ranked_all: list[int],
     pool_size: int,

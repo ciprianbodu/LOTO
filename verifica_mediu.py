@@ -196,7 +196,6 @@ def _is_in_venv() -> bool:
     return (
         hasattr(sys, "real_prefix")
         or (hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix)
-        or "venv" in sys.executable.lower()
     )
 
 
@@ -207,11 +206,13 @@ def main():
         print(f"\n[EROARE] {py_msg}")
         sys.exit(21)
     print(f"Exec:   {sys.executable}")
-    print(f"Venv:   {'DA' if _is_in_venv() else 'NU (GLOBAL — gresit!)'}")
+    in_venv = _is_in_venv()
+    print(f"Venv:   {'DA' if in_venv else 'NU'}")
 
-    if not _is_in_venv():
-        print("\n[ATENTIE] Ruleaza ACTUALIZARI.bat, nu direct verifica_mediu.py!")
-        print("          Venv-ul proiectului: D:\\_BUILD\\_LOTO\\.venv\n")
+    if not in_venv:
+        print("\n[EROARE] Ruleaza ACTUALIZARI.bat pentru actualizarea mediului LOTO.")
+        print("         Venv-ul proiectului: D:\\_BUILD\\_LOTO\\.venv\n")
+        sys.exit(23)
 
     check_scoring_stack()
     assets_ok = check_bench_assets()

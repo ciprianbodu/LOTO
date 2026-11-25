@@ -133,13 +133,14 @@ def collect_candidates(
         if not (path.exists() or path.is_symlink()):
             return
         try:
-            rel = path.resolve().relative_to(root).as_posix()
+            relative_path = path.relative_to(root).as_posix()
+            target_path = path.resolve().relative_to(root).as_posix()
         except ValueError:
             return  # niciodata in afara proiectului
         if tracked is None:
             if needs_git:
                 return
-        elif _is_tracked(rel, tracked):
+        elif any(_is_tracked(relative, tracked) for relative in (relative_path, target_path)):
             return
         found.append((path, reason))
 

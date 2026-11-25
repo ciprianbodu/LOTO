@@ -23,7 +23,7 @@ import time
 from typing import Callable, Iterable
 import unicodedata
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 import uuid
 
@@ -202,12 +202,12 @@ def _selected_month(document: _Node) -> tuple[int, int] | None:
 
 
 def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeDraw]:
-    """Parse a monthly official response, rejecting fallbacks and partial tables."""
+    """Parse official draws, with the main draw before supplements on the same date."""
     game = normalize_game(game)
     document = _Document(html).root
     if _selected_month(document) != (year, month):
         raise ArchiveError("Official archive did not confirm the requested month")
-    found = {}
+    by_date: dict[str, dict[tuple[tuple[int, ...], int | None], tuple[PrizeDraw, bool]]] = {}
     for block in document.nodes("div"):
         if not block.has_class("rezultate-extrageri-content"):
             continue
@@ -216,13 +216,15 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
             continue
         heading = " ".join(headings[0].text().split())
         pattern = (
-            rf"detalii castiguri\s+(?:extrageri speciale\s+)?la\s+{re.escape(_HEADINGS[game])}"
-            rf"\s+din\s+(\d{{2}}[.\-/]\d{{2}}[.\-/]\d{{4}})"
+            r"detalii castiguri\s+(?P<supplementary>extrageri speciale\s+)?"
+            rf"la\s+{re.escape(_HEADINGS[game])}"
+            r"\s+din\s+(?P<date>\d{2}[.\-/]\d{2}[.\-/]\d{4})"
         )
         match = re.search(pattern, _plain(heading))
         if not match:
             continue  # The companion Noroc game has a separate prize table.
-        draw_date = _date(match.group(1))
+        draw_date = _date(match["date"])
+        supplementary = match["supplementary"] is not None
         if (draw_date.year, draw_date.month) != (year, month):
             raise ArchiveError("Official archive returned a draw from another month")
         number_blocks = [n for n in block.nodes("div") if n.has_class("numere-extrase")]
@@ -231,8 +233,8 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
         numbers = []
         joker = None
         for image in number_blocks[0].nodes("img"):
-            path = urlparse(image.attrs.get("src", "")).path
-            ball = re.search(r"/images/bile/(?:(joker)/)?(\d+)\.png$", path)
+            path = unquote(urlparse(image.attrs.get("src", "")).path)
+            ball = re.search(r"/images/bile/(?:(joker)/)?(\d+) *\.png$", path)
             if not ball:
                 raise ArchiveError("Unrecognized official draw ball image")
             if ball.group(1):
@@ -294,11 +296,21 @@ def parse_month_html(game: str, html: str, year: int, month: int) -> list[PrizeD
             game, draw_date.isoformat(), tuple(numbers), joker,
             tuple(categories), ARCHIVE_URLS[game],
         )
-        key = (draw.draw_date, tuple(sorted(draw.numbers)), draw.joker)
-        if key in found and found[key] != draw:
+        same_day = by_date.setdefault(draw.draw_date, {})
+        key = (tuple(sorted(draw.numbers)), draw.joker)
+        previous = same_day.get(key)
+        if previous is not None and previous[0] != draw:
             raise ArchiveError("Conflicting official tables for the same draw")
-        found[key] = draw
-    return list(found.values())
+        if previous is None or not supplementary:
+            same_day[key] = draw, supplementary
+
+    # The archive can display the supplementary table first. Keep date and
+    # same-kind table order, but emit the main draw before its supplements.
+    return [
+        draw
+        for same_day in by_date.values()
+        for draw, _ in sorted(same_day.values(), key=lambda item: item[1])
+    ]
 
 
 def _fetch_month_html(game: str, year: int, month: int, timeout: float = 10) -> str:

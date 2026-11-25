@@ -302,9 +302,7 @@ def _normalize_task(
     except TypeError, ValueError:
         restrict_base_min = 0
 
-    # Limita de consecutive (preferință OPȚIONALĂ, 0 = oprit; UI-ul trimite 0
-    # sau 2). Plafon = pool-ul maxim al jocului: o limită cât pool-ul nu mai
-    # schimbă nimic.
+    # Limita generică rămâne opțională. Un cod LR o normalizează separat.
     try:
         max_consecutive_run = max(
             0, min(pool_cap, int(task.get("max_consecutive_run") or 0))
@@ -381,14 +379,13 @@ def _task_norm(task: dict, lot) -> dict:
             raise ValueError("joker_pool_size trebuie să fie un număr întreg între 1 și 20.")
         norm["joker_pool_size"] = size
     if scheme is not None:
-        from loto_enterprise.core.walk_forward_adapter import _effective_pool_size
+        from loto_enterprise.core.pool_selection import playable_lr_limit
 
-        # Reject a shortened LR pool before cache lookup, not after a job hit.
-        played_pool = _effective_pool_size(
-            norm["pool_size"], lot.geometry,
-            norm["restrict_base_max"], norm["restrict_base_min"],
+        # Use the engine's limit before cache lookup and when recording the result.
+        norm["max_consecutive_run"] = playable_lr_limit(
+            int(lot.max_n), scheme.n, norm["restrict_base_min"], norm["restrict_base_max"],
+            norm["max_consecutive_run"],
         )
-        resolve_lr_scheme(lot.geometry, scheme.code, played_pool)
         dynamic = task.get("dynamic_method", False)
         if not isinstance(dynamic, bool):
             raise ValueError("dynamic_method trebuie să fie boolean")
@@ -981,10 +978,14 @@ def main() -> None:
         logging.debug("Nu pot requeue joburile RUNNING la startup worker: %s", exc)
     logging.info("[worker] Început loop principal - aștept job-uri...")
 
+    pending_failure = None
     while True:
         job = None  # reset per iterație: altfel un fetch care crapă la iterația
         # următoare vede jobul VECHI (deja COMPLETED) și fail_job i-ar distruge rezultatul
         try:
+            if pending_failure is not None:
+                fail_job(*pending_failure, worker_token=WORKER_TOKEN)
+                pending_failure = None
             job = fetch_pending_job(worker_token=WORKER_TOKEN)
             if not job:
                 job = fetch_running_job(worker_token=WORKER_TOKEN)
@@ -1001,7 +1002,9 @@ def main() -> None:
             tb = traceback.format_exc()
             logging.error(f"[worker] Eroare în job: {exc}\n{tb}")
             if isinstance(job, dict) and job.get("id"):
-                fail_job(int(job["id"]), f"{exc}\n{tb}", worker_token=WORKER_TOKEN)
+                # Păstrăm cauza inițială și proprietarul dacă SQLite refuză
+                # temporar scrierea. Următoarea iterație reîncearcă marcarea.
+                pending_failure = (int(job["id"]), f"{exc}\n{tb}")
             time.sleep(2)
 
 

@@ -354,11 +354,19 @@ def test_mail_names_the_lr_code_of_the_pool(monkeypatch):
     monkeypatch.setitem(app.STATE, "result_sources", {"loto_6_49.csv": df})
     body = app._build_mail_body()
     assert "REFERINȚĂ LR: Cod 59 (112 var. ≈ 896 lei în variante" in body
-    played = {**_data(), "lr_scheme_code": 59}
+    tickets = lr.scheme_tickets(_scheme("6/49", 59), POOL16)
+    played = {**_data(variants=tickets), "lr_scheme_code": 59}
     monkeypatch.setitem(app.STATE, "results", ([("loto_6_49.csv", {"6/49": played})], 0))
     body = app._build_mail_body()
     assert "SCHEMĂ LR: Cod 59 (112 var. ≈ 896 lei în variante" in body
     assert "taxa pe bilet se adaugă separat" in body
+    # Sunt tot 112 variante, dar una dintre cele oficiale lipsește și alta se repetă.
+    wrong = {**played, "variants": [tickets[1], *tickets[1:]]}
+    monkeypatch.setitem(app.STATE, "results", ([("loto_6_49.csv", {"6/49": wrong})], 0))
+    body = app._build_mail_body()
+    assert "SCHEMĂ LR:" not in body
+    assert "Codul LR 59 din rezultat nu corespunde variantelor generate." in body
+    assert "VARIANTE GENERATE: 112" in body
 
 
 # --------------------------------------------------------------------------- #

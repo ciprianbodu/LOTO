@@ -156,6 +156,17 @@ def test_short_history_keeps_full_base_but_reports_available_chronology():
     assert result["ranges"][0]["chronology"]["window_draws"] == 20
 
 
+def test_undated_range_replay_reports_file_order_and_draw_based_timing():
+    frame, _ = _frame(20)
+    result = analysis.compare_budget_ranges(
+        100, FOUR_PLUS, "6/49", {"6/49": ("undated.csv", frame.drop(columns="date"))}, dynamic=True,
+    )
+    assert result["first_date"] is result["as_of"] is None
+    assert all(row["chronology"]["phase_basis"] == "draws" for row in result["ranges"])
+    assert "Se păstrează ordinea rândurilor din fișier" in result["protocol"]
+    assert "înaintea fiecărei extrageri" in result["protocol"]
+
+
 def test_joker_range_comparison_handles_bonus_feasibility_and_distinguishes_objectives():
     frame, _ = _frame(255, main=5, maximum=45)
     frame["joker"] = np.arange(len(frame)) % 20 + 1
@@ -198,6 +209,29 @@ def test_joker_prizes_require_main_and_bonus_on_same_zone_and_hide_missing_bonus
     row = analysis._summarize(data, data, 3, timing, 0, (10, 40), 31, 10, True)
     assert row["successes"] == 3 and row["ticket_3plus"] == 1
     assert row["objective_evaluated"] == 5 and row["objective_missing"] == 1
+
+
+
+def test_joker_missing_bonus_only_hides_uncertain_prizes_and_does_not_favor_candidate():
+    # Known wins and misses are included even when the bonus is unknown.
+    # An unknown baseline outcome can still be a prize, limiting the evidence.
+    reference = np.asarray([[0, 0, -1], [3, 3, -1], [2, 2, -1], [0, 0, -1]])
+    candidate = np.asarray([[3, 3, -1], [0, 0, -1], [3, 3, -1], [2, 2, -1]])
+    timing = range_timing(np.tile(np.arange(11, 16), (4, 1)), None, (10, 40))
+    row = analysis._summarize(candidate, reference, 3, timing, 0, (10, 40), 31, 10, True)
+    assert (row["successes"], row["objective_evaluated"], row["objective_missing"]) == (2, 3, 1)
+    assert (row["paired_evaluated"], row["paired_wins"], row["paired_losses"]) == (2, 1, 1)
+    assert row["adjusted_p"] == 1.0
+
+
+def test_repeated_draws_on_a_day_contribute_one_evidence_factor():
+    reference = np.zeros((12, 2), dtype=int)
+    candidate = np.full((12, 2), 4, dtype=int)
+    dates = pd.DatetimeIndex(["2026-05-01"] * len(candidate))
+    timing = range_timing(np.tile(np.arange(11, 17), (12, 1)), dates, (10, 40))
+    row = analysis._summarize(candidate, reference, 4, timing, 0, (10, 40), 31, 12)
+    assert row["paired_wins"] == 12
+    assert row["adjusted_p"] == pytest.approx(1 / ((1.25 + 1.5) / 2))
 
 
 def test_bonus_predictions_use_prior_valid_days_and_date_specific_inverse(monkeypatch):

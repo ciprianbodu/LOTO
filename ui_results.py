@@ -315,11 +315,16 @@ def _generated_system_summary(game: str, data: dict) -> str:
     if kind == "empty":
         return label
     spec = _game_spec_for(game, data)
-    size = len(data.get("variants") or [])
+    variants = data.get("variants") or []
+    size = len(variants)
     cost = (
         f"≈ {_thousands(size * spec.price, 2)} {spec.currency} în variante"
         if spec.price is not None else "tarif necunoscut"
     )
+    if spec.game_id == "joker":
+        _, missing, invalid = _joker_variant_balls(variants, spec.pick_n)
+        if missing or invalid:
+            cost += f" dacă se completează câmpul Joker. Variante fără bilă validă: {missing + invalid}"
     return f"Sistem generat: {label} · {count(size, 'variante', 'variantă')} · {cost}."
 
 
@@ -798,6 +803,44 @@ def _render_lr_layouts(game: str, data: dict, schemes) -> None:
             ui.label(text).classes("font-mono text-sm").style("white-space: pre")
 
 
+def _joker_variant_balls(variants, pick: int) -> tuple[set[int], int, int]:
+    from covering.probability import _integer
+
+    balls = set()
+    missing = 0
+    invalid = 0
+    for row in variants:
+        try:
+            if len(row) == pick:
+                missing += 1
+                continue
+            if len(row) != pick + 1:
+                invalid += 1
+                continue
+            ball = _integer(row[pick])
+            if isinstance(row[pick], bool) or not 1 <= ball <= 20:
+                invalid += 1
+                continue
+        except (TypeError, KeyError, ValueError):
+            invalid += 1
+            continue
+        balls.add(ball)
+    return balls, missing, invalid
+
+
+def _joker_ball_probability(variants, pick: int) -> str:
+    balls, missing, invalid = _joker_variant_balls(variants, pick)
+    if invalid:
+        return "Urna 2 · Șansa nu poate fi calculată. O variantă conține o bilă Joker invalidă."
+    if not balls:
+        return "Urna 2 · Variantele conțin numai numerele din urna 1. Nicio variantă nu are o bilă Joker."
+    odds = (f"Urna 2 · Șansa ca cel puțin o variantă să conțină bila Joker extrasă este "
+            f"{len(balls)}/20 ({5 * len(balls)}%).")
+    if missing:
+        odds += f" Variante fără bilă Joker: {missing}."
+    return odds
+
+
 def _wheel_probability_lines(game: str, data: dict) -> list[str]:
     """Same exact, unconditional ticket odds in the UI and the saved report."""
     from covering.probability import MAX_EXACT_POOL, wheel_hit_probabilities
@@ -866,6 +909,8 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
             lines.append(
                 f"6 numere pe o variantă: 0% (imposibil: varianta are {pick} numere)."
             )
+        if is_joker:
+            lines.append(_joker_ball_probability(variants, pick))
         return lines
     try:
         # Joker fără numărul Urnei 2 (coloana lipsă sau invalidă): 5 numere.
@@ -903,7 +948,8 @@ def _wheel_probability_lines(game: str, data: dict) -> list[str]:
             "Categoria I (5 din primele 5 extrase) nu este modelată separat."
         )
     elif is_joker:
-        lines.append("Joker: procentele privesc urna 1; numărul Joker din urna 2 are separat șansa 1/20.")
+        lines.append("Joker: procentele privesc urna 1.")
+        lines.append(_joker_ball_probability(variants, pick))
         lines.append(
             "Optimizarea pentru 3+ numere în urna 1 poate reduce șansa categoriei "
             "cu două numere și Joker; această categorie nu este protejată de "

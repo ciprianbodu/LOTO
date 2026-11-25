@@ -12,7 +12,9 @@ import numpy as np
 import pandas as pd
 
 from covering.hypergeo import hypergeometric_hit_forecast
-from loto_enterprise.core.ranking import rank_by_score
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
+from loto_enterprise.core.pool_selection import playable_lr_limit
+from loto_enterprise.core.ranking import longest_consecutive_run, rank_by_score
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
 try:
@@ -146,6 +148,9 @@ class PipelineMixin:
             if _pool_analysis_only:
                 raise ValueError("O schemă LR se validează prin variantele sale fizice, nu ca sistem complet virtual")
             lr_scheme_code = scheme.code
+            max_consecutive_run = playable_lr_limit(
+                int(self.params["max_n"]), scheme.n, restrict_base_min, restrict_base_max, max_consecutive_run,
+            )
             max_variants = scheme.size
             # Auxiliary coverage at four pool hits; official guarantees are
             # carried separately in audit.lr_scheme, without a generic promise.
@@ -500,8 +505,8 @@ class PipelineMixin:
                 len(_excluded),
             )
 
-        # Limita de consecutive: opțiune a utilizatorului (0 = oprit, implicit în
-        # motor). Se aplică pe clasament, după penalizare și restrângerea bazei.
+        # Aplicăm limita pe clasament, după penalizare și restrângerea bazei.
+        # Pentru schemele oficiale LR plafonul este de două numere consecutive.
         _mcr = max(0, int(max_consecutive_run or 0))
         self.hard_core = self._get_timesfm_pool(
             tfm_scores,
@@ -509,6 +514,12 @@ class PipelineMixin:
             blacklist=blacklist,
             max_consecutive_run=_mcr,
         )
+        if lr_scheme_code is not None and (
+            len(self.hard_core) != pool_size or longest_consecutive_run(self.hard_core) > LR_MAX_CONSECUTIVE_RUN
+        ):
+            raise ValueError(
+                f"Clasamentul nu permite un pool LR complet de {pool_size} numere fără trei consecutive."
+            )
         _cl = self.audit.get("consecutive_limit") or {}
         if _cl.get("removed") or _cl.get("relaxed"):
             logging.info(

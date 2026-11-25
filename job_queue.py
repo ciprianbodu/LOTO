@@ -23,13 +23,17 @@ def _default_db_path() -> str:
     """Coada SQLite NU trebuie să stea în OneDrive: sync-ul poate corupe WAL-ul
     bazei ACTIVE (scriere parțială) ȘI sincronizează joburi între mașini (laptop
     ↔ ALF). O punem în AFARA OneDrive.
-      • Override explicit: env LOTO_JOBS_DB.
+      • LOTO_JOBS_DB, apoi loto_jobs.db în LOTO_RUNTIME_DIR, dacă sunt configurate.
       • Windows: D:\\_BUILD\\_LOTO (preferat), apoi %LOCALAPPDATA%\\LOTO.
       • Linux: $XDG_CACHE_HOME/LOTO (sau ~/.cache/LOTO).
       • Fallback final: cwd (comportamentul vechi)."""
     env = os.environ.get("LOTO_JOBS_DB")
     if env:
         return env
+    if os.environ.get("LOTO_RUNTIME_DIR", "").strip():
+        from runtime_paths import _resolve_runtime_root
+
+        return str(_resolve_runtime_root() / "loto_jobs.db")
     candidates: list[str] = []
     if os.name == "nt":
         candidates.append(_PREFERRED_WIN_DIR)
@@ -65,7 +69,7 @@ JOB_CANCELLED = "CANCELLED"
 # și se trunchiază la 6000 caractere (păstrează doar coada, nu creștere
 # nemărginită pe un job reprogramat/anulat repetat).
 _LOG_TAIL_APPEND_SQL = (
-    "CASE WHEN log_tail IS NULL OR log_tail = '' THEN ? "
+    "CASE WHEN log_tail IS NULL OR log_tail = '' THEN substr(?, -6000) "
     "ELSE substr(log_tail || char(10) || ?, -6000) END"
 )
 
@@ -148,12 +152,21 @@ def _conn(db_path: str = DB_PATH):
 # Cache pentru DB-urile deja inițializate în acest proces — evităm CREATE TABLE
 # redundant la fiecare apel get_job_status/update_job_progress/etc.
 _INITIALIZED_DBS: set[str] = set()
+_DB_FILE_IDS: dict[str, tuple[int, int]] = {}
 
 
 def init_job_queue(db_path: str = DB_PATH) -> None:
+    db_path = os.path.abspath(db_path)
     if db_path in _INITIALIZED_DBS:
-        return
+        try:
+            info = os.stat(db_path)
+        except FileNotFoundError:
+            pass
+        else:
+            if _DB_FILE_IDS.get(db_path) == (info.st_dev, info.st_ino):
+                return
     with _conn(db_path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS jobs (
@@ -189,30 +202,17 @@ def init_job_queue(db_path: str = DB_PATH) -> None:
         # rezultatul lui B (sau chiar să-l marcheze FAILED), fiindcă statusul redevenise
         # RUNNING sub B. Coloana e opțională la citire/scriere (None = fără gardă de
         # proprietate, comportament vechi) — doar worker.py o populează în producție.
-        migrated = True
-        try:
-            cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
-            if "completed_at" not in cols:
-                conn.execute("ALTER TABLE jobs ADD COLUMN completed_at TIMESTAMP")
-            if "worker_token" not in cols:
-                conn.execute("ALTER TABLE jobs ADD COLUMN worker_token TEXT")
-            # ui_finalized_at: UI-ul a preluat rezultatul (afișare, mail, shutdown).
-            # Marcajul stă pe rândul jobului, în baza stației: id-urile reîncep de
-            # la 1 pe fiecare stație, iar `.ui_state.json` din checkout se poate
-            # sincroniza între stații, deci un id salvat acolo poate fi al alteia.
-            if "ui_finalized_at" not in cols:
-                conn.execute("ALTER TABLE jobs ADD COLUMN ui_finalized_at TIMESTAMP")
-        except sqlite3.OperationalError as exc:
-            # "duplicate column" = altă conexiune a adăugat-o deja (race UI↔worker) → benign.
-            # Altceva (lock/I/O OneDrive cât fișierul se sincronizează) → NU marcăm DB-ul
-            # ca inițializat, ca un apel ulterior să RE-încerce migrarea (altfel
-            # complete_job ar eșua cu "no such column" tot restul vieții procesului).
-            if "duplicate column" not in str(exc).lower():
-                logger.warning("[job_queue] migrare completed_at amânată: %s", exc)
-                migrated = False
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)")}
+        if "completed_at" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN completed_at TIMESTAMP")
+        if "worker_token" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN worker_token TEXT")
+        if "ui_finalized_at" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN ui_finalized_at TIMESTAMP")
+        info = os.stat(db_path)
         conn.commit()
-    if migrated:
-        _INITIALIZED_DBS.add(db_path)
+    _DB_FILE_IDS[db_path] = (info.st_dev, info.st_ino)
+    _INITIALIZED_DBS.add(db_path)
 
 
 def submit_job(task_type: str, config_json: str, db_path: str = DB_PATH) -> int:
@@ -497,8 +497,9 @@ def _claim_job(
             return None
         job_id = int(row["id"])
         conn.execute(update_sql, update_extra_params + (job_id,))
+        claimed = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         conn.commit()
-    return get_job_status(job_id, db_path=db_path)
+    return dict(claimed)
 
 
 def fetch_pending_job(
@@ -552,14 +553,16 @@ def cancel_pending_running_jobs(
     """
     init_job_queue(db_path)
     msg = str(reason or "Oprit de utilizator")
-    ids = [int(j) for j in (job_ids or [])]
     where = "status IN (?, ?)"
     params: tuple = (
         (JOB_CANCELLED, msg) + _append_log_tail_params(msg) + (JOB_PENDING, JOB_RUNNING)
     )
-    if ids:
+    if job_ids is not None:
+        ids = tuple(int(j) for j in job_ids)
+        if not ids:
+            return 0
         where += f" AND id IN ({','.join('?' * len(ids))})"
-        params = params + tuple(ids)
+        params += ids
     with _conn(db_path) as conn:
         cur = conn.execute(
             f"""

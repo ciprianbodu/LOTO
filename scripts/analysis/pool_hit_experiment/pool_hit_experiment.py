@@ -5,7 +5,8 @@ amprentele datelor in preregistration_2026-10-02.json.
 Nu atinge productia: citeste registry-ul METHODS, nu scrie nicio stare.
 
 Moduri:
-    python pool_hit_experiment.py hashes      # amprentele prefixelor (pentru JSON)
+    python pool_hit_experiment.py hashes      # amprentele fișierelor actuale integrale
+    python pool_hit_experiment.py compare     # prefixele actuale față de înregistrare
     python pool_hit_experiment.py run [--jobs 4]  # -> results_validated.json
 """
 
@@ -79,7 +80,7 @@ ALPHA = 0.05
 # publicat ruleaza pe exact datele preinregistrate. Detalii: RESULTS_2026-10-02.md.
 ERRATA = {
     # 24-10-2024 copia extragerea din 27-10-2024; corect dupa arhiva loto.ro.
-    "_ISTORIC/loto_5_40.csv": {
+    "testdata/preregistration/loto_5_40.csv": {
         1538: ("24-10-2024,13,34,11,16,10,39", "24-10-2024,14,15,28,10,25,26"),
     },
 }
@@ -87,6 +88,13 @@ ERRATA = {
 
 def _lines(path: Path) -> list[str]:
     return path.read_bytes().replace(b"\r\n", b"\n").decode("utf-8").splitlines()
+
+
+def registered_path(name: str) -> Path:
+    rel, _, _, _, role = DATASETS[name]
+    if role == "ro":
+        return ROOT / "testdata" / "preregistration" / Path(rel).name
+    return ROOT / rel
 
 
 def _registered_lines(path: Path) -> list[str]:
@@ -111,17 +119,47 @@ def _registered_lines(path: Path) -> list[str]:
     return lines
 
 
+def _hash_lines(lines: list[str], n_rows: int) -> str:
+    return hashlib.sha256(("\n".join(lines[: n_rows + 1]) + "\n").encode("utf-8")).hexdigest()
+
+
 def prefix_hash(path: Path, n_rows: int) -> str:
-    """SHA-256 al antetului + primelor n_rows randuri inregistrate, cu LF."""
-    lines = _registered_lines(path)[: n_rows + 1]
-    return hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest()
+    """SHA-256 al antetului și primelor n_rows. Numai copia studiului aplică erata."""
+    return _hash_lines(_registered_lines(path), n_rows)
 
 
-def load(name: str, n_rows: int | None = None):
+def _registered_prefix(name, info):
+    lines = _registered_lines(registered_path(name))[: info["rows"] + 1]
+    if len(lines) != info["rows"] + 1 or _hash_lines(lines, info["rows"]) != info["prefix_sha256"]:
+        raise ValueError(f"{name}: amprenta difera de preinregistrare")
+    return lines
+
+
+def compare_current(reg):
+    report = {}
+    for name, info in reg["datasets"].items():
+        _registered_prefix(name, info)
+        current = _lines(ROOT / info["file"])
+        digest = _hash_lines(current, info["rows"])
+        report[name] = {
+            "registered_rows": info["rows"], "current_rows": len(current) - 1,
+            "registered_sha256": info["prefix_sha256"], "current_prefix_sha256": digest,
+            "current_prefix_matches": digest == info["prefix_sha256"],
+        }
+    return report
+
+
+def load(name: str, n_rows: int | None = None, october_erratum: bool = False):
     import pandas as pd
 
-    rel, max_num, draw_n, cols, _ = DATASETS[name]
-    text = "\n".join(_registered_lines(ROOT / rel)) + "\n"
+    _, max_num, draw_n, cols, _ = DATASETS[name]
+    info = json.loads(REG_PATH.read_text(encoding="utf-8"))["datasets"][name]
+    lines = _registered_prefix(name, info)
+    if october_erratum:
+        rel = registered_path(name).relative_to(ROOT).as_posix()
+        for line_no, (_, corrected) in ERRATA.get(rel, {}).items():
+            lines[line_no - 1] = corrected
+    text = "\n".join(lines) + "\n"
     df = pd.read_csv(io.StringIO(text), dtype=str)
     if n_rows is not None:
         df = df.iloc[:n_rows]
@@ -166,12 +204,12 @@ def ranking(scores: dict, max_num: int) -> np.ndarray:
     return np.asarray(top, dtype=np.int16)
 
 
-def _evaluate_dataset(name: str, n_rows: int) -> dict:
+def _evaluate_dataset(name: str, n_rows: int, october_erratum: bool = False) -> dict:
     """Pentru fiecare tinta eligibila: clasamentul complet al fiecarei metode."""
     warnings.filterwarnings("ignore")
     from scripts.analysis.legacy_methods_2026_11_20 import METHODS
 
-    dates, draws, max_num, _ = load(name, n_rows)
+    dates, draws, max_num, _ = load(name, n_rows, october_erratum)
     methods = production_methods()
     prior = np.searchsorted(dates, dates, side="left")  # exclude toata ziua tintei
     targets = [i for i in range(len(draws)) if prior[i] >= WARMUP]
@@ -352,9 +390,7 @@ def run(jobs: int) -> dict:
     if production_methods() != reg["methods"]:
         raise SystemExit("registry-ul difera de metodele preinregistrate")
     for name, info in reg["datasets"].items():
-        h = prefix_hash(ROOT / DATASETS[name][0], info["rows"])
-        if h != info["prefix_sha256"]:
-            raise SystemExit(f"{name}: amprenta difera de preinregistrare")
+        _registered_prefix(name, info)
     # Checkpointurile vechi nu valideaza scorurile si nu includ identitatea codului.
     identity = checkpoint_identity(reg)
     ck = HERE / ".checkpoint"
@@ -472,7 +508,7 @@ def run(jobs: int) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["hashes", "run"])
+    ap.add_argument("mode", choices=["hashes", "compare", "run"])
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument(
         "--output",
@@ -481,6 +517,9 @@ def main() -> None:
         help="separate result file; the original published JSON is preserved",
     )
     a = ap.parse_args()
+    if a.mode == "compare":
+        print(json.dumps(compare_current(json.loads(REG_PATH.read_text(encoding="utf-8"))), indent=2))
+        return
     if a.mode == "hashes":
         out = {}
         for name, (rel, *_rest) in DATASETS.items():

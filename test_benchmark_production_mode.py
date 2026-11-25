@@ -7,7 +7,7 @@ from pathlib import Path
 from loto_enterprise.core import lotteries
 
 
-def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
+def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline(tmp_path):
     # Executăm doar handlerul: fără server NiceGUI sau procese de bench reale.
     source = ast.parse(Path("app_nicegui.py").read_text(encoding="utf-8"))
     handler = next(
@@ -18,6 +18,7 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     calls = []
     scope = {
         "_bench_running": lambda: False,
+        "lr_rebench_running": lambda: False,
         "_istoric_has_data": lambda: True,
         "_load_missing_bench_histories": lambda: None,
         "STATE": {"datasets": [object()]},
@@ -26,7 +27,7 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
         "_selected_country": lambda: "RO",
         "_country_label": lambda cc=None: str(cc),
         "_LOT": lotteries,
-        "PROJECT_ROOT": Path(".").resolve(),
+        "PROJECT_ROOT": tmp_path,
     }
     exec(compile(ast.Module(body=[handler], type_ignores=[]), "handler", "exec"), scope)
     scope["run_rebench"]()
@@ -37,6 +38,10 @@ def test_ui_rebench_uses_per_draw_scoring_and_keeps_random_baseline():
     # România: argv-ul de dinainte, fără --country.
     assert "--country" not in args
     # Altă țară: aceeași rulare, cu registrul și ieșirea ei.
+    for game in lotteries.games_for_country("DE"):
+        csv = tmp_path / game.csv
+        csv.parent.mkdir(parents=True, exist_ok=True)
+        csv.touch()
     scope["_selected_country"] = lambda: "DE"
     scope["run_rebench"]()
     args_de, _ = calls[1]

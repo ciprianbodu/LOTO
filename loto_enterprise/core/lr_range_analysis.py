@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -236,24 +237,35 @@ def _replay(data, cutoffs, game, code, masks, lookback, dynamic, inverse, target
 def _summarize(data, reference, threshold, timing, start, limits, eligible_count, size, bonus_prize=False):
     pool, tickets = data[:, 0], data[:, 1]
     played = pool >= 0
-    evaluated = played.copy()
-    base_evaluated = reference[:, 0] >= 0
+    base_played = reference[:, 0] >= 0
+    base_tickets = reference[:, 1]
+    evaluated, base_evaluated = played, base_played
     success = tickets >= threshold
-    base_success = reference[:, 1] >= threshold
+    base_success = base_tickets >= threshold
     if bonus_prize:
-        evaluated &= data[:, 2] >= 0
-        base_evaluated &= reference[:, 2] >= 0
-        success = (success | (data[:, 2] > 0)) & evaluated
-        base_success = (base_success | (reference[:, 2] > 0)) & base_evaluated
+        # A main-only prize and an entirely missed ticket are known without the bonus.
+        evaluated = played & (success | (tickets == 0) | (data[:, 2] >= 0))
+        base_evaluated = base_played & (base_success | (base_tickets == 0) | (reference[:, 2] >= 0))
+        success |= data[:, 2] > 0
+        base_success |= reference[:, 2] > 0
     compared = evaluated & base_evaluated
     differences = success.astype(int) - base_success.astype(int)
     paired = differences[compared]
     wins, losses = int((paired > 0).sum()), int((paired < 0).sum())
-    # Under uniform draws these identically laid out tickets have equal
-    # conditional win chances, including when chosen adaptively from the past.
-    # Each nonnegative product has expectation <= 1 under a nonpositive gain.
-    # Markov's bound gives a conservative p-value for the single 10–40 contrast.
-    evidence = sum((1 + bet) ** wins * (1 - bet) ** losses for bet in (0.25, 0.5)) / 2
+
+    # The layout has equal conditional win chances under uniform draws. Average
+    # the differences within each forecast day so the evidence remains valid
+    # when there are several dependent draws on that date. An unknown outcome
+    # is bounded against the candidate to avoid selection on the observed bonus.
+    lower_differences = success.astype(int) - (base_success | ~base_evaluated).astype(int)
+    by_day = defaultdict(list)
+    for (_, day), delta, both_played in zip(
+        timing["_phase_keys"][start:], lower_differences, played & base_played, strict=True,
+    ):
+        if both_played:
+            by_day[day].append(delta)
+    daily_means = np.array([np.mean(values) for values in by_day.values()])
+    evidence = sum(float(np.prod(1 + bet * daily_means)) for bet in (0.25, 0.5)) / 2
     adjusted = min(1.0, 1.0 / evidence)
     deltas = [None] * start + [int(delta) if ok else None for delta, ok in zip(differences, compared, strict=True)]
     phase = phase_evidence(timing, deltas)
@@ -367,15 +379,19 @@ def compare_budget_ranges(
             row["feasible_now"] = lr_pool_capacity(base) >= scheme.n
         rows.append(row)
     recommendation, reason = _decision(rows)
+    origin = "zi" if dates is not None else "extragere"
+    each_origin = "fiecărei zile" if dates is not None else "fiecărei extrageri"
     protocol = (
-        "Selectorul dinamic a fost recalculat înaintea fiecărei date, inclusiv pentru martorul aleator."
+        f"Selectorul dinamic a fost recalculat înaintea {each_origin}, inclusiv pentru martorul aleator."
         if dynamic else f"Estimare în mod fix. Metoda {method or 'indisponibilă'} a fost aleasă prin Re-Bench "
-        "pe baza completă înaintea perioadei de test și folosită și pentru 10–40, cu scoruri actualizate la fiecare dată."
+        f"pe baza completă înaintea perioadei de test și folosită și pentru 10–40, cu scoruri actualizate la fiecare {origin}."
     )
+    if dates is None:
+        protocol += " Istoricul nu are date calendaristice. Se păstrează ordinea rândurilor din fișier."
     protocol += " Pool-urile din urna principală au cel mult două numere consecutive."
     if inverse:
         protocol += (
-            " Înaintea fiecărei date, simularea calculează pool-ul direct separat pentru fiecare bază "
+            f" Înaintea {each_origin}, simularea calculează pool-ul direct separat pentru fiecare bază "
             "și îl exclude din acea bază înainte de a alege pool-ul invers."
         )
     metric = f"{threshold}+ numere principale pe cel puțin o variantă"
@@ -383,12 +399,21 @@ def compare_budget_ranges(
         metric = "Orice premiu Joker pe o variantă"
         protocol += (
             f" Pentru Urna 2 se estimează bilele jucate cu metoda {bonus_method or 'indisponibilă'}, fixată "
-            "înaintea validării și actualizată pe extragerile anterioare fiecărei date. Ambele baze "
+            f"înaintea validării și actualizată pe extragerile anterioare {each_origin}. Ambele baze "
             "folosesc aceleași bile Joker pe aceleași zone. Sunt numărate trei numere principale sau "
             "cel puțin un număr principal cu bila Joker corectă pe aceeași variantă."
         )
     if game_id == "5/40":
         protocol += " La 5/40 se evaluează toate cele șase numere extrase."
+    protocol += (
+        " Validarea folosește ultimele 100 de extrageri eligibile. Avantajul se testează în perechi "
+        "între 10–40 și baza completă, cu un prag de 5%, și se verifică în ambele jumătăți, "
+        "în ultimele 25 de extrageri și la pauze similare."
+    )
+    if dates is not None:
+        protocol += " Extragerile din aceeași zi contribuie cu un singur factor la testul statistic."
+    if bonus_prize:
+        protocol += " La Joker, rezultatele necunoscute se tratează conservator în acest test."
     return {
         "game": game_id, "code": scheme.code, "pool_size": scheme.n, "inverse": inverse,
         "rows": len(matrix) - start, "days": days, "first_date": (
@@ -396,7 +421,5 @@ def compare_budget_ranges(
         ), "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(matrix) else None,
         "metric": metric, "ranges": rows, "bonus_method": bonus_method,
         "recommended_range": recommendation, "reason": reason, "fixed_method": method,
-        "protocol": protocol + " Validarea folosește ultimele 100 de extrageri eligibile. Avantajul se testează în perechi "
-        "între 10–40 și baza completă, cu un prag de 5%, și se verifică în ambele jumătăți, "
-        "în ultimele 25 de extrageri și la pauze similare.",
+        "protocol": protocol,
     }

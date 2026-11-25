@@ -7,6 +7,7 @@ from fractions import Fraction
 from functools import lru_cache
 from itertools import combinations
 from math import comb
+from operator import index
 from random import Random
 
 import numpy as np
@@ -202,6 +203,18 @@ def required_pool_size(plan):
 def restrict_to_pool(plan, objective, pool, jokers=()):
     """Replace the unrestricted layout with whole official zones inside this pool."""
     lot = require_lottery(plan["game"], "RO")
+    if lot.geo.second is not None:
+        try:
+            jokers = tuple(jokers)
+            if any(isinstance(number, (bool, np.bool_)) for number in jokers):
+                raise TypeError("Indicator boolean în loc de bilă Joker.")
+            jokers = tuple(map(index, jokers))
+        except TypeError as exc:
+            raise ValueError("Urna 2 Joker cere bile eligibile din intervalul 1–20.") from exc
+        if not jokers or len(jokers) != len(set(jokers)) or any(
+            not 1 <= number <= lot.geo.second.max_n for number in jokers
+        ):
+            raise ValueError("Urna 2 Joker cere bile distincte din intervalul 1–20.")
     pool = tuple(sorted(pool))
     template = [zone for ticket in plan["tickets"] for zone in ticket]
     use_bonus = plan["game"] == "joker" and objective == ANY_PRIZE

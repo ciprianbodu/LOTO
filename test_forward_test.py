@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 from scipy.stats import binomtest, hypergeom
 
-HERE = Path(__file__).resolve().parent / "scripts" / "analysis" / "forward_test"
+ROOT = Path(__file__).resolve().parent
+HERE = ROOT / "scripts" / "analysis" / "forward_test"
 sys.path.insert(0, str(HERE))
 
 import forward_test as ft  # noqa: E402
@@ -27,7 +28,8 @@ import frozen_dmd  # noqa: E402
 import sprt_operating  # noqa: E402
 
 REG = json.loads((HERE / "preregistration_2026-09-27.json").read_text(encoding="utf-8"))
-ISTORIC = Path(__file__).resolve().parent / "_ISTORIC" / "loto_6_49.csv"
+CURRENT_HISTORY = ROOT / "_ISTORIC" / "loto_6_49.csv"
+REGISTERED_HISTORY = ROOT / "testdata" / "preregistration" / CURRENT_HISTORY.name
 
 
 def test_frozen_method_is_the_registered_file():
@@ -67,14 +69,24 @@ def test_frozen_method_reproduces_the_registered_ranking_and_scores():
     """Pe istoricul de la înregistrare, copia dă clasamentul și scorurile scrise în
     JSON (care erau identice bit cu bit cu metoda din aplicație la acea dată).
     Metoda din aplicație se poate schimba ulterior fără să atingă testul."""
-    dates, draws = ft.load_history(ISTORIC)
+    dates, draws = ft.load_history(REGISTERED_HISTORY)
     n = REG["history_rows_at_registration"]
+    assert dates[n - 1].isoformat() == REG["history_last_date_at_registration"]
     assert ft.history_hash(dates, draws, n) == REG["history_sha256"]
+    assert ft.integrity_warnings(REG, dates[:n], draws[:n], HERE / "frozen_dmd.py") == []
     assert frozen_dmd.ranking(draws[:n], 49)[:12] == REG["golden_top12_at_registration"]
     got = frozen_dmd.scores(draws[:n], 49)
     want = {int(k): v for k, v in REG["scores_at_registration"].items()}
     assert got.keys() == want.keys()
     assert all(math.isclose(got[k], want[k], rel_tol=1e-9, abs_tol=1e-12) for k in want)
+
+
+def test_current_history_reports_corrections_to_the_registered_prefix(capsys):
+    dates, draws = ft.load_history(CURRENT_HISTORY)
+    assert ft.history_hash(dates, draws, REG["history_rows_at_registration"]) != REG["history_sha256"]
+    assert ft.main(["--csv", str(CURRENT_HISTORY)]) == 0
+    out = capsys.readouterr().out
+    assert "istoricul de dinaintea înregistrării s-a schimbat" in out or "ca la înregistrare" in out
 
 
 def _write_csv(path: Path, rows):
@@ -95,10 +107,11 @@ def _history(tmp_path, future):
     return path
 
 
-def _real_history_plus(tmp_path, extra_lines):
-    path = tmp_path / "real.csv"
-    text = ISTORIC.read_text(encoding="utf-8").rstrip("\n")
-    path.write_text(text + "\n" + "\n".join(extra_lines) + "\n", encoding="utf-8")
+def _registered_history_plus(tmp_path, extra_lines):
+    path = tmp_path / "registered.csv"
+    n = REG["history_rows_at_registration"]
+    lines = REGISTERED_HISTORY.read_text(encoding="utf-8").splitlines()[:n + 1]
+    path.write_text("\n".join(lines + extra_lines) + "\n", encoding="utf-8")
     return path
 
 
@@ -142,12 +155,12 @@ def test_hits_count_the_drawn_numbers_inside_the_pool(tmp_path):
 )
 def test_an_invalid_draw_stops_the_evaluation(tmp_path, line):
     with pytest.raises(ValueError, match="nevalid"):
-        ft.load_history(_real_history_plus(tmp_path, [line]))
+        ft.load_history(_registered_history_plus(tmp_path, [line]))
 
 
 def test_a_repeated_draw_stops_the_evaluation(tmp_path):
     """O extragere copiată de două ori ar conta de două ori în SPRT."""
-    path = _real_history_plus(tmp_path, ["01-10-2026,4,7,18,19,25,27"] * 2)
+    path = _registered_history_plus(tmp_path, ["01-10-2026,4,7,18,19,25,27"] * 2)
     with pytest.raises(ValueError, match="repetată"):
         ft.load_history(path)
 
@@ -155,14 +168,14 @@ def test_a_repeated_draw_stops_the_evaluation(tmp_path):
 def test_a_late_row_before_the_start_date_is_reported(tmp_path):
     """Un rând datat 25-26.09 nu schimbă primele 2.587 de rânduri, dar intră în
     istoricul fiecărei extrageri evaluate: trebuie semnalat."""
-    clean = _real_history_plus(tmp_path, ["27-09-2026,1,2,3,4,5,6"])
+    clean = _registered_history_plus(tmp_path, ["27-09-2026,1,2,3,4,5,6"])
     dates, draws = ft.load_history(clean)
     assert ft.integrity_warnings(REG, dates, draws, HERE / "frozen_dmd.py") == []
-    late = _real_history_plus(tmp_path, ["26-09-2026,13,17,21,33,39,45"])
+    late = _registered_history_plus(tmp_path, ["26-09-2026,13,17,21,33,39,45"])
     dates, draws = ft.load_history(late)
     warnings = ft.integrity_warnings(REG, dates, draws, HERE / "frozen_dmd.py")
     assert any("2026-09-26" in w for w in warnings)
-    moved = _real_history_plus(tmp_path, ["20-09-2026,13,17,21,33,39,45"])
+    moved = _registered_history_plus(tmp_path, ["20-09-2026,13,17,21,33,39,45"])
     dates, draws = ft.load_history(moved)
     warnings = ft.integrity_warnings(REG, dates, draws, HERE / "frozen_dmd.py")
     assert any("2588 de extrageri" in w for w in warnings)
@@ -243,10 +256,11 @@ def test_no_next_pool_once_the_verdict_is_final(tmp_path):
 
 
 def test_next_pool_is_announced_only_for_an_evaluated_draw(tmp_path):
-    dates, draws = ft.load_history(ISTORIC)
-    res = ft.evaluate(REG, dates, draws)
-    if dates[-1] < ft.dt.date(2026, 9, 27):
-        assert res["next_pools"] == {} and "prima extragere evaluată" in res["next_note"]
+    dates, draws = ft.load_history(REGISTERED_HISTORY)
+    n = REG["history_rows_at_registration"]
+    res = ft.evaluate(REG, dates[:n], draws[:n])
+    assert res["n"] == 0
+    assert res["next_pools"] == {} and "prima extragere evaluată" in res["next_note"]
     dates, draws = ft.load_history(_history(tmp_path, []))
     res = ft.evaluate(REG, dates, draws)
     assert res["next_pools"][6] == sorted(frozen_dmd.ranking(draws, 49)[:6])

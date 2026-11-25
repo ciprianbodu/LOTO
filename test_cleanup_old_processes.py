@@ -17,7 +17,6 @@ from cleanup_old_processes import (
     kill_pid_tree,
     kill_stale_project_processes,
     path_is_under,
-    select_stale_pids,
 )
 
 VENV = r"D:\_BUILD\_LOTO\.venv"
@@ -162,59 +161,62 @@ def test_ui_and_worker_from_start_bat_are_stale():
     assert is_stale_proc(worker, venv_dir=VENV, project_root=ROOT, keep_pids=KEEP)
 
 
-def test_select_includes_descendants_and_port_listener():
+def test_restart_stops_loto_tree_but_preserves_foreign_listener(monkeypatch):
+    from dataclasses import replace
+
+    import cleanup_old_processes as cleanup
+
     bench = _py(
         20,
         [rf"{VENV}\Scripts\python.exe", "bench_all_methods.py"],
         exe=rf"{VENV}\Scripts\python.exe",
         cwd=ROOT,
     )
-    child = _py(
-        21,
-        [rf"{VENV}\Scripts\python.exe", "-c", "spawn_main()"],
-        exe=rf"{VENV}\Scripts\python.exe",
-        cwd=ROOT,
-        ppid=20,
-    )
-    grandchild = _py(
-        22,
-        [rf"{VENV}\Scripts\python.exe", "-c", "resource_tracker()"],
-        exe=rf"{VENV}\Scripts\python.exe",
-        cwd=ROOT,
-        ppid=21,
-    )
-    # Copil NON-python: expand_descendants trebuie să-l includă (echivalent taskkill /T)
-    conhost = ProcView(
-        pid=23,
-        name="conhost.exe",
-        exe=r"C:\Windows\System32\conhost.exe",
-        parent_pid=20,
-    )
-    other = ProcView(pid=80, name="node.exe", exe=r"C:\nodejs\node.exe", parent_pid=1)
-    stale = select_stale_pids(
-        [bench, child, grandchild, conhost, other],
-        venv_dir=VENV,
-        project_root=ROOT,
-        keep_pids=KEEP,
-        listen_pids={80},
-    )
-    assert stale == {20, 21, 22, 23, 80}
+    child = _py(21, ["python.exe", "-c", "spawn_main()"], ppid=20)
+    grandchild = _py(22, ["python.exe", "-c", "resource_tracker()"], ppid=21)
+    console = ProcView(pid=23, name="conhost.exe", parent_pid=20)
+    foreign = ProcView(pid=80, name="node.exe", parent_pid=1)
+    foreign_child = ProcView(pid=81, name="node.exe", parent_pid=80)
+    procs = [
+        replace(proc, create_time=float(proc.pid))
+        for proc in (bench, child, grandchild, console, foreign, foreign_child)
+    ]
+    stopped = []
+    monkeypatch.setattr(cleanup, "_snapshot", lambda: procs)
+    monkeypatch.setattr(cleanup, "_keep_pids", lambda: KEEP)
+    monkeypatch.setattr(cleanup, "_listen_pids", lambda port: {80} if port == 8000 else set())
+
+    def stop(pid, *, expected_create_time):
+        assert expected_create_time == float(pid)
+        stopped.append(pid)
+        return True
+
+    monkeypatch.setattr(cleanup, "_kill_pid", stop)
+    assert kill_stale_project_processes(venv_dir=VENV, project_root=ROOT, port=8000) == stopped
+    assert set(stopped) == {20, 21, 22, 23}
+    assert stopped.index(22) < stopped.index(21) < stopped.index(20)
+    assert stopped.index(23) < stopped.index(20)
 
 
-def test_port_8000_does_not_match_80001():
-    """findstr :8000 fără spațiu ar fi potrivit :80001; matcher-ul e pe port exact."""
-    listener = ProcView(pid=90, name="python.exe", exe=r"C:\Python314\python.exe")
-    stale = select_stale_pids(
-        [listener],
-        venv_dir=VENV,
-        project_root=ROOT,
-        keep_pids=KEEP,
-        listen_pids=set(),
-    )
-    assert stale == set()
+def test_listener_diagnostic_only_matches_the_requested_port(monkeypatch):
+    from types import SimpleNamespace
+
+    import cleanup_old_processes as cleanup
+    import psutil
+
+    def connection(pid, port, status):
+        return SimpleNamespace(pid=pid, laddr=SimpleNamespace(port=port), status=status)
+
+    connections = [
+        connection(80, 8000, psutil.CONN_LISTEN),
+        connection(81, 8001, psutil.CONN_LISTEN),
+        connection(82, 8000, psutil.CONN_ESTABLISHED),
+    ]
+    monkeypatch.setattr(psutil, "net_connections", lambda kind: connections)
+    assert cleanup._listen_pids(8000) == {80}
 
 
-def test_non_python_not_matched_unless_listening():
+def test_project_working_directory_does_not_make_non_python_stale():
     notepad = ProcView(
         pid=50,
         name="notepad.exe",
@@ -225,16 +227,16 @@ def test_non_python_not_matched_unless_listening():
     assert not is_stale_proc(notepad, venv_dir=VENV, project_root=ROOT, keep_pids=KEEP)
 
 
-def test_start8000_calls_python_cleanup_and_tree_kills_port():
+def test_start8000_delegates_shutdown_without_killing_other_port_owners():
     text = Path("START_8000.bat").read_text(encoding="utf-8")
     launch = text[text.index("\n:launch_phase") : text.index("\n:push_istoric")]
     assert "cleanup_old_processes.py" in launch
     assert "--venv" in launch
     assert "CommandLine -like '*%~dp0*'" not in launch
     assert "Stop-Process" not in launch
-    compact = " ".join(launch.lower().split())
-    assert "taskkill /f /t /pid" in compact
-    assert 'findstr /c:":8000 "' in compact
+    assert "--port 8000" in launch
+    assert "taskkill" not in launch.lower()
+    assert "netstat" not in launch.lower()
 
 
 def test_kills_spawned_worker_without_touching_this_pytest(tmp_path):

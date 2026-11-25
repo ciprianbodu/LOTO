@@ -29,12 +29,7 @@ NAME, K, THR = "ro_540", 11, 4
 
 def _evaluate(registered: bool) -> dict:
     reg = json.loads(phe.REG_PATH.read_text(encoding="utf-8"))
-    errata = phe.ERRATA
-    phe.ERRATA = errata if registered else {}
-    try:
-        return phe._evaluate_dataset(NAME, reg["datasets"][NAME]["rows"])
-    finally:
-        phe.ERRATA = errata
+    return phe._evaluate_dataset(NAME, reg["datasets"][NAME]["rows"], october_erratum=not registered)
 
 
 def cell(ev: dict) -> dict:

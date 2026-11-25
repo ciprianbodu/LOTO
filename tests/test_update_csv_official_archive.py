@@ -42,14 +42,15 @@ def run_update(tmp_path, monkeypatch, game, stored, recent, official):
 
     def fetch(key, year, month, *, timeout):
         assert (key, year, month, timeout) == (game, 2026, 11, updater.TIMEOUT_S)
-        return "<html></html>"
+        return official if isinstance(official, str) else "<html></html>"
 
     def parse(key, html, year, month):
         assert (key, html, year, month) == (game, "<html></html>", 2026, 11)
         return [SimpleNamespace(draw_date=day, numbers=numbers, joker=joker) for day, numbers, joker in official]
 
     monkeypatch.setattr(official_prizes, "_fetch_month_html", fetch)
-    monkeypatch.setattr(official_prizes, "parse_month_html", parse)
+    if not isinstance(official, str):
+        monkeypatch.setattr(official_prizes, "parse_month_html", parse)
     return updater.update_all(), target, before
 
 
@@ -139,3 +140,64 @@ def test_540_official_tail_checks_sixth_ball_without_reordering_first_five(
     else:
         assert target.read_bytes() == before
         assert "a șasea bilă este 37 în CSV și 6 la loto.ro" in status
+
+
+
+def _draw_block(heading, day, main, joker=None, *, supplementary=False):
+    marker = "EXTRAGERI SPECIALE " if supplementary else ""
+    balls = "".join(f'<img src="/images/bile/{number}.png">' for number in main)
+    if joker is not None:
+        balls += f'<img src="/images/bile/joker/{joker}.png">'
+    labels = (
+        ("I (5/5+J)", "II (5/5)", "III (4/5+J)", "IV (4/5)",
+         "V (3/5+J)", "VI (3/5)", "VII (2/5+J)", "VIII (1/5+J)")
+        if joker is not None else ("I (5/5)", "II (5/6)", "III (4/6)")
+    )
+    categories = "".join(
+        f"<tr><td>{label}</td><td>1</td><td>10,00</td><td></td></tr>"
+        for label in labels
+    )
+    return (
+        '<div class="rezultate-extrageri-content">'
+        f'<div class="button-open-details">Detalii câștiguri {marker}la {heading} din {day}</div>'
+        f'<div class="numere-extrase">{balls}</div>'
+        f'<table class="results-table">{categories}</table></div>'
+    )
+
+
+@pytest.mark.parametrize("game", ["loto_5_40", "joker"])
+@pytest.mark.parametrize("stored_main", [False, True])
+def test_official_archive_saves_main_before_supplement(tmp_path, monkeypatch, game, stored_main):
+    heading = "joker" if game == "joker" else "5/40"
+    previous, main, supplement = (1, 3, 5, 7, 9, 11), (2, 4, 6, 8, 10, 12), (13, 15, 17, 19, 21, 23)
+    if game == "joker":
+        previous, main, supplement = previous[:5], main[:5], supplement[:5]
+        jokers = (5, 17, 17)
+    else:
+        jokers = (None, None, None)
+
+    def csv_row(day, values, joker):
+        return ",".join(map(str, (day, *values, *((joker,) if joker is not None else ()))))
+
+    prior_row = csv_row("19-11-2026", previous, jokers[0])
+    main_row = csv_row("22-11-2026", main, jokers[1])
+    supplement_row = csv_row("22-11-2026", supplement, jokers[2])
+    stored = [prior_row, main_row] if stored_main else [prior_row]
+    recent = "2026-11-19 " + " ".join(map(str, previous))
+    if jokers[0] is not None:
+        recent += f" + {jokers[0]}"
+    html = (
+        '<select name="select-year"><option value="2026" selected>2026</option></select>'
+        '<select name="select-month"><option value="11" selected>Noiembrie</option></select>'
+        + _draw_block(heading, "22.11.2026", supplement, jokers[2], supplementary=True)
+        + _draw_block(heading, "22.11.2026", main, jokers[1])
+        + _draw_block(heading, "19.11.2026", previous, jokers[0])
+    )
+
+    count, target, _ = run_update(tmp_path, monkeypatch, game, stored, recent, html)
+
+    assert count == (1 if stored_main else 2)
+    assert target.read_text("utf-8").splitlines()[1:] == [prior_row, main_row, supplement_row]
+    current = target.read_bytes()
+    assert updater.update_all() == 0
+    assert target.read_bytes() == current

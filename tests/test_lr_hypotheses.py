@@ -50,6 +50,14 @@ def test_range_bench_counts_draws_outside_interval_among_the_targets():
     assert json.loads(json.dumps(result)) == result
 
 
+def test_undated_bench_states_that_the_csv_row_order_is_used():
+    report = _run(_history().drop(columns="date"), inverse=True)
+    urn, = report["urns"]
+    assert report["as_of"] is None
+    assert "rândurile anterioare, în ordinea fișierului" in urn["protocol"]
+    assert "înaintea primei extrageri evaluate" in urn["protocol"]
+
+
 @pytest.mark.parametrize(("restricted", "first_ball", "width"), [(False, 1, 49), (True, 10, 31)])
 def test_dynamic_inverse_uses_a_direct_pool_from_its_base_without_same_day_leakage(
     monkeypatch, restricted, first_ball, width,

@@ -9,6 +9,31 @@ import app_nicegui as app
 from covering.lr_budget import FOUR_PLUS, recommend_games
 
 
+@pytest.mark.parametrize("country", ["RO", "DE"])
+def test_general_rebench_scores_each_draw_for_the_current_country(tmp_path, monkeypatch, country):
+    for game in app._LOT.games_for_country(country):
+        history = tmp_path / game.csv
+        history.parent.mkdir(parents=True, exist_ok=True)
+        history.touch()
+    monkeypatch.setattr(app, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(app, "STATE", {"datasets": [object()]})
+    monkeypatch.setattr(app, "_selected_country", lambda: country)
+    monkeypatch.setattr(app, "_bench_running", lambda: False)
+    monkeypatch.setattr(app, "lr_rebench_running", lambda: False)
+    monkeypatch.setattr(app, "_istoric_has_data", lambda: True)
+    monkeypatch.setattr(app, "_load_missing_bench_histories", lambda: None)
+    calls = []
+    monkeypatch.setattr(app, "_launch_bench", lambda args, label: calls.append(args))
+    app.run_rebench()
+    args, = calls
+    assert args[args.index("--block-size") + 1] == "1"
+    assert "--no-shuffled-control" in args and "--methods" not in args
+    if country == "RO":
+        assert "--country" not in args
+    else:
+        assert args[args.index("--country") + 1] == country
+
+
 def test_budget_changes_update_the_next_lottery_job(monkeypatch):
     for key in ("country_val", "games_val", "lr_budget_lei", *app._POOL_KEYS.values(), *app._LR_CODE_KEYS.values()):
         monkeypatch.setitem(app.SETTINGS, key, app.DEFAULTS[key])

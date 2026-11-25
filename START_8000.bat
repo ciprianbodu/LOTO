@@ -173,14 +173,10 @@ REM cale RELATIVA, exe-ul e venv-ul din D:\_BUILD\_LOTO (in AFARA repo-ului),
 REM deci %PROJECT_DIR% nu apare pe cmdline — acelasi bug ca in cancel_all din UI.
 REM Python face tree-kill: pe Windows uciderea parintelui NU omoara copiii.
 "%VENV_DIR%\Scripts\python.exe" "%PROJECT_DIR%cleanup_old_processes.py" --venv "%VENV_DIR%" --port 8000
-REM Fallback: orice mai asculta pe 8000. /C:":8000 " evita :80001; /T = arborele.
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr /C:":8000 " 2^>nul') do (
-    if NOT "%%a"=="0" (
-        echo [CLEANUP] Port 8000 inca ocupat de PID %%a
-        taskkill /f /t /pid %%a >nul 2>&1
-    )
+if errorlevel 1 (
+    echo [EROARE] Resursele necesare pentru relansare sunt inca ocupate. Coada este pastrata.
+    endlocal & exit /b 29
 )
-timeout /t 3 /nobreak >nul 2>&1
 
 REM Golire coada de joburi la FIECARE pornire: fara joburi reziduale care se
 REM reiau singure (procesele vechi sunt deja omorate la [2/4]). Ultimul job

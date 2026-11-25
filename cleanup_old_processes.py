@@ -1,7 +1,7 @@
 """Omoară UI / worker / bench rămase din sesiunea anterioară.
 
-Apelat din START_8000.bat ÎNAINTE de reset_jobs.py. Best-effort: nu blochează
-pornirea dacă un PID a murit între scan și kill.
+Apelat din START_8000.bat înainte de reset_jobs.py. Confirmă că procesele
+LOTO s-au oprit și adresa interfeței este liberă înainte de resetare.
 
 De ce NU e suficient PowerShell + CommandLine like %~dp0:
   `_launch_bench` pornește `python bench_all_methods.py` cu cale RELATIVĂ
@@ -15,9 +15,12 @@ De ce NU e suficient PowerShell + CommandLine like %~dp0:
 from __future__ import annotations
 
 import argparse
+import ntpath
 import os
-import re
+import posixpath
+import socket
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,13 +54,13 @@ _SYSTEM_PIDS = frozenset({0, 4})
 def _norm(path: str | os.PathLike[str] | None) -> str:
     if not path:
         return ""
-    return os.path.normcase(str(path)).replace("\\", "/").rstrip("/")
+    return posixpath.normpath(os.path.normcase(str(path)).replace("\\", "/")).rstrip("/")
 
 
 def path_is_under(
     path: str | os.PathLike[str] | None, root: str | os.PathLike[str]
 ) -> bool:
-    """True dacă `path` e `root` sau un fiu al lui. Acceptă / și \\, case-insensitive."""
+    """True dacă `path` e `root` sau un fiu al lui. Acceptă / și \\."""
     npath = _norm(path)
     nroot = _norm(root)
     if not npath or not nroot:
@@ -77,6 +80,20 @@ def cmdline_script_names(cmdline: list[str] | tuple[str, ...] | None) -> set[str
         if base:
             names.add(base.lower())
     return names
+
+
+def _python_script(cmdline: tuple[str, ...]) -> str | None:
+    args = iter(cmdline[1:])
+    for arg in args:
+        if arg == "--":
+            return next(args, None)
+        if not arg.startswith("-"):
+            return arg
+        if arg == "-" or arg.startswith(("-c", "-m")):
+            return None
+        if arg in ("-W", "-X", "--check-hash-based-pycs"):
+            next(args, None)
+    return None
 
 
 @dataclass(frozen=True)
@@ -101,10 +118,8 @@ def is_stale_proc(
 ) -> bool:
     """True dacă procesul e python al acestui proiect și trebuie omorât la restart.
 
-    Potrivire pe DOUĂ axe (OR), ca un filtru să nu le scape pe celelalte:
-      1. exe-ul e în venv-ul dedicat (UI, worker, bench, copii ProcessPool)
-      2. un script al proiectului e pe cmdline ȘI (calea proiectului e în cmdline
-         SAU CWD-ul e proiectul) — acoperă python pornit în afara venv-ului
+    Pentru interpretoare externe, identificarea cere scriptul LOTO executat.
+    Venv-ul dedicat identifică și copiii ProcessPool fără script pe cmdline.
     """
     if proc.pid in keep_pids or proc.pid in _SYSTEM_PIDS:
         return False
@@ -112,21 +127,18 @@ def is_stale_proc(
     if name and name not in _PYTHON_NAMES:
         return False
 
-    if path_is_under(proc.exe, venv_dir):
-        return True
-
-    scripts = cmdline_script_names(proc.cmdline)
-    if not (scripts & SCRIPT_MARKERS):
-        return False
-
-    cmd = _norm(" ".join(proc.cmdline))
-    root = _norm(project_root)
-    # Calea proiectului ca segment întreg de cale, nu ca prefix de text: un
-    # director frate `_LOTO_old` nu e proiectul (audit 2026-10-22; aceeași
-    # regulă ca `ui_shared.is_worker_running`).
-    if root and re.search(re.escape(root) + r"(?=$|/|\s|[\"'])", cmd):
-        return True
-    return bool(proc.cwd) and path_is_under(proc.cwd, project_root)
+    dedicated_python = path_is_under(proc.exe, venv_dir)
+    script = (_python_script(proc.cmdline) or "").strip('"')
+    name = _basename(script)
+    if name.lower() not in SCRIPT_MARKERS:
+        return dedicated_python
+    if ntpath.isabs(script):
+        path = script
+    elif proc.cwd:
+        path = f"{proc.cwd}/{script}"
+    else:
+        return dedicated_python
+    return _norm(path) == _norm(f"{project_root}/{name}")
 
 
 def expand_descendants(stale_pids: set[int], procs: list[ProcView]) -> set[int]:
@@ -169,6 +181,11 @@ def select_stale_pids(
     keep_pids: set[int],
     listen_pids: set[int] | None = None,
 ) -> set[int]:
+    """Select confirmed LOTO processes and their descendants.
+
+    Existing callers may supply a listener snapshot. Port ownership alone
+    cannot establish which application launched a process.
+    """
     stale = {
         p.pid
         for p in procs
@@ -176,12 +193,6 @@ def select_stale_pids(
             p, venv_dir=venv_dir, project_root=project_root, keep_pids=keep_pids
         )
     }
-    if listen_pids:
-        stale.update(
-            pid
-            for pid in listen_pids
-            if pid not in keep_pids and pid not in _SYSTEM_PIDS
-        )
     return expand_descendants(stale, procs) - keep_pids - _SYSTEM_PIDS
 
 
@@ -344,14 +355,16 @@ def kill_stale_project_processes(
     root = Path(project_root) if project_root else Path(__file__).resolve().parent
     keep = _keep_pids()
     procs = [p for p in _snapshot() if p.create_time is not None]
-    listening = _listen_pids(port)
     stale = select_stale_pids(
         procs,
         venv_dir=venv_dir,
         project_root=root,
         keep_pids=keep,
-        listen_pids=listening,
     )
+    other_listeners = _listen_pids(port) - stale
+    if other_listeners:
+        pids = ", ".join(map(str, sorted(other_listeners)))
+        print(f"[CLEANUP] Portul {port} este folosit și de alte procese (PID {pids}).")
     ordered = _order_deepest_first(stale, procs)
     created = {p.pid: p.create_time for p in procs}
     acted: list[int] = []
@@ -370,6 +383,39 @@ def kill_stale_project_processes(
     if not acted:
         print("[CLEANUP] Niciun proces vechi de oprit.")
     return acted
+
+
+def _local_port_available(port: int) -> bool:
+    if port <= 0:
+        return True
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            probe.bind(("127.0.0.1", port))
+    except (OSError, OverflowError):
+        return False
+    return True
+
+
+def _wait_for_startup_clear(venv_dir: str, project_root: str, port: int, timeout: float = 3.0) -> bool:
+    keep = _keep_pids()
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = select_stale_pids(
+            _snapshot(), venv_dir=venv_dir, project_root=project_root, keep_pids=keep
+        )
+        available = _local_port_available(port)
+        if not remaining and available:
+            return True
+        if time.monotonic() >= deadline:
+            if remaining:
+                pids = ", ".join(map(str, sorted(remaining)))
+                print(f"[CLEANUP] Procesele LOTO încă rulează (PID {pids}).")
+            if not available:
+                print(f"[CLEANUP] Adresa 127.0.0.1:{port} este încă indisponibilă.")
+            return False
+        time.sleep(0.1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -393,9 +439,11 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             dry_run=args.dry_run,
         )
-    except Exception as exc:  # noqa: BLE001 — pornirea NU trebuie blocată
-        print(f"[CLEANUP] Esec best-effort: {type(exc).__name__}: {exc}")
-        return 0
+        if not args.dry_run and not _wait_for_startup_clear(args.venv, args.project_root, args.port):
+            return 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"[CLEANUP] Nu pot verifica relansarea: {type(exc).__name__}: {exc}")
+        return 1
     return 0
 
 

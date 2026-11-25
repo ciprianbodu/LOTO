@@ -17,15 +17,16 @@ def _resolve_runtime_root() -> Path:
     acel volum păstrăm fallback-ul compatibil în rădăcina proiectului.
     """
     configured = os.environ.get("LOTO_RUNTIME_DIR", "").strip()
-    candidates = [Path(configured).expanduser()] if configured else []
+    if configured:
+        runtime = Path(configured).expanduser()
+        runtime.mkdir(parents=True, exist_ok=True)
+        return runtime.resolve()
     if os.name == "nt":
-        candidates.append(PREFERRED_RUNTIME_ROOT)
-    for candidate in candidates:
         try:
-            candidate.mkdir(parents=True, exist_ok=True)
-            return candidate.resolve()
+            PREFERRED_RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
+            return PREFERRED_RUNTIME_ROOT.resolve()
         except OSError:
-            continue
+            pass
     return PROJECT_ROOT
 
 

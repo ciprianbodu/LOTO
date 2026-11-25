@@ -22,6 +22,9 @@ import re
 import sys
 import tempfile
 from datetime import date, timedelta
+from pathlib import Path
+
+from history_write_lock import history_write_lock
 
 # Consola Windows e cp1252 by default -> diacriticele (ă, î) arunca UnicodeEncodeError.
 # Reconfiguram stdout/stderr pe UTF-8 cu fallback 'replace' ca sa nu mai crape.
@@ -30,7 +33,6 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Config
@@ -695,9 +697,12 @@ def update_all() -> int:
 
         if new_draws:
             try:
-                written = _append_rows_atomic(
-                    csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
-                )
+                with history_write_lock():
+                    if _stored_rows(csv_path) != stored:
+                        raise OSError("Istoricul s-a modificat între timp. Reia actualizarea.")
+                    written = _append_rows_atomic(
+                        csv_path, new_draws, cfg["has_joker"], cfg["num_main"]
+                    )
             except OSError as exc:
                 # Fișier deschis în alt program (Excel pe Windows) sau disc plin:
                 # celelalte jocuri continuă, iar scriptul iese tot cu 0.
