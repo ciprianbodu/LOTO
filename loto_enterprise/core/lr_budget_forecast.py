@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 from copy import deepcopy
 from fractions import Fraction
 from functools import lru_cache
@@ -17,11 +18,14 @@ from covering.lr_pool_budget import required_pool_size, restrict_to_pool
 from covering.lr_selection import lr_pool_sizes, resolve_lr_scheme, select_lr_scheme
 from covering.probability import _integer
 from loto_engine import LotoEngine
+from loto_enterprise.benchmark import decision
+from loto_enterprise.benchmark.methods import call_method, list_methods
 from loto_enterprise.benchmark.restricted_decision import restricted_bench_scores
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.dynamic_winner import choose_dynamic_winner
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
+from loto_enterprise.core.method_selector import combine_ensemble_scores
 from loto_enterprise.core.ranking import rank_by_score
 
 
@@ -65,11 +69,82 @@ def _forecast_engine(lot, source, lookback, expected_hash=None):
         raise ValueError("Istoricul jocului nu conține extrageri valide.")
     if expected_hash and engine.audit["hash"] != expected_hash:
         raise ValueError("Istoricul disponibil diferă de cel al pool-ului generat. Regenerați pool-ul.")
+    return _apply_lookback(engine, lookback)
+
+
+def _apply_lookback(engine, lookback):
     if 0 < lookback < 100:
         rows = max(1, int(len(engine.data) * (lookback / 100)))
         engine.data = engine.data.tail(rows)
         engine._draw_matrix = engine._draw_matrix[-rows:]
     return engine
+
+
+def _stored_members_valid(members, methods):
+    return isinstance(members, list) and bool(members) and all(
+        isinstance(member, dict) and isinstance(member.get("method"), str) and member["method"] in methods
+        and type(member.get("weight")) in (int, float) and math.isfinite(member["weight"]) and member["weight"] > 0
+        for member in members
+    )
+
+
+def _rebench_candidates(entries, lot, scheme, number_range, dynamic, lookback, hit_target, joker_size):
+    """Keep complete, reusable profiles for this geometry before validating the full CSV hash."""
+    if not entries or number_range not in (None, (10, 40)):
+        return []
+    urn_keys = {lot.bench_key}
+    if lot.bench_key_urna2:
+        urn_keys.add(lot.bench_key_urna2)
+    methods = set(list_methods())
+    candidates = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("game") != lot.game_id:
+            continue
+        settings, report = entry.get("settings"), entry.get("result")
+        if not isinstance(settings, dict) or not isinstance(report, dict) or not report.get("history_hash"):
+            continue
+        if (settings.get("restricted") is not (number_range is not None)
+                or settings.get("dynamic") is not dynamic or type(settings.get("inverse")) is not bool
+                or str(settings.get("scheme")) != str(scheme.code)
+                or type(settings.get("lookback")) not in (int, float)
+                or (settings["lookback"] or 100) != (lookback or 100)
+                or settings.get("hit_target") != (decision.BENCH_HIT_TARGET if hit_target is None else hit_target)
+                or (lot.bench_key_urna2 and settings.get("joker_size") != joker_size)):
+            continue
+        urns = {}
+        for urn in report.get("urns") or ():
+            if not isinstance(urn, dict) or urn.get("game_key") not in urn_keys:
+                continue
+            profile = urn.get("decision")
+            if isinstance(profile, dict) and _stored_members_valid(profile.get("members"), methods):
+                urns[urn["game_key"]] = profile
+        if urns.keys() == urn_keys:
+            candidates.append((report["history_hash"], settings["inverse"], urns))
+    return candidates
+
+
+def _profile_scores(choice, matrix, cutoffs, maximum, excluded, count):
+    profile, member_key = choice
+    contributions = []
+    blocked = set(excluded)
+    for member in profile[member_key]:
+        method = member["method"]
+        scores, _ = call_method(method, matrix, maximum, history_cutoffs=cutoffs)
+        eligible = {n: score for n, score in scores.items() if 1 <= n <= maximum and n not in blocked}
+        contributions.append((method, eligible, member["weight"]))
+    audit = {}
+    scores = combine_ensemble_scores(contributions, audit)
+    if len(scores) < count:
+        raise ValueError("Metoda salvată de Re-Bench nu a produs suficiente scoruri pentru acest pool.")
+    active = audit["ensemble_active"]
+    reference = member_key == "reference_members"
+    return scores, {
+        "method": " + ".join(name for name, _ in active),
+        "members": [{"method": name, "weight": weight} for name, weight in active],
+        "source": "lr_rebench_reference" if reference else "lr_rebench",
+        "fallback": bool(profile.get("fallback")) and not reference,
+        "hit_target": profile.get("target"), "evaluated": profile.get("evaluated"), "folds": profile.get("folds", []),
+    }
 
 
 def _check_capacity(name, maximum, count, excluded):
@@ -81,9 +156,15 @@ def _check_capacity(name, maximum, count, excluded):
         )
 
 
-def _score_pool(lot, engine, scheme, dynamic, joker_size, *, excluded=(), excluded_jokers=(), hit_target=None):
+def _score_pool(lot, engine, scheme, dynamic, joker_size, *, excluded=(), excluded_jokers=(), hit_target=None,
+                profiles=None, bonus_history=None):
     engine._winner_pool_hint = scheme.n
-    if dynamic:
+    profiles = profiles or {}
+    if lot.bench_key in profiles:
+        scores, selection = _profile_scores(
+            profiles[lot.bench_key], engine._draw_matrix, training_cutoffs(engine.data), lot.max_n, excluded, scheme.n,
+        )
+    elif dynamic:
         scores, selection = _dynamic_scores(
             lot.game_id, scheme.code, engine._draw_matrix.tobytes(), training_cutoffs(engine.data), excluded,
         )
@@ -102,13 +183,20 @@ def _score_pool(lot, engine, scheme, dynamic, joker_size, *, excluded=(), exclud
     jokers, bonus = (), None
     if lot.bench_key_urna2:
         maximum = lot.geo.second.max_n
-        if excluded_jokers:
-            matrix, valid = valid_draw_matrix(engine.data, ["joker"], draw_n=1, max_num=maximum)
+        if lot.bench_key_urna2 in profiles or excluded_jokers:
+            history = bonus_history if bonus_history is not None and lot.bench_key_urna2 in profiles else engine.data
+            matrix, valid = valid_draw_matrix(history, ["joker"], draw_n=1, max_num=maximum)
             if not len(matrix):
                 raise ValueError("Istoricul Urnei 2 Joker nu conține extrageri valide.")
-            bonus_scores, bonus = restricted_bench_scores(
-                matrix, training_cutoffs(engine.data.loc[valid]), lot.bench_key_urna2, 1, excluded_jokers, hit_target,
-            )
+            bounds = training_cutoffs(history.loc[valid])
+            if lot.bench_key_urna2 in profiles:
+                bonus_scores, bonus = _profile_scores(
+                    profiles[lot.bench_key_urna2], matrix, bounds, maximum, excluded_jokers, joker_size,
+                )
+            else:
+                bonus_scores, bonus = restricted_bench_scores(
+                    matrix, bounds, lot.bench_key_urna2, 1, excluded_jokers, hit_target,
+                )
             jokers = tuple(rank_by_score({
                 n: score for n, score in bonus_scores.items() if 1 <= n <= maximum and n not in excluded_jokers
             }, joker_size))
@@ -188,7 +276,8 @@ def _range_exclusions(lot, scheme, number_range, normal_pool=()):
     return tuple(sorted(blocked))
 
 
-def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, hit_target, number_range):
+def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, hit_target, number_range,
+                      profiles=None, bonus_history=None):
     normal = tuple(sorted(normal_pool))
     blocked = _range_exclusions(lot, scheme, number_range, normal)
     excluded_jokers = tuple(sorted(normal_jokers))
@@ -196,7 +285,7 @@ def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, 
         _check_capacity("Urna 2 Joker", lot.geo.second.max_n, len(normal_jokers), excluded_jokers)
     forecast = _score_pool(
         lot, engine, scheme, dynamic, len(normal_jokers), excluded=blocked,
-        excluded_jokers=excluded_jokers, hit_target=hit_target,
+        excluded_jokers=excluded_jokers, hit_target=hit_target, profiles=profiles, bonus_history=bonus_history,
     )
     forecast.update(excluded_pool=list(normal), eligible_count=lot.max_n - len(blocked), inverse_range=number_range)
     if lot.bench_key_urna2:
@@ -205,10 +294,47 @@ def _inverse_forecast(lot, engine, scheme, dynamic, normal_pool, normal_jokers, 
 
 
 def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynamic, joker_size, inverse, hit_target,
-                     number_range, exclude_generated_pool=False):
+                     number_range, exclude_generated_pool=False, lr_rebench_entries=()):
     scheme = budget_plan_scheme(plan)
     number_range = _number_range(number_range)
     filename = source[0] if source else Path(lot.csv).name
+    engine, bonus_history = None, None
+    profiles = {}
+    candidates = _rebench_candidates(
+        () if exclude_generated_pool else lr_rebench_entries, lot, scheme, number_range,
+        dynamic, lookback, hit_target, joker_size,
+    )
+    if candidates:
+        try:
+            current = _forecast_engine(lot, source, 0)
+        except (ValueError, OSError):
+            # A completed job may still supply a playable direct pool without a local CSV.
+            current = None
+        if current is not None:
+            for fingerprint, mode, urns in candidates:
+                if fingerprint == current.audit["hash"]:
+                    profiles.setdefault(mode, urns)
+            if profiles:
+                if lot.bench_key_urna2:
+                    _, valid = valid_draw_matrix(current.data, ["joker"], draw_n=1, max_num=lot.geo.second.max_n)
+                    bonus_history = current.data.loc[valid]
+                    if 0 < lookback < 100:
+                        bonus_history = bonus_history.tail(max(1, int(len(bonus_history) * (lookback / 100))))
+                engine = _apply_lookback(current, lookback)
+    inverse_profiles = {key: (p, "members") for key, p in profiles.get(True, {}).items()}
+    direct_profiles = {key: (p, "members") for key, p in profiles.get(False, {}).items()}
+    if not direct_profiles and inverse_profiles:
+        methods = set(list_methods())
+        direct_profiles = {
+            key: (p, "reference_members") for key, (p, _) in inverse_profiles.items()
+            if _stored_members_valid(p.get("reference_members"), methods)
+        }
+    if profiles and result:
+        # An inverse winner ranks the complement. Preserve an identical direct job when
+        # this benchmark supplied no replacement recipe for the direct pool.
+        generated_hash = (result[1].get("audit") or {}).get("hash")
+        if direct_profiles or filename != result[0] or generated_hash != engine.audit["hash"]:
+            result = None
     saved = result[1] if result else {}
     previous = _generated_pool(lot, saved) if result else None
     saved_lookback = saved.get("lookback", (saved.get("audit") or {}).get("lookback_pct"))
@@ -233,8 +359,7 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
     # An email describes a completed job: its displayed original is the exclusion
     # even when the budget selects a different scoring scheme for the alternative.
     reuse = exclude_generated_pool or (same_settings and size == scheme.n and same_scheme)
-    engine = None
-    if not reuse or inverse or number_range is not None:
+    if engine is None and (not reuse or inverse or number_range is not None):
         if result and filename != result[0]:
             raise ValueError("Lipsește istoricul folosit la generarea acestui pool.")
         expected_hash = (saved.get("audit") or {}).get("hash")
@@ -254,7 +379,8 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
     # explicitly pairs its alternative with an already generated normal pool.
     if number_range is not None and not exclude_generated_pool:
         blocked = _range_exclusions(lot, scheme, number_range)
-        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target)
+        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, excluded=blocked, hit_target=hit_target,
+                               profiles=direct_profiles, bonus_history=bonus_history)
         if reuse and lot.bench_key_urna2:
             # A restriction on the main urn must preserve the generated Joker choice.
             forecast.update(jokers=previous["jokers"], joker_selection=previous["joker_selection"])
@@ -263,14 +389,15 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
         forecast = previous
         filename = result[0]
     else:
-        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size)
+        forecast = _score_pool(lot, engine, scheme, dynamic, joker_size, profiles=direct_profiles, bonus_history=bonus_history)
 
     pool = _balls(forecast["pool"], lot.max_n)
     jokers = _balls(forecast["jokers"], lot.geo.second.max_n) if lot.bench_key_urna2 else ()
     if lot.bench_key_urna2 and not jokers:
         raise ValueError("Pool-ul Urnei 2 Joker este indisponibil.")
     if inverse:
-        forecast = _inverse_forecast(lot, engine, scheme, dynamic, pool, jokers, hit_target, number_range)
+        forecast = _inverse_forecast(lot, engine, scheme, dynamic, pool, jokers, hit_target, number_range,
+                                     profiles=inverse_profiles, bonus_history=bonus_history)
     else:
         forecast.update(pool=pool, jokers=jokers)
         forecast.setdefault("eligible_count", lot.max_n)
@@ -292,10 +419,11 @@ def playable_plan_order(item):
 def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5, inverse=False, hit_target=None,
-    inverse_range=None, number_range=None, exclude_generated_pool=False,
+    inverse_range=None, number_range=None, exclude_generated_pool=False, lr_rebench_entries=(),
 ):
     """Rank within the budget; optionally exclude a completed job's exact pool in inverse mode."""
     limits = number_range if number_range is not None or not inverse else inverse_range
+    lr_rebench_entries = tuple(lr_rebench_entries or ())
     plans = recommend_games(budget_lei, objective, game_id)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
@@ -305,7 +433,7 @@ def recommend_playable_games(
         try:
             forecast = _budget_forecast(
                 plan, lot, pool_codes.get(lot.game_id), result, source,
-                lookback, dynamic, joker_size, inverse, hit_target, limits, exclude_generated_pool,
+                lookback, dynamic, joker_size, inverse, hit_target, limits, exclude_generated_pool, lr_rebench_entries,
             )
             if not restrict_to_pool(plan, objective, forecast["pool"], forecast["jokers"])["tickets"]:
                 plan["forecast_error"] = f"Niciun cod LR în buget pentru pool-ul de {len(forecast['pool'])} numere."

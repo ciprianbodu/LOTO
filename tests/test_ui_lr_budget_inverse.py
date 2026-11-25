@@ -351,10 +351,10 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         refresh = budget.lr_budget_panel(MagicMock(value=200), lambda game: {})
         view.expansion.return_value.value = True
         await refresh()
-        assert assigned == [{"6/49": (10, 40), "5/40": None, "joker": None}]
+        assert assigned == [{"6/49": None, "5/40": None, "joker": None}]
         first_actions = MagicMock(is_deleted=False)
         latest_actions = MagicMock(is_deleted=False)
-        callbacks["6/49"]("6/49", "Baza completă", first_actions)
+        callbacks["6/49"]("6/49", "auto", first_actions)
         first_button = view.button.return_value
         first_actions.__enter__.assert_called_once()
         callbacks["5/40"]("5/40", "10–40", latest_actions)
@@ -367,7 +367,7 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         await view.button.call_args.kwargs["on_click"]()
         latest_button.delete.assert_called_once()
         assert len(analysed) == 1
-        assert assigned[-1] == {"6/49": None, "5/40": (10, 40), "joker": None}
+        assert assigned[-1] == {"6/49": (10, 40), "5/40": (10, 40), "joker": None}
     asyncio.run(scenario())
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import CancelledError, FIRST_COMPLETED, ProcessPoolExecutor, wait
 from functools import partial
+from math import isfinite
 from pathlib import Path
 from time import monotonic
 
@@ -67,8 +68,9 @@ def _blocked_by_date(
     check(force=True)
     outside_base = frozenset(range(1, game.max_num + 1)).difference(base)
     if not reference_size:
-        return dict.fromkeys(origins, outside_base), ""
+        return dict.fromkeys(origins, outside_base), "", []
 
+    reference_members = []
     if dynamic and scheme is not None:
         limits = np.asarray(bounds, dtype=np.intp)
         days = np.flatnonzero(limits == np.arange(len(limits)))
@@ -89,6 +91,7 @@ def _blocked_by_date(
         method = selection["method"]
         if not method or " + " in method:
             method = "frequency"
+        reference_members = [{"method": method, "weight": 1.0}]
 
         def direct_pool(origin):
             past, cuts = _training(matrix, bounds, origin, lookback)
@@ -107,7 +110,7 @@ def _blocked_by_date(
         if len(direct) != reference_size or direct.difference(base):
             raise ValueError("Pool-ul direct al unei date nu poate fi completat în baza aleasă.")
         blocked[origin] = outside_base | direct
-    return blocked, protocol
+    return blocked, protocol, reference_members
 
 
 def _evaluate_method(method, *, matrix, game, windows, blocked, lookback, size, cancel_path):
@@ -156,6 +159,40 @@ def _evaluate_parallel(evaluate, methods, workers, check):
     return [record for method in methods for record in results[method]]
 
 
+def _reusable_decision(config, records, target, history_rows, reference_members):
+    """Keep only benchmarked ensemble members and their common positive samples."""
+    if config.get("error"):
+        return None
+    samples = {}
+    for row in records:
+        if not row["failed"] and row["n_eval"] > 0:
+            samples.setdefault(row["method"], {})[int(row["percentile"])] = int(row["n_eval"])
+
+    selected = config.get("ensemble") or [{"method": config.get("scorer"), "weight": 1.0}]
+    weighted = []
+    for member in selected:
+        method, weight = member["method"], float(member["weight"])
+        if method in samples and method != "random" and isfinite(weight) and weight > 0:
+            weighted.append((method, weight))
+    if not weighted:
+        return None
+
+    common = set.intersection(*(set(samples[method]) for method, _ in weighted))
+    if not common:
+        return None
+    widest = max(common)
+    total = sum(weight for _, weight in weighted)
+    return {
+        "members": [{"method": method, "weight": weight / total} for method, weight in weighted],
+        "target": target,
+        "fallback": bool(config.get("fallback") or config.get("low_confidence") or len(weighted) != len(selected)),
+        "evaluated": min(samples[method][widest] for method, _ in weighted),
+        "folds": sorted(common),
+        "history_rows": history_rows,
+        "reference_members": reference_members,
+    }
+
+
 def _bench_urn(
     name, matrix, game, size, base, reference_size, required, scheme, dynamic, lookback, target, cancel_path,
 ):
@@ -163,8 +200,8 @@ def _bench_urn(
     check(force=True)
     eligible_count = max(0, len(base) - reference_size)
     output = {
-        "name": name, "pool_size": size, "target": target, "eligible_count": eligible_count,
-        "rows": [], "method": None, "fallback": False, "folds": [], "protocol": "",
+        "name": name, "game_key": game.key, "pool_size": size, "target": target, "eligible_count": eligible_count,
+        "rows": [], "method": None, "fallback": False, "folds": [], "protocol": "", "decision": None,
     }
     if eligible_count < required:
         output["error"] = f"Rămân {eligible_count} numere eligibile. Sunt necesare {required}."
@@ -184,7 +221,7 @@ def _bench_urn(
     if origins[0] == 0:
         output["error"] = "Nu există extrageri din zile anterioare pentru prima zi de test."
         return output
-    blocked, reference_protocol = _blocked_by_date(
+    blocked, reference_protocol, reference_members = _blocked_by_date(
         matrix, game.history_cutoffs, game, scheme, origins, base, reference_size,
         dynamic, lookback, target, check,
     )
@@ -215,9 +252,10 @@ def _bench_urn(
         for row in records if row["percentile"] == widest_pct and not row["failed"]
     ]
     widest.sort(key=lambda row: (-row["hit_rate"], -row["avg_hits"], row["method"]))
-    method = " + ".join(member["method"] for member in (config.get("ensemble") or ())) or config.get("scorer")
+    reusable = _reusable_decision(config, records, target, len(matrix), reference_members)
+    method = " + ".join(member["method"] for member in reusable["members"]) if reusable else None
     output.update(
-        rows=widest, method=method, fallback=bool(config.get("fallback") or config.get("low_confidence")),
+        rows=widest, method=method, fallback=bool(reusable and reusable["fallback"]), decision=reusable,
         folds=[pct for pct, _ in windows],
         protocol=(
             "Clasamentul arată fereastra cea mai lungă. Decizia folosește toate ferestrele disponibile. "
@@ -226,8 +264,8 @@ def _bench_urn(
             + reference_protocol
         ).rstrip(),
     )
-    if config.get("error"):
-        output["error"] = config["error"]
+    if not reusable:
+        output["error"] = config.get("error") or "Decizia nu conține metode cu rezultate utilizabile pentru recomandare."
     return output
 
 
@@ -276,6 +314,7 @@ def benchmark_lr_hypotheses(
     check(force=True)
     return {
         "game": game_id, "scheme_code": scheme.code,
+        "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(dates) else None,
         "inverse": bool(inverse), "restricted": bool(restricted), "lookback": lookback, "urns": urns,
     }

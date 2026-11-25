@@ -138,7 +138,7 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
         frame = pd.DataFrame({"n1": [6]})
 
         async def immediate(_fn, game, _history, **options):
-            return _result(game, options["scheme"])
+            return _profile_result(game, options["scheme"], "a" * 16)
 
         if previous_saved:
             monkeypatch.setattr(panel.run, "io_bound", immediate)
@@ -155,7 +155,7 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
             assert cancel.exists()
             if worker_raises:
                 raise CancelledError()
-            return _result(game, options["scheme"])
+            return _profile_result(game, options["scheme"], "b" * 16)
 
         monkeypatch.setattr(panel.run, "io_bound", paused)
         pending = asyncio.create_task(panel.run_lr_rebench([
@@ -175,5 +175,140 @@ def test_cancellation_discards_in_flight_report_and_keeps_last_saved(monkeypatch
         else:
             assert not panel._RESULT_PATH.exists()
         assert "a fost anulată" in panel._notice
+
+    asyncio.run(scenario())
+
+
+def _profile_result(game, scheme, fingerprint, *, partial=False):
+    report = _result(game, scheme)
+    report.update(history_hash=fingerprint, history_rows=240)
+    keys = {
+        "joker": ("joker_urna1", "joker_urna2"),
+        "6/49": ("loto_6_49",),
+        "5/40": ("loto_5_40",),
+    }
+    for urn, key in zip(report["urns"], keys[game], strict=True):
+        urn["game_key"] = key
+        urn["decision"] = {
+            "members": [{"method": "frequency", "weight": 0.65}, {"method": "ewma_40", "weight": 0.35}],
+            "reference_members": [{"method": "frequency", "weight": 1.0}],
+            "target": urn["target"], "fallback": False, "folds": [10], "evaluated": 24,
+        }
+    if partial:
+        report["urns"][-1]["decision"] = None
+        report["urns"][-1]["error"] = "Istoric insuficient în Urna 2 Joker."
+    return report
+
+
+def test_saved_decisions_retain_each_game_and_hypothesis_and_replace_only_complete_profiles(monkeypatch):
+    frame = pd.DataFrame({"n1": [6]})
+    old, newer = "a" * 16, "b" * 16
+    joker_options = _settings(24)
+
+    async def scenario():
+        async def publish(game, name, result, settings):
+            async def evaluate(*_args, **_kwargs):
+                if isinstance(result, Exception):
+                    raise result
+                return result
+            monkeypatch.setattr(panel.run, "io_bound", evaluate)
+            assert await panel.run_lr_rebench([(game, (name, frame), settings)])
+
+        await publish("joker", "joker.csv", _profile_result("joker", 24, old), joker_options)
+        await publish("6/49", "six.csv", _profile_result("6/49", 57, old), _settings(57))
+        await publish("joker", "joker.csv", _profile_result("joker", 24, old), {**joker_options, "restricted": False})
+        baseline = panel.lr_rebench_decisions()
+        assert set(baseline) == {"joker", "6/49"}
+        assert [entry["settings"]["restricted"] for entry in baseline["joker"]] == [False, True]
+
+        await publish("joker", "joker.csv", _profile_result("joker", 24, newer, partial=True), joker_options)
+        await publish("joker", "joker.csv", ValueError("test failed"), joker_options)
+        assert panel.lr_rebench_decisions() == baseline
+
+        await publish("joker", "joker.csv", _profile_result("joker", 24, newer), joker_options)
+        await publish("joker", "uploaded.csv", _profile_result("joker", 24, old), joker_options)
+        profiles = panel.lr_rebench_decisions()
+        candidates = profiles["joker"]
+        assert [(item["source"], item["settings"]["restricted"], item["result"]["history_hash"])
+                for item in candidates] == [
+                    ("uploaded.csv", True, old), ("joker.csv", True, newer), ("joker.csv", False, old),
+                ]
+        assert [urn["game_key"] for urn in candidates[1]["result"]["urns"]] == ["joker_urna1", "joker_urna2"]
+        assert "rows" not in candidates[1]["result"]["urns"][0]
+        assert candidates[1]["result"]["urns"][0]["decision"]["members"] == [
+            {"method": "frequency", "weight": 0.65}, {"method": "ewma_40", "weight": 0.35},
+        ]
+        assert profiles["6/49"] == baseline["6/49"]
+        mutated = panel.lr_rebench_decisions()
+        mutated["joker"][0]["result"]["urns"][0]["decision"]["members"][0]["weight"] = 99
+        assert panel.lr_rebench_decisions() == profiles
+        monkeypatch.setattr(panel, "_last", None)
+        monkeypatch.setattr(panel, "_loaded", False)
+        assert panel.lr_rebench_decisions() == profiles
+
+    asyncio.run(scenario())
+
+
+def test_legacy_report_is_visible_but_produces_no_reusable_decision():
+    panel.atomic_write_json(panel._RESULT_PATH, {
+        "schema": 1, "total": 1, "finished_at": "2026-11-25T11:20:00+02:00",
+        "entries": [{"game": "joker", "settings": _settings(24), "source": "legacy.csv", "result": _result("joker", 24)}],
+    })
+    assert panel.lr_rebench_decisions() == {}
+    assert panel._last["entries"][0]["result"]["urns"][0]["method"] == "frequency"
+
+
+@pytest.mark.parametrize("chosen", [None, (10, 40)])
+def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_choice(monkeypatch, chosen):
+    frame = pd.DataFrame({"n1": [6]})
+    settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+")}
+    calls = []
+
+    async def execute(function, *args, **kwargs):
+        calls.append(function)
+        if function is panel.compare_budget_ranges:
+            assert args[:3] == (200, "4+", "joker")
+            assert args[3]["joker"][0] == "input.csv"
+            pd.testing.assert_frame_equal(args[3]["joker"][1], frame)
+            assert args[3]["joker"][1] is not frame
+            assert kwargs == dict(inverse=True, dynamic=True, lookback=80, hit_target=4,
+                                  joker_size=2, pool_codes={"joker": 24})
+            return {"recommended_range": chosen}
+        assert function is panel.benchmark_lr_hypotheses
+        assert kwargs["restricted"] is (chosen is not None)
+        assert "auto_budget" not in kwargs
+        return _profile_result("joker", 24, "a" * 16)
+
+    monkeypatch.setattr(panel.run, "io_bound", execute)
+    assert asyncio.run(panel.run_lr_rebench([("joker", ("input.csv", frame), settings)]))
+    assert calls == [panel.compare_budget_ranges, panel.benchmark_lr_hypotheses]
+    saved, = panel.lr_rebench_decisions()["joker"]
+    assert saved["settings"]["restricted"] is (chosen is not None)
+    assert "auto_budget" not in saved["settings"]
+    assert settings["restricted"] is False
+
+
+def test_cancelling_during_automatic_scope_does_not_start_benchmark(monkeypatch):
+    frame = pd.DataFrame({"n1": [6]})
+    settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+")}
+
+    async def scenario():
+        comparing, release = asyncio.Event(), asyncio.Event()
+
+        async def execute(function, *_args, **_kwargs):
+            assert function is panel.compare_budget_ranges
+            comparing.set()
+            await release.wait()
+            return {"recommended_range": (10, 40)}
+
+        monkeypatch.setattr(panel.run, "io_bound", execute)
+        task = asyncio.create_task(panel.run_lr_rebench([("joker", ("input.csv", frame), settings)]))
+        await asyncio.wait_for(comparing.wait(), timeout=2)
+        assert panel._active["comparing"]
+        assert panel.cancel_lr_rebench()
+        release.set()
+        assert await asyncio.wait_for(task, timeout=2)
+        assert panel.lr_rebench_decisions() == {}
+        assert not panel._RESULT_PATH.exists()
 
     asyncio.run(scenario())

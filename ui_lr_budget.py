@@ -13,6 +13,7 @@ from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.ro_text import count
 from ui_lr_portfolio import _percent, _price
+from ui_lr_rebench import lr_rebench_decisions
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
@@ -29,6 +30,11 @@ def _columns(fields):
 
 def _bench_method(selection):
     method = selection["method"]
+    if selection.get("source") == "lr_rebench":
+        detail = " · metodă de rezervă" if selection.get("fallback") else ""
+        return f"{method} · din Re-Bench pentru această selecție{detail}"
+    if selection.get("source") == "lr_rebench_reference":
+        return f"{method} · metoda de referință a pool-ului direct din Re-Bench"
     if selection.get("fallback"):
         reason = "lipsește decizia Re-Bench" if selection.get("no_decision") else "metodă de rezervă"
         return f"{method} ({reason})"
@@ -105,7 +111,7 @@ def _ticket_details(plan, *, expanded=False):
             ui.label(f"{forecast['filename']}{date}" + (f" · {history}" if forecast["rows"] else "")).classes("text-caption")
             selection = forecast["selection"]
             if selection.get("method"):
-                if not forecast["dynamic"]:
+                if selection.get("source") in ("lr_rebench", "lr_rebench_reference") or not forecast["dynamic"]:
                     evidence = _bench_method(selection)
                 elif selection.get("reason") == "insufficient_history":
                     evidence = f"{selection['method']} · istoric prea scurt pentru selecția walk-forward"
@@ -124,6 +130,8 @@ def _ticket_details(plan, *, expanded=False):
                         evidence += " · metodă de rezervă"
                 method_label = "Metoda pool-ului invers" if excluded is not None else "Metoda pool-ului"
                 ui.label(f"{method_label} · {evidence}").classes("text-caption")
+                if selection.get("source") not in ("lr_rebench", "lr_rebench_reference"):
+                    ui.label("Bilet calculat fără un rezultat Re-Bench LR pentru această selecție și acest istoric.").classes("text-caption")
             bonus = forecast["joker_selection"] or {}
             if bonus.get("method"):
                 ui.label(f"Urna 2 Joker · {_bench_method(bonus)}").classes("text-caption")
@@ -339,12 +347,20 @@ def _compare_games(amount, goal, games, inputs, inverse):
 
 
 def _generate_selection(amount, goal, selections, inputs, inverse):
+    decisions = lr_rebench_decisions()
     plans = []
     for game, limits in selections.items():
         plans.extend(recommend_playable_games(
-            amount, goal, game, inverse=inverse, number_range=limits, **inputs,
+            amount, goal, game, inverse=inverse, number_range=limits,
+            lr_rebench_entries=decisions.get(game, ()), **inputs,
         ))
     return sorted(plans, key=playable_plan_order)
+
+
+def lr_base_choice(manual_choices, game, inverse, restricted):
+    if restricted:
+        return _range_label(_INVERSE_RANGE)
+    return manual_choices.get((game, inverse), _range_label(None))
 
 
 def initial_budget_amount(value):
@@ -373,6 +389,7 @@ def lr_budget_panel(
     on_budget_plan=None, initial_objective=FOUR_PLUS, on_objective_change=None,
     initial_game="all", on_game_change=None,
     initial_inverse=False, initial_restricted=False, on_method_change=None,
+    base_choices=None, on_base_change=None,
 ):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
@@ -451,7 +468,7 @@ def lr_budget_panel(
         applied_budget = None
         cached_analysis = None
         displayed = None
-        manual_choices = {}
+        manual_choices = {} if base_choices is None else base_choices
         confirm_button = None
         waiting_for_choice = False
 
@@ -472,6 +489,8 @@ def lr_budget_panel(
             if not panel.value or actions.is_deleted:
                 return
             manual_choices[game_id, bool(inverse.value)] = value
+            if on_base_change is not None:
+                on_base_change()
             revision += 1
             waiting_for_choice = True
             clear_confirmation()
@@ -541,15 +560,15 @@ def lr_budget_panel(
                                 for report in reports:
                                     gid = report["game"]
                                     _range_comparison(
-                                        report, game_options[gid], manual_choices.get((gid, inverse_mode), "auto"),
+                                        report, game_options[gid], lr_base_choice(manual_choices, gid, inverse_mode, forced),
                                         change_base, forced, expanded=len(reports) == 1,
                                     )
                             displayed = (id(reports), forced)
                         selections = {}
                         for report in reports:
                             gid = report["game"]
-                            choice = manual_choices.get((gid, inverse_mode), "auto")
-                            if forced or choice == _range_label(_INVERSE_RANGE):
+                            choice = lr_base_choice(manual_choices, gid, inverse_mode, forced)
+                            if choice == _range_label(_INVERSE_RANGE):
                                 limits = _INVERSE_RANGE
                             elif choice == "auto":
                                 limits = report.get("recommended_range")

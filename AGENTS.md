@@ -2111,15 +2111,22 @@ folosește complementul pool-ului normal disponibil înainte de extragerea
 respectivă. Intervalul restrânge numai urna principală. În detaliile biletului
 apar pool-ul exclus și numerele de jucat.
 
-Cu „Metoda inversă” sau „Pool restrâns între 10 și 40” bifată, butonul
-„RE-BENCH” evaluează metodele pentru jocul și schema din recomandarea LR,
-pe istoricul încărcat la lansare. Cu ambele bife active, la fiecare zi de
+Pentru jocurile românești, butonul „RE-BENCH” evaluează metoda normală sau
+inversă cu schema din recomandarea LR, pe istoricul încărcat la lansare.
+Cu ambele bife debifate, baza implicită este urna completă. Poți alege
+separat baza fiecărui joc în „Analiza bazelor de selecție”. Bifa „Pool
+restrâns între 10 și 40” aplică intervalul tuturor jocurilor alese.
+Cu ambele bife active, la fiecare zi de
 test se exclud din 10–40 numerele pool-ului direct calculat pe același
 interval din extragerile anterioare. Toate extragerile din ferestrele de
 test participă la evaluare. La Joker, intervalul privește prima urnă.
-Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport în
-`.nicegui/lr_rebench_latest.json` din directorul de rulare. Cu ambele opțiuni
-debifate, butonul pornește Re-Bench-ul obișnuit.
+„Generează recomandarea” aplică metodele și ponderile rezultate din Re-Bench
+când coincid jocul, schema, istoricul, ipoteza și setările de calcul. Pentru
+Joker verifică ambele urne. Pe bilet apare sursa metodei folosite. O modificare
+a istoricului cere o nouă evaluare pentru a aplica decizia Re-Bench acelui istoric.
+Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport și deciziile
+pentru fiecare ipoteză în `.nicegui/lr_rebench_latest.json` din directorul de
+rulare. Calculul general se pornește din „Re-Bench general și Auto-Pilot”.
 
 Pentru fiecare interval, panoul numără extragerile în care toate numerele
 principale au fost în interval, dintre ultimele 100 de extrageri valide. Arată

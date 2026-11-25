@@ -94,7 +94,7 @@ from ui_history_upload import (
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
-from ui_lr_budget import initial_budget_amount, lr_budget_panel, lr_budget_slider
+from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
@@ -1118,7 +1118,7 @@ def run_rebench() -> None:
     la decizia de producție (``decision.py`` folosește doar ``is_random=False``).
     Baseline-ul scorerului ``random`` rămâne prezent și obligatoriu.
     """
-    if _bench_running():
+    if lr_rebench_running() or _bench_running():
         ui.notify("Un bench rulează deja.", type="warning")
         return
     if _selected_country() != _LOT.RO:
@@ -4067,13 +4067,18 @@ def _lr_rebench_jobs(choices, amount):
         for plan in plans:
             game = plan["game"]
             source = sources.get(game)
-            jobs.append((game, (source[0], source[1].copy(deep=True)) if source else None, {
+            inverse = choices["lr_inverse_val"]
+            base = lr_base_choice(choices.get("base_choices", {}), game, inverse, choices["lr_restricted_val"])
+            options = {
                 "scheme": budget_plan_scheme(plan).code,
-                "inverse": choices["lr_inverse_val"], "restricted": choices["lr_restricted_val"],
+                "inverse": inverse, "restricted": base == "10–40",
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "lookback": _effective_lookback_pct(), "hit_target": _clamped_bench_target(),
                 "joker_size": _int_setting("joker_pool_size_val"),
-            }))
+            }
+            if base == "auto":
+                options["auto_budget"] = (amount, choices["lr_budget_objective"])
+            jobs.append((game, (source[0], source[1].copy(deep=True)) if source else None, options))
     return jobs
 
 
@@ -4081,7 +4086,7 @@ async def _run_selected_rebench(choices, amount, on_scoped):
     if lr_rebench_running():
         ui.notify("Re-Bench pentru selecția LR este deja în curs.", type="warning")
         return
-    if _selected_country() != _LOT.RO or not (choices["lr_inverse_val"] or choices["lr_restricted_val"]):
+    if _selected_country() != _LOT.RO:
         run_rebench()
         return
     if _bench_running():
@@ -4090,6 +4095,19 @@ async def _run_selected_rebench(choices, amount, on_scoped):
     jobs = _lr_rebench_jobs(choices, amount)
     on_scoped()
     await run_lr_rebench(jobs)
+
+
+def _align_budget_sources(histories, generated):
+    """Use the same loaded draw history for Re-Bench and the next recommendation."""
+    originals = STATE.get("result_sources") or {}
+    for game, (name, _) in tuple(generated.items()):
+        original = originals.get(name)
+        current = histories.get(game)
+        if current is None:
+            if original is not None:
+                histories[game] = (name, original)
+        elif current[0] != name or original is None or not original.equals(current[1]):
+            del generated[game]
 
 
 @ui.page("/", title=APP_TITLE)
@@ -4102,14 +4120,13 @@ def main_page() -> None:
         "lr_budget_objective": _budget_objective(),
         "lr_inverse_val": SETTINGS.get("lr_inverse_val") is True,
         "lr_restricted_val": SETTINGS.get("lr_restricted_val") is True,
+        "base_choices": {},
     }
     if lr_choices["lr_budget_game"] not in ("all", *(g.game_id for g in _LOT.games_for_country(_LOT.RO))):
         lr_choices["lr_budget_game"] = "all"
-    lr_choices["scoped"] = lr_choices["lr_inverse_val"] or lr_choices["lr_restricted_val"]
 
     def change_lr_choices(**changed):
         lr_choices.update(changed)
-        lr_choices["scoped"] = lr_choices["lr_inverse_val"] or lr_choices["lr_restricted_val"]
         show_lr_scope()
         if any(SETTINGS.get(key) != value for key, value in changed.items()):
             SETTINGS.update(changed)
@@ -4149,9 +4166,7 @@ def main_page() -> None:
                 lot = _game_spec_for(name)
                 if lot.game_id in games:
                     histories[lot.game_id] = (name, history)
-            for game, (name, _) in generated.items():
-                if (source := _result_source(name)) is not None:
-                    histories[game] = (name, source)
+            _align_budget_sources(histories, generated)
             return {
                 "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
                 "generated": generated,
@@ -4406,9 +4421,9 @@ def main_page() -> None:
                 ui.checkbox("Alege dinamic metoda pentru pool-ul schemei LR"), "dynamic_method_enabled_val",
             )
             ui.label(
-                "La fiecare generare și pas walk-forward, metoda se alege după numărul de extrageri "
-                "anterioare cu cel puțin 4 numere pe aceeași variantă a schemei reduse. "
-                "Premiile se verifică pe variantele schemei LR. Debifează pentru metoda fixă din Re-Bench."
+                "Recomandarea folosește metoda din Re-Bench când jocul, schema, istoricul și selecția coincid. "
+                "Până la acel calcul, selecția dinamică alege metoda după extragerile anterioare "
+                "cu cel puțin 4 numere pe aceeași variantă LR. Debifarea activează selecția fixă."
             ).classes("text-caption text-grey")
             for _plabel, _ptitle in (
                 ("6/49", "Pool Loto 6/49"),
@@ -4581,70 +4596,79 @@ def main_page() -> None:
                 game = lr_choices["lr_budget_game"]
                 name = "Toate jocurile" if game == "all" else _LOT.require_lottery(game, _LOT.RO).name
                 method = "Metoda inversă" if lr_choices["lr_inverse_val"] else "Metoda normală"
-                base = "Pool restrâns între 10 și 40" if lr_choices["lr_restricted_val"] else "Baza completă"
+                games = _LOT.games_for_country(_LOT.RO) if game == "all" else [_LOT.require_lottery(game, _LOT.RO)]
+                labels = {"auto": "Bază automată", "10–40": "Pool restrâns între 10 și 40"}
+                bases = {}
+                for lot in games:
+                    value = lr_base_choice(lr_choices["base_choices"], lot.game_id, lr_choices["lr_inverse_val"],
+                                           lr_choices["lr_restricted_val"])
+                    bases[lot.name] = labels.get(value, value)
+                base = next(iter(bases.values())) if len(set(bases.values())) == 1 else ", ".join(
+                    f"{title} ({value})" for title, value in bases.items()
+                )
                 scope_label.set_text(f"Re-Bench · {name} · {method} · {base}")
-                scope_label.set_visibility(lr_choices["scoped"])
 
             show_lr_scope()
-        ui.label(_bench_intro_text(_cc)).bind_text_from(
-            SETTINGS, "bench_hit_target", lambda _: _bench_intro_text(_cc)
-        ).classes("text-caption").bind_visibility_from(lr_choices, "scoped", backward=lambda v: _cc != _LOT.RO or not v)
-        if _cc != _LOT.RO:
-            _ctx = _country_bench_texts(_cc)
-            ui.label(_ctx["eta"]).classes("text-caption text-grey")
-            ui.label(f"🎯 {_ctx['curation']}").classes("text-caption text-info")
-        if _cc == _LOT.RO:
-            _eta_folds = _target_bench_folds()
-            if _eta_folds:
-                ui.label(
-                    f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
-                    f"{count(_eta_folds, 'folduri', 'un fold')} "
-                    f"{_workers_text(_bench_workers())} — din durata medie a unui fold "
-                    "la ultima rulare; după o schimbare de matrice estimarea e aproximativă."
-                ).classes("text-caption text-grey").bind_visibility_from(lr_choices, "scoped", backward=lambda v: not v)
-            # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
-            # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
-            _cur = _curation_banner_info()
-            if _cur is not None:
-                _pg = _cur.get("per_game") or {}
-                _main_pg_txt = "/".join(
-                    str(int(_pg[g]))
-                    for g in ("loto_6_49", "loto_5_40", "joker_urna1")
-                    if g in _pg
-                )
-                _urna2_n = _pg.get("joker_urna2")
-                if _main_pg_txt and _urna2_n is not None:
-                    _pg_bit = (
-                        f"matrice Re-Bench = {_main_pg_txt} jocuri principale "
-                        f"+ {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
-                    )
-                elif _main_pg_txt:
-                    _pg_bit = f"matrice Re-Bench = {_main_pg_txt} per joc, plus baseline-urile structurale"
-                elif _urna2_n is not None:
-                    _pg_bit = f"matrice Re-Bench = {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
-                else:
-                    _pg_bit = "matrice Re-Bench = tot setul activ"
-                _n_after = _cur["n_after"]
-                ui.html(
-                    render_html_safe(
-                        t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
-                        t"(uniune eligibilă; {_pg_bit})."
-                    )
-                ).classes("text-caption text-info")
-                ui.label(
-                    "Dezactivare (revine la toate metodele): șterge sau golește lista "
-                    f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
-                    "Nimic nu se pierde — nu e blacklist."
-                ).classes("text-caption text-grey")
-                if _cur["missing_required"]:
+        bench_options = ui.expansion("Re-Bench general și Auto-Pilot").classes("w-full") if _cc == _LOT.RO else ui.column()
+        with bench_options:
+            if _cc == _LOT.RO:
+                ui.button("Pornește Re-Bench general", on_click=run_rebench).props("outline no-caps").classes("w-full")
+            ui.label(_bench_intro_text(_cc)).bind_text_from(
+                SETTINGS, "bench_hit_target", lambda _: _bench_intro_text(_cc)
+            ).classes("text-caption")
+            if _cc != _LOT.RO:
+                _ctx = _country_bench_texts(_cc)
+                ui.label(_ctx["eta"]).classes("text-caption text-grey")
+                ui.label(f"🎯 {_ctx['curation']}").classes("text-caption text-info")
+            if _cc == _LOT.RO:
+                _eta_folds = _target_bench_folds()
+                if _eta_folds:
                     ui.label(
-                        "⚠️ Lipsesc din curare metode structurale "
-                        f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
-                        "cădea pe low_confidence. Adaugă-le în curated_methods.json."
-                    ).classes("text-caption text-negative")
-        with ui.column().classes("w-full").bind_visibility_from(
-            lr_choices, "scoped", backward=lambda v: _cc != _LOT.RO or not v,
-        ):
+                        f"⏱ ETA estimat: {_estimate_bench_eta(_eta_folds)} pentru "
+                        f"{count(_eta_folds, 'folduri', 'un fold')} "
+                        f"{_workers_text(_bench_workers())} — din durata medie a unui fold "
+                        "la ultima rulare; după o schimbare de matrice estimarea e aproximativă."
+                    ).classes("text-caption text-grey")
+                # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
+                # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
+                _cur = _curation_banner_info()
+                if _cur is not None:
+                    _pg = _cur.get("per_game") or {}
+                    _main_pg_txt = "/".join(
+                        str(int(_pg[g]))
+                        for g in ("loto_6_49", "loto_5_40", "joker_urna1")
+                        if g in _pg
+                    )
+                    _urna2_n = _pg.get("joker_urna2")
+                    if _main_pg_txt and _urna2_n is not None:
+                        _pg_bit = (
+                            f"matrice Re-Bench = {_main_pg_txt} jocuri principale "
+                            f"+ {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
+                        )
+                    elif _main_pg_txt:
+                        _pg_bit = f"matrice Re-Bench = {_main_pg_txt} per joc, plus baseline-urile structurale"
+                    elif _urna2_n is not None:
+                        _pg_bit = f"matrice Re-Bench = {int(_urna2_n)} Urna 2, plus baseline-urile structurale"
+                    else:
+                        _pg_bit = "matrice Re-Bench = tot setul activ"
+                    _n_after = _cur["n_after"]
+                    ui.html(
+                        render_html_safe(
+                            t"🎯 <b>Curare activă: {_n_after} metode din {_cur['n_before']}</b> "
+                            t"(uniune eligibilă; {_pg_bit})."
+                        )
+                    ).classes("text-caption text-info")
+                    ui.label(
+                        "Dezactivare (revine la toate metodele): șterge sau golește lista "
+                        f"'active' din {_cur['path']}, apoi rulează un Re-Bench. "
+                        "Nimic nu se pierde — nu e blacklist."
+                    ).classes("text-caption text-grey")
+                    if _cur["missing_required"]:
+                        ui.label(
+                            "⚠️ Lipsesc din curare metode structurale "
+                            f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
+                            "cădea pe low_confidence. Adaugă-le în curated_methods.json."
+                        ).classes("text-caption text-negative")
             _bench_freshness_panel(_cc)
             _bind_save(
                 ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
@@ -4689,6 +4713,7 @@ def main_page() -> None:
                 ),
                 on_game_change=lambda game: change_lr_choices(lr_budget_game=game),
                 on_objective_change=lambda goal: change_lr_choices(lr_budget_objective=goal),
+                base_choices=lr_choices["base_choices"], on_base_change=show_lr_scope,
             )
             lr_report_anchor = lr_rebench_panel()
         results_panel()

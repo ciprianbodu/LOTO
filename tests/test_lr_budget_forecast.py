@@ -20,6 +20,135 @@ def _history(game="6/49"):
     return frame
 
 
+def _rebench_entry(history, members, *, game="6/49", inverse=False, dynamic=True, lookback=100,
+                   reference=(), joker_members=()):
+    lot = forecast.require_lottery(game, "RO")
+    code = 24 if game == "joker" else 49
+    engine = forecast._forecast_engine(lot, ("current.csv", history), 0)
+    def decision(key, values, ref=()):
+        return {"game_key": key, "decision": {
+            "members": [{"method": name, "weight": weight} for name, weight in values],
+            "reference_members": [{"method": name, "weight": weight} for name, weight in ref],
+            "target": 1 if key == lot.bench_key_urna2 else 4, "evaluated": 82, "folds": [10, 30],
+        }}
+    urns = [decision(lot.bench_key, members, reference)]
+    if joker_members:
+        urns.append(decision(lot.bench_key_urna2, joker_members))
+    return {"game": game, "settings": {"inverse": inverse, "restricted": True, "dynamic": dynamic,
+            "lookback": lookback, "hit_target": 4, "joker_size": 2, "scheme": code},
+            "result": {"history_hash": engine.audit["hash"], "scheme_code": code, "urns": urns}}
+
+
+@pytest.mark.parametrize("dynamic", [True, False])
+def test_saved_rebench_ranks_actual_tickets_and_excludes_current_direct_pool(monkeypatch, dynamic):
+    history = _history()
+    direct_weights = [("frequency", .3), ("compact_transition_prior", .7)]
+    direct = _rebench_entry(history, direct_weights, dynamic=dynamic)
+    inverse = _rebench_entry(history, [("compact_renewal_hazard", 1)], inverse=True, dynamic=dynamic,
+                             reference=[("frequency", 1)])
+    def scores(method, matrix, maximum, **_):
+        delta = {"frequency": 0, "compact_transition_prior": 2, "compact_renewal_hazard": 4}[method]
+        return {n: n if delta == 0 else ((n + 7) % (3 + delta)) * 19 - n for n in range(1, maximum + 1)}, 0
+    monkeypatch.setattr(forecast, "call_method", scores)
+    monkeypatch.setattr(forecast, "_dynamic_scores", lambda *a, **k: pytest.fail("reselected"))
+    monkeypatch.setattr(forecast, "restricted_bench_scores", lambda *a, **k: pytest.fail("rebench repeated"))
+    arguments = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, number_range=(10, 40),
+                     dynamic=dynamic, hit_target=4, lr_rebench_entries=[inverse, direct],
+                     generated={"6/49": ("old.csv", {"lr_scheme_code":49, "audit":{"hash":"old"},
+                                                     "hard_core":list(range(1, 11))})})
+    plan, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **arguments)
+    alternative, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **arguments)
+    pool, inv = plan["forecast"], alternative["forecast"]
+    expected = forecast.combine_ensemble_scores([
+        (name, {n: s for n, s in scores(name, None, 49)[0].items() if 10 <= n <= 40}, weight)
+        for name, weight in direct_weights
+    ])
+    assert pool["pool"] == sorted(forecast.rank_by_score(expected, 10)) == plan["tickets"][0][0]["numbers"]
+    assert pool["selection"]["members"] == direct["result"]["urns"][0]["decision"]["members"]
+    assert pool["selection"]["source"] == inv["selection"]["source"] == "lr_rebench"
+    assert inv["selection"]["method"] == "compact_renewal_hazard"
+    assert inv["eligible_count"] == 21 and inv["excluded_pool"] == pool["pool"]
+    assert set(alternative["tickets"][0][0]["numbers"]).isdisjoint(pool["pool"])
+
+
+def test_matching_inverse_reference_is_used_for_displayed_direct_and_exclusion(monkeypatch):
+    history = _history()
+    inverse = _rebench_entry(history, [("frequency", 1)], dynamic=False, inverse=True,
+                             reference=[("compact_transition_prior", 1)])
+    monkeypatch.setattr(forecast, "restricted_bench_scores", lambda *a, **k: pytest.fail("rebench repeated"))
+    args = dict(pool_codes={}, histories={"6/49": ("sample.csv", history)}, number_range=(10, 40),
+                lr_rebench_entries=[inverse], dynamic=False, hit_target=4)
+    direct, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **args)
+    other, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **args)
+    assert direct["forecast"]["selection"]["source"] == "lr_rebench_reference"
+    assert direct["forecast"]["selection"]["method"] == "compact_transition_prior"
+    assert other["forecast"]["selection"]["method"] == "frequency"
+    assert direct["tickets"][0][0]["numbers"] == other["forecast"]["excluded_pool"]
+
+
+def test_inverse_only_dynamic_decision_preserves_verified_current_direct_job():
+    history = _history()
+    inverse = _rebench_entry(history, [("frequency", 1)], inverse=True)
+    inverse["settings"]["restricted"] = False
+    direct_numbers = list(range(2, 12))
+    args = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, hit_target=4,
+                lr_rebench_entries=[inverse], generated={"6/49": ("current.csv", {
+                    "hard_core": direct_numbers, "dynamic_method": True, "lr_scheme_code": 49,
+                    "audit": {"hash": inverse["result"]["history_hash"]},
+                })})
+    direct, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **args)
+    other, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **args)
+    assert direct["forecast"]["generated"] and direct["forecast"]["pool"] == direct_numbers
+    assert other["forecast"]["selection"]["source"] == "lr_rebench"
+    assert other["forecast"]["excluded_pool"] == direct_numbers
+
+
+@pytest.mark.parametrize("mismatch", [
+    "game", "scheme", "dynamic", "lookback", "hit_target", "restricted", "legacy", "history", "custom_range",
+])
+def test_stale_or_incompatible_saved_rebench_keeps_current_selector(monkeypatch, mismatch):
+    history = _history()
+    entry = _rebench_entry(history, [("frequency", 1)])
+    if mismatch == "game":
+        entry["game"] = "joker"
+    elif mismatch == "legacy":
+        del entry["result"]["urns"][0]["decision"]
+    elif mismatch == "history":
+        history.loc[0, "n1"] = 42  # Same dates, last row and number of draws; different full input.
+    elif mismatch != "custom_range":
+        entry["settings"][mismatch] = {"scheme":57, "dynamic":False, "lookback":75,
+                                       "hit_target":3, "restricted":False}[mismatch]
+    monkeypatch.setattr(forecast, "_dynamic_scores", lambda *args:
+                        ({n: n for n in range(1, 50)}, {"method":"legacy"}))
+    plan, = forecast.recommend_playable_games(
+        171, FOUR_PLUS, "6/49", {"6/49": ("sample.csv", history)}, pool_codes={}, hit_target=4,
+        number_range=(11, 40) if mismatch == "custom_range" else (10, 40), lr_rebench_entries=[entry],
+    )
+    assert plan["tickets"] and plan["forecast"]["selection"] == {"method":"legacy"}
+
+
+def test_joker_saved_winners_use_separate_urns_and_valid_bonus_lookback(monkeypatch):
+    history = _history("joker")
+    args = dict(game="joker", lookback=50, joker_members=[("compact_transition_prior", 1)])
+    direct = _rebench_entry(history, [("frequency", 1)], **args)
+    inverse = _rebench_entry(history, [("compact_renewal_hazard", 1)], inverse=True, **args)
+    calls = []
+    def score(method, matrix, maximum, **_):
+        calls.append((method, maximum, matrix.tolist()))
+        return {n: n for n in range(1, maximum + 1)}, 0
+    monkeypatch.setattr(forecast, "call_method", score)
+    plan, = forecast.recommend_playable_games(
+        100, FOUR_PLUS, "joker", {"joker": ("joker.csv", history)}, pool_codes={}, hit_target=4,
+        number_range=(10, 40), lr_rebench_entries=[direct, inverse], lookback=50, joker_size=2, inverse=True,
+    )
+    record = plan["forecast"]
+    assert record["selection"]["method"] == "compact_renewal_hazard"
+    assert record["joker_selection"]["method"] == "compact_transition_prior"
+    assert [(maximum, len(rows)) for _, maximum, rows in calls] == [(45, 2), (20, 1)] * 2
+    assert record["excluded_jokers"] == (19, 20) and record["jokers"] == (18, 17)
+    assert plan["tickets"][0][0]["joker"] == 18
+
+
 @pytest.mark.parametrize(("game", "budget", "objective", "width"), [
     ("6/49", 100, FOUR_PLUS, 9),
     ("6/49", 200, FOUR_PLUS, 12),

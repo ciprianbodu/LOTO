@@ -6,7 +6,9 @@ import json
 import logging
 import uuid
 from concurrent.futures import CancelledError
+from copy import deepcopy
 from datetime import date, datetime
+from math import isfinite
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -14,6 +16,7 @@ from nicegui import run, ui
 
 from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
 from loto_enterprise.core.lotteries import require_lottery
+from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
 from runtime_paths import RUNTIME_ROOT
 from ui_shared import atomic_write_json
 
@@ -27,6 +30,7 @@ _last = None
 _loaded = False
 _notice = ""
 _revision = 0
+_PROFILE_SETTINGS = ("scheme", "inverse", "restricted", "dynamic", "lookback", "hit_target", "joker_size")
 
 
 def lr_rebench_running() -> bool:
@@ -45,12 +49,122 @@ def _restore_report():
                 or not isinstance(saved.get("entries"), list) or not isinstance(saved.get("total"), int)):
             raise ValueError("format de raport necunoscut")
         datetime.fromisoformat(saved.get("finished_at", ""))
+        saved["decision_profiles"] = _restore_profiles(saved.get("decision_profiles"))
         _last = saved
     except FileNotFoundError:
         pass
     except (OSError, ValueError, TypeError) as exc:
         logger.warning("[Re-Bench LR] Raportul local nu poate fi citit: %s", exc)
         _notice = "Raportul anterior de Re-Bench pe baza aleasă nu poate fi citit."
+
+
+def _valid_members(members):
+    return isinstance(members, list) and bool(members) and all(
+        isinstance(member, dict) and isinstance(member.get("method"), str) and member["method"]
+        and type(weight := member.get("weight")) in (int, float) and isfinite(weight) and weight > 0
+        for member in members
+    )
+
+
+def _compact_profile(entry, finished_at):
+    if not isinstance(entry, dict) or not isinstance(entry.get("source"), str):
+        return None
+    result = entry.get("result")
+    settings = entry.get("settings")
+    if entry.get("error") or not isinstance(result, dict) or result.get("error"):
+        return None
+    if not isinstance(settings, dict) or not all(key in settings for key in _PROFILE_SETTINGS):
+        return None
+    if (any(type(settings[key]) is not bool for key in ("inverse", "restricted", "dynamic"))
+            or type(settings["lookback"]) not in (int, float)
+            or type(settings["hit_target"]) is not int or type(settings["joker_size"]) is not int):
+        return None
+    history_hash = result.get("history_hash")
+    history_rows = result.get("history_rows")
+    scheme = result.get("scheme_code")
+    game = entry.get("game")
+    if (not isinstance(history_hash, str) or not history_hash or type(history_rows) is not int or history_rows < 1
+            or type(scheme) is not int or str(scheme) != str(settings["scheme"]) or result.get("game") != game):
+        return None
+    lot = require_lottery(game, "RO")
+    urns = []
+    by_urn = {
+        urn["game_key"]: urn for urn in result.get("urns") or ()
+        if isinstance(urn, dict) and isinstance(urn.get("game_key"), str)
+    }
+    for key in lot.bench_keys:
+        urn = by_urn.get(key, {})
+        decision = urn.get("decision")
+        if urn.get("error") or not isinstance(decision, dict) or not _valid_members(decision.get("members")):
+            return None
+        if (type(decision.get("evaluated")) is not int or decision["evaluated"] < 1
+                or not decision.get("folds") or decision.get("target") != urn.get("target")):
+            return None
+        if settings["inverse"] and (not settings["dynamic"] or key == lot.bench_key_urna2):
+            if not _valid_members(decision.get("reference_members")):
+                return None
+        fields = ("game_key", "name", "pool_size", "target", "eligible_count", "decision")
+        if not all(field in urn for field in fields):
+            return None
+        urns.append({field: urn[field] for field in fields})
+    captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
+    captured_settings["scheme"] = scheme
+    return {
+        "game": game, "source": entry["source"], "settings": captured_settings, "finished_at": finished_at,
+        "result": {
+            "game": game, "scheme_code": scheme, "history_hash": history_hash, "history_rows": history_rows,
+            "as_of": result.get("as_of"), "urns": urns,
+        },
+    }
+
+
+def _profile_key(entry):
+    settings = entry["settings"]
+    return (
+        entry["source"], settings["scheme"], settings["inverse"], settings["restricted"], settings["dynamic"],
+        settings["lookback"] or 100, settings["hit_target"], settings["joker_size"] if entry["game"] == "joker" else None,
+    )
+
+
+def _restore_profiles(raw):
+    profiles = {}
+    for game, entries in raw.items() if isinstance(raw, dict) else ():
+        if not isinstance(entries, list):
+            continue
+        current = []
+        for entry in entries:
+            if not isinstance(entry, dict) or entry.get("game") != game:
+                continue
+            try:
+                finished_at = entry["finished_at"]
+                datetime.fromisoformat(finished_at)
+                profile = _compact_profile(entry, finished_at)
+            except (KeyError, ValueError, TypeError):
+                continue
+            if profile is not None:
+                current.append(profile)
+        if current:
+            profiles[game] = current
+    return profiles
+
+
+def lr_rebench_decisions():
+    """Întoarce deciziile complete păstrate pe joc și configurație, de la cele mai noi."""
+    _restore_report()
+    return deepcopy((_last or {}).get("decision_profiles", {}))
+
+
+def _remember_profiles(finished):
+    # Fișierul raportului și al deciziilor se înlocuiește prin aceeași scriere atomică.
+    profiles = lr_rebench_decisions()
+    for entry in finished["entries"]:
+        profile = _compact_profile(entry, finished["finished_at"])
+        if profile is None:
+            continue
+        game = profile["game"]
+        key = _profile_key(profile)
+        profiles[game] = [profile, *(older for older in profiles.get(game, ()) if _profile_key(older) != key)]
+    return profiles
 
 
 def _changed():
@@ -76,18 +190,35 @@ async def _run_games(jobs, report):
     global _active, _last, _notice
     cancel_path = report["cancel_path"]
     try:
-        for index, (entry, history, options) in enumerate(jobs, start=1):
+        for index, (entry, history, options, auto_budget) in enumerate(jobs, start=1):
             if report["cancelled"]:
                 break
             report["current"] = (index, entry["name"])
+            report["comparing"] = bool(auto_budget and history is not None)
             _changed()
             outcome = {**entry}
             if history is None:
                 outcome["error"] = "Istoricul jocului este indisponibil."
             else:
                 try:
+                    game = entry["game"]
+                    if auto_budget is not None:
+                        budget, objective = auto_budget
+                        comparison = await run.io_bound(
+                            compare_budget_ranges, budget, objective, game, {game: history},
+                            inverse=options["inverse"], dynamic=options["dynamic"],
+                            lookback=options["lookback"], hit_target=options["hit_target"],
+                            joker_size=options["joker_size"], pool_codes={game: options["scheme"]},
+                        )
+                        if report["cancelled"]:
+                            break
+                        if comparison is None:
+                            raise ValueError("Analiza bazelor nu a returnat un rezultat.")
+                        options["restricted"] = comparison.get("recommended_range") is not None
+                        report["comparing"] = False
+                        _changed()
                     result = await run.io_bound(
-                        benchmark_lr_hypotheses, entry["game"], history, cancel_path=cancel_path, **options,
+                        benchmark_lr_hypotheses, game, history, cancel_path=cancel_path, **options,
                     )
                     if result is None:
                         raise ValueError("Calculul nu a returnat un rezultat.")
@@ -110,6 +241,7 @@ async def _run_games(jobs, report):
             return
         finished = {key: report[key] for key in ("schema", "entries", "total", "started_at")}
         finished["finished_at"] = datetime.now(_BUCHAREST).isoformat(timespec="seconds")
+        finished["decision_profiles"] = _remember_profiles(finished)
         _last = finished
         try:
             atomic_write_json(_RESULT_PATH, finished)
@@ -139,10 +271,12 @@ async def run_lr_rebench(jobs) -> bool:
         else:
             source = Path(lot.csv).name if history is None else "Istoric încărcat"
             if history is not None:
-                history = history.copy(deep=True)
+                history = (source, history.copy(deep=True))
         options = dict(settings)
+        auto_budget = options.pop("auto_budget", None)
         options["scheme"] = getattr(options["scheme"], "code", options["scheme"])
-        captured.append(({"game": game, "name": lot.name, "source": source, "settings": options}, history, options))
+        entry = {"game": game, "name": lot.name, "source": source, "settings": options}
+        captured.append((entry, history, options, tuple(auto_budget) if auto_budget is not None else None))
     if not captured:
         return False
     _restore_report()
@@ -249,12 +383,16 @@ def lr_rebench_panel():
             if report:
                 ui.label("Rezultate Re-Bench pe baza aleasă").classes("text-h6 text-weight-bold")
                 if _active and report["cancelled"]:
-                    status = (
-                        "Rularea se va opri după jocul curent."
-                        if report.get("cancel_after_game") else "Se oprește rularea."
-                    )
+                    if report.get("comparing"):
+                        status = "Rularea se va opri după analiza bazei jocului curent."
+                    else:
+                        status = (
+                            "Rularea se va opri după jocul curent."
+                            if report.get("cancel_after_game") else "Se oprește rularea."
+                        )
                 elif _active and (current := report["current"]):
-                    status = f"Se evaluează {current[1]} · jocul {current[0]} din {report['total']}."
+                    operation = "Se compară bazele pentru" if report.get("comparing") else "Se evaluează"
+                    status = f"{operation} {current[1]} · jocul {current[0]} din {report['total']}."
                 elif _active:
                     status = "Se pregătește rularea."
                 else:
