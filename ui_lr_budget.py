@@ -368,7 +368,12 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
     return slider
 
 
-def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=None, initial_objective=FOUR_PLUS):
+def lr_budget_panel(
+    slider, forecast_inputs, *scoring_controls,
+    on_budget_plan=None, initial_objective=FOUR_PLUS, on_objective_change=None,
+    initial_game="all", on_game_change=None,
+    initial_inverse=False, initial_restricted=False, on_method_change=None,
+):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
         .lr-ticket-table .lr-ticket-numbers { font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -395,10 +400,12 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
     lotteries = games_for_country("RO")
     game_options = {"all": "Toate jocurile"}
     game_options.update({lot.game_id: lot.name for lot in lotteries})
+    if not isinstance(initial_game, str) or initial_game not in game_options:
+        initial_game = "all"
     with ui.card().props("flat bordered").classes("lr-recommendation-form w-full min-w-0 gap-3"):
         ui.label("Recomandare de bilete LR").classes("text-h6 text-weight-bold")
         with ui.row().classes("w-full items-end gap-x-6 gap-y-2"):
-            game = ui.select(game_options, value="all", label="Joc").props(
+            game = ui.select(game_options, value=initial_game, label="Joc").props(
                 'outlined dense aria-label="Joc pentru bilete LR"'
             ).classes("w-full sm:w-64")
             with ui.column().classes("gap-1"):
@@ -407,11 +414,11 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
                     'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
                 )
         with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
-            inverse = ui.switch("Metoda inversă", value=False).props('aria-label="Metoda inversă"').tooltip(
+            inverse = ui.switch("Metoda inversă", value=initial_inverse is True).props('aria-label="Metoda inversă"').tooltip(
                 "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
             )
-            range_filter = ui.switch("Doar numere principale între 10 și 40", value=False).props(
-                'aria-label="Doar numere principale între 10 și 40"'
+            range_filter = ui.switch("Pool restrâns între 10 și 40", value=initial_restricted is True).props(
+                'aria-label="Pool restrâns între 10 și 40"'
             ).classes("max-w-full").tooltip(
                 "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
             )
@@ -585,13 +592,23 @@ def lr_budget_panel(slider, forecast_inputs, *scoring_controls, on_budget_plan=N
                 return
             await refresh()
 
+        def change_method(recalculate):
+            if on_method_change is not None:
+                on_method_change(*selected_method())
+            return recalculate()
+
+        def change_selection(callback, control):
+            if callback is not None:
+                callback(control.value)
+            return refresh()
+
         panel.on_value_change(refresh)
         generate.on_click(show_recommendation)
-        inverse.on_value_change(refresh)
-        range_filter.on_value_change(calculate)
+        inverse.on_value_change(lambda: change_method(refresh))
+        range_filter.on_value_change(lambda: change_method(calculate))
         slider.on_value_change(show_recommendation)
-        game.on_value_change(refresh)
-        objective.on_value_change(refresh)
+        game.on_value_change(lambda: change_selection(on_game_change, game))
+        objective.on_value_change(lambda: change_selection(on_objective_change, objective))
         for control in scoring_controls:
             control.on_value_change(refresh)
         return refresh

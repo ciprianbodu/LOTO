@@ -3,7 +3,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-from nicegui import ui
+from nicegui import Client, ui
 
 import ui_lr_budget as budget
 
@@ -41,7 +41,7 @@ def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatc
     budget.lr_budget_panel(MagicMock(value=200), inputs)
     game, objective = view.select.return_value, view.toggle.return_value
     inverse = view.switch_by_label["Metoda inversă"]
-    reduced = view.switch_by_label["Doar numere principale între 10 și 40"]
+    reduced = view.switch_by_label["Pool restrâns între 10 și 40"]
     panel = view.expansion.return_value
 
     async def scenario():
@@ -58,6 +58,51 @@ def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatc
     asyncio.run(scenario())
 
 
+def test_panel_restores_preferences_and_saves_each_change_before_calculating(monkeypatch):
+    view = _widgets(monkeypatch)
+    methods, games, objectives, inputs = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+    budget.lr_budget_panel(
+        MagicMock(value=200), inputs,
+        initial_inverse=True, initial_restricted=True, on_method_change=methods,
+        initial_game="joker", on_game_change=games,
+        initial_objective=budget.ANY_PRIZE, on_objective_change=objectives,
+    )
+    inverse = view.switch_by_label["Metoda inversă"]
+    restricted = view.switch_by_label["Pool restrâns între 10 și 40"]
+    game = view.select.return_value
+    objective = view.toggle.return_value
+    assert (inverse.value, restricted.value, game.value) == (True, True, "joker")
+    assert objective.value == budget.ANY_PRIZE
+    objectives.assert_not_called()
+    methods.assert_not_called()
+    games.assert_not_called()
+
+    async def scenario():
+        for control, expected in [(inverse, (False, True)), (restricted, (False, False))]:
+            control.value = False
+            pending = control.on_value_change.call_args.args[0]()
+            methods.assert_called_with(*expected)
+            await pending
+        game.value = "all"
+        pending = game.on_value_change.call_args.args[0]()
+        games.assert_called_once_with("all")
+        await pending
+        objective.value = budget.FOUR_PLUS
+        pending = objective.on_value_change.call_args.args[0]()
+        objectives.assert_called_once_with(budget.FOUR_PLUS)
+        await pending
+        assert methods.call_count == 2
+        inputs.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_unknown_saved_game_uses_all_games(monkeypatch):
+    view = _widgets(monkeypatch)
+    budget.lr_budget_panel(MagicMock(value=200), MagicMock(), initial_game="absent")
+    assert view.select.return_value.value == "all"
+
+
 def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(monkeypatch):
     inputs, io_bound = MagicMock(), MagicMock()
     monkeypatch.setattr(budget.run, "io_bound", io_bound)
@@ -69,9 +114,10 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
     }
 
     async def scenario():
-        with ui.column() as host:
-            budget.lr_budget_panel(MagicMock(value=200), inputs)
+        client = Client(ui.page("/test-lr-budget"))
         try:
+            with client, ui.column() as host:
+                budget.lr_budget_panel(MagicMock(value=200), inputs)
             game = next(node for node in host.descendants() if isinstance(node, ui.select))
             inverse = next(
                 node for node in host.descendants()
@@ -79,7 +125,7 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
             )
             reduced = next(
                 node for node in host.descendants()
-                if isinstance(node, ui.switch) and node.text == "Doar numere principale între 10 și 40"
+                if isinstance(node, ui.switch) and node.text == "Pool restrâns între 10 și 40"
             )
             odds = {
                 node.text: node for node in host.descendants()
@@ -115,7 +161,7 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
             inputs.assert_not_called()
             io_bound.assert_not_called()
         finally:
-            host.delete()
+            client.delete()
 
     asyncio.run(scenario())
 
@@ -152,7 +198,7 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         monkeypatch.setattr(budget.run, "io_bound", calculate)
         refresh = budget.lr_budget_panel(slider, lambda game: {}, on_budget_plan=apply_budget)
         switch = view.switch_by_label["Metoda inversă"]
-        filtered = view.switch_by_label["Doar numere principale între 10 și 40"]
+        filtered = view.switch_by_label["Pool restrâns între 10 și 40"]
         assert filtered.value is False
         panel = view.expansion.return_value
         button = view.button.return_value

@@ -95,6 +95,7 @@ from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
 from ui_lr_budget import initial_budget_amount, lr_budget_panel, lr_budget_slider
+from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
@@ -1443,13 +1444,14 @@ def _load_registry_histories(games) -> tuple[list, list]:
     return loaded, errors
 
 
-def _load_missing_bench_histories() -> None:
+def _load_missing_bench_histories(games=None) -> None:
     """Completează jocurile selectate, fără să reîncarce sursele existente."""
     with STATE_LOCK:
         current = list(STATE.get("datasets") or [])
         present = {_game_spec_for(name).game_id for name, _ in current}
         names = {str(name).casefold() for name, _ in current}
-    missing = [game for game in _selected_games() if game.game_id not in present]
+    games = _selected_games() if games is None else games
+    missing = [game for game in games if game.game_id not in present]
     loadable, errors = [], []
     for game in missing:
         name = Path(game.csv).name
@@ -1634,6 +1636,7 @@ def _hw_telemetry_html() -> str:
 
 
 def cancel_all() -> None:
+    cancel_lr_rebench()
     # Publicarea și finalizarea WF se serializează cu anularea, înainte de I/O.
     cancelled_identity = STATE.get("_bench_run_identity")
     try:
@@ -4050,11 +4053,67 @@ def _apply_budget_plan(plans):
         _save_settings()
 
 
+def _lr_rebench_jobs(choices, amount):
+    from covering.lr_budget import recommend_games
+    from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
+
+    selected = choices["lr_budget_game"]
+    plans = recommend_games(amount, choices["lr_budget_objective"], None if selected == "all" else selected)
+    games = [_LOT.require_lottery(plan["game"], _LOT.RO) for plan in plans]
+    _load_missing_bench_histories(games)
+    with STATE_LOCK:
+        sources = {_game_spec_for(name).game_id: (name, frame) for name, frame in STATE["datasets"]}
+        jobs = []
+        for plan in plans:
+            game = plan["game"]
+            source = sources.get(game)
+            jobs.append((game, (source[0], source[1].copy(deep=True)) if source else None, {
+                "scheme": budget_plan_scheme(plan).code,
+                "inverse": choices["lr_inverse_val"], "restricted": choices["lr_restricted_val"],
+                "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
+                "lookback": _effective_lookback_pct(), "hit_target": _clamped_bench_target(),
+                "joker_size": _int_setting("joker_pool_size_val"),
+            }))
+    return jobs
+
+
+async def _run_selected_rebench(choices, amount, on_scoped):
+    if lr_rebench_running():
+        ui.notify("Re-Bench pentru selecția LR este deja în curs.", type="warning")
+        return
+    if _selected_country() != _LOT.RO or not (choices["lr_inverse_val"] or choices["lr_restricted_val"]):
+        run_rebench()
+        return
+    if _bench_running():
+        ui.notify("Un Re-Bench este deja în curs.", type="warning")
+        return
+    jobs = _lr_rebench_jobs(choices, amount)
+    on_scoped()
+    await run_lr_rebench(jobs)
+
+
 @ui.page("/", title=APP_TITLE)
 def main_page() -> None:
     ui.dark_mode().enable()
     refresh_budget = None
     budget_result = STATE.get("results")
+    lr_choices = {
+        "lr_budget_game": SETTINGS.get("lr_budget_game", "all"),
+        "lr_budget_objective": _budget_objective(),
+        "lr_inverse_val": SETTINGS.get("lr_inverse_val") is True,
+        "lr_restricted_val": SETTINGS.get("lr_restricted_val") is True,
+    }
+    if lr_choices["lr_budget_game"] not in ("all", *(g.game_id for g in _LOT.games_for_country(_LOT.RO))):
+        lr_choices["lr_budget_game"] = "all"
+    lr_choices["scoped"] = lr_choices["lr_inverse_val"] or lr_choices["lr_restricted_val"]
+
+    def change_lr_choices(**changed):
+        lr_choices.update(changed)
+        lr_choices["scoped"] = lr_choices["lr_inverse_val"] or lr_choices["lr_restricted_val"]
+        show_lr_scope()
+        if any(SETTINGS.get(key) != value for key, value in changed.items()):
+            SETTINGS.update(changed)
+            _save_settings()
 
     def focus_control(control):
         ui.run_javascript(f"""requestAnimationFrame(() => {{
@@ -4504,12 +4563,32 @@ def main_page() -> None:
 
         ui.separator()
         ui.label("Re-Bench și întreținere").classes("text-bold")
-        ui.button("🔬 RE-BENCH", on_click=run_rebench).props(
+
+        async def start_selected_rebench():
+            def show_scoped():
+                drawer.hide()
+                focus_control(lr_report_anchor)
+
+            await _run_selected_rebench(lr_choices, int(budget_slider.value) if budget_slider else 0, show_scoped)
+
+        ui.button("🔬 RE-BENCH", on_click=start_selected_rebench).props(
             "color=orange no-caps"
         ).classes(_BTN).style(_BTN_STYLE)
+        if _cc == _LOT.RO:
+            scope_label = ui.label().classes("text-caption text-info")
+
+            def show_lr_scope():
+                game = lr_choices["lr_budget_game"]
+                name = "Toate jocurile" if game == "all" else _LOT.require_lottery(game, _LOT.RO).name
+                method = "Metoda inversă" if lr_choices["lr_inverse_val"] else "Metoda normală"
+                base = "Pool restrâns între 10 și 40" if lr_choices["lr_restricted_val"] else "Baza completă"
+                scope_label.set_text(f"Re-Bench · {name} · {method} · {base}")
+                scope_label.set_visibility(lr_choices["scoped"])
+
+            show_lr_scope()
         ui.label(_bench_intro_text(_cc)).bind_text_from(
             SETTINGS, "bench_hit_target", lambda _: _bench_intro_text(_cc)
-        ).classes("text-caption")
+        ).classes("text-caption").bind_visibility_from(lr_choices, "scoped", backward=lambda v: _cc != _LOT.RO or not v)
         if _cc != _LOT.RO:
             _ctx = _country_bench_texts(_cc)
             ui.label(_ctx["eta"]).classes("text-caption text-grey")
@@ -4522,7 +4601,7 @@ def main_page() -> None:
                     f"{count(_eta_folds, 'folduri', 'un fold')} "
                     f"{_workers_text(_bench_workers())} — din durata medie a unui fold "
                     "la ultima rulare; după o schimbare de matrice estimarea e aproximativă."
-                ).classes("text-caption text-grey")
+                ).classes("text-caption text-grey").bind_visibility_from(lr_choices, "scoped", backward=lambda v: not v)
             # Curare REVERSIBILĂ a setului de metode (curated_methods.json). Dacă e
             # activă, bench-ul rulează un SUBSET — spunem clar câte și cum se anulează.
             _cur = _curation_banner_info()
@@ -4563,11 +4642,14 @@ def main_page() -> None:
                         f"({', '.join(_cur['missing_required'])}) — decizia bench poate "
                         "cădea pe low_confidence. Adaugă-le în curated_methods.json."
                     ).classes("text-caption text-negative")
-        _bench_freshness_panel(_cc)
-        _bind_save(
-            ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
-            "autopilot_after_bench",
-        )
+        with ui.column().classes("w-full").bind_visibility_from(
+            lr_choices, "scoped", backward=lambda v: _cc != _LOT.RO or not v,
+        ):
+            _bench_freshness_panel(_cc)
+            _bind_save(
+                ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
+                "autopilot_after_bench",
+            )
 
         ui.separator()
         ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props(
@@ -4600,7 +4682,15 @@ def main_page() -> None:
             refresh_budget = lr_budget_panel(
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
+                initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
+                initial_game=lr_choices["lr_budget_game"],
+                on_method_change=lambda inverse, restricted: change_lr_choices(
+                    lr_inverse_val=inverse, lr_restricted_val=restricted,
+                ),
+                on_game_change=lambda game: change_lr_choices(lr_budget_game=game),
+                on_objective_change=lambda goal: change_lr_choices(lr_budget_objective=goal),
             )
+            lr_report_anchor = lr_rebench_panel()
         results_panel()
         history_windows_panel()
         nested_wfv_panel(_cc)
