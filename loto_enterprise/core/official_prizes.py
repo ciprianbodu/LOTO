@@ -78,6 +78,8 @@ class PrizeDraw:
     currency: str = "lei"
     order_known: bool = True
     supplementary: bool | None = field(default=None, compare=False)
+    official_id: str | None = field(default=None, compare=False)
+    draw_order: int | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -202,15 +204,29 @@ def _selected_month(document: _Node) -> tuple[int, int] | None:
     return None
 
 
+def _draw_attribute(block, heading, names):
+    values = {node.attrs[name].strip() for node in (block, heading) for name in names if name in node.attrs}
+    if len(values) > 1 or "" in values:
+        raise ArchiveError("Conflicting official draw identity attributes")
+    return next(iter(values), None)
+
+
 def parse_month_html(
     game: str, html: str, year: int, month: int, *, draw_dates: set[str] | None = None,
+    preserve_event_identity: bool = False,
 ) -> list[PrizeDraw]:
-    """Parse all draws or selected ISO dates, with main draws before supplements."""
+    """Parse official tables, with main draws before supplements.
+
+    Event consumers need every observation, including two distinct events with
+    identical results. Content-keyed historical and payout consumers use the
+    existing projection by drawn numbers.
+    """
     game = normalize_game(game)
     document = _Document(html).root
     if _selected_month(document) != (year, month):
         raise ArchiveError("Official archive did not confirm the requested month")
     by_date: dict[str, dict[tuple[tuple[int, ...], int | None], tuple[PrizeDraw, bool]]] = {}
+    observed: dict[str, list[PrizeDraw]] = {}
     for block in document.nodes("div"):
         if not block.has_class("rezultate-extrageri-content"):
             continue
@@ -297,10 +313,20 @@ def parse_month_html(
             expected_names.append("IV")
         if names != expected_names:
             raise ArchiveError("Official prize categories are incomplete or duplicated")
+        # Presentation IDs, element order and URL fragments do not identify an
+        # event. Only explicitly named draw attributes carry this meaning.
+        official_id = _draw_attribute(block, headings[0], ("data-draw-id", "data-extragere-id"))
+        ordinal = _draw_attribute(block, headings[0], ("data-draw-order", "data-ordine-extragere"))
+        if ordinal is not None and not re.fullmatch(r"[1-9][0-9]{0,2}", ordinal):
+            raise ArchiveError("Invalid official draw order")
         draw = PrizeDraw(
             game, draw_date.isoformat(), tuple(numbers), joker,
             tuple(categories), ARCHIVE_URLS[game], supplementary=supplementary,
+            official_id=official_id, draw_order=int(ordinal) if ordinal is not None else None,
         )
+        if preserve_event_identity:
+            observed.setdefault(draw.draw_date, []).append(draw)
+            continue
         same_day = by_date.setdefault(draw.draw_date, {})
         key = (_number_key(draw.numbers, game), draw.joker)
         previous = same_day.get(key)
@@ -311,6 +337,10 @@ def parse_month_html(
 
     # The archive can display the supplementary table first. Keep date and
     # same-kind table order, but emit the main draw before its supplements.
+    if preserve_event_identity:
+        return [draw for same_day in observed.values() for draw in sorted(
+            same_day, key=lambda item: (item.supplementary, item.draw_order or 0),
+        )]
     return [
         draw
         for same_day in by_date.values()

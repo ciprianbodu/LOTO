@@ -482,3 +482,39 @@ def test_fixed_share_policy_is_forwarded_only_when_selected(monkeypatch):
     assert captured == [{}, {"selection_policy": budget.ONLINE_TICKET_EXPERTS}, {}]
     assert compared == [None, budget.ONLINE_TICKET_EXPERTS, None]
     assert [call.args for call in choice.call_args_list] == [(True,), (False,)]
+
+
+def test_540_inverse_200_lei_shows_exact_capacity_in_generation_comparison_and_validation(monkeypatch):
+    import numpy as np
+    import pandas as pd
+    from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
+    from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
+    from loto_enterprise.core.lr_walk_forward import validate_lr_walk_forward
+
+    rng = np.random.default_rng(540)
+    matrix = [rng.choice(range(1, 41), 6, replace=False) for _ in range(253)]
+    frame = pd.DataFrame(matrix, columns=[f"n{i}" for i in range(1, 7)])
+    frame["date"] = pd.date_range("2020-01-01", periods=len(frame)).strftime("%d-%m-%Y")
+    source = ("5-40.csv", frame)
+    histories = {"5/40": source}
+    reason = "În intervalul 10–40 rămân 15 numere eligibile după excluderea pool-ului normal (31 − 16 = 15). Cod 37 necesită 16."
+    args = 200, budget.FOUR_PLUS, "5/40", histories
+    for policy in (None, "online_ticket_experts"):
+        plan, = recommend_playable_games(*args, inverse=True, pool_codes={}, number_range=(10, 40),
+                                         selection_policy=policy)
+        assert not plan["tickets"] and not plan["variants"] and not plan["price_bani"]
+        assert plan["forecast_error"] == f"5-40.csv · {reason}"
+    view = _widgets(monkeypatch)
+    budget._render_recommendations([plan], 200, budget.FOUR_PLUS)
+    view.label.assert_any_call(plan["forecast_error"])
+    view.table.assert_not_called()
+    comparison = compare_budget_ranges(*args, inverse=True)
+    assert comparison["reason"] == reason
+    budget._range_comparison(comparison, "Loto 5/40", "10–40", lambda *_: None, True, expanded=True)
+    view.label.assert_any_call(reason)
+    for replay in ("fixed", "daily"):
+        with pytest.raises(ValueError) as error:
+            validate_lr_walk_forward("5/40", source, budget_lei=200, objective=budget.FOUR_PLUS, scheme=37,
+                                     inverse=True, restricted=True, dynamic=True, lookback=100, hit_target=4,
+                                     joker_size=5, depth=10, replay_policy=replay)
+        assert str(error.value) == reason

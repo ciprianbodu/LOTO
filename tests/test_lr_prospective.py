@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, time
+from hashlib import sha256
 import json
 import os
 import sqlite3
@@ -123,9 +124,9 @@ def test_registration_and_official_same_day_evaluations_survive_restart(monkeypa
     clock[0] = _moment(hour=20)
     main = expanded.variants[0][0]
     source = official_prizes.ARCHIVE_URLS["loto_6_49"]
-    first = official_prizes.PrizeDraw("loto_6_49", "2026-11-26", main, None, (), source)
+    first = official_prizes.PrizeDraw("loto_6_49", "2026-11-26", main, None, (), source, supplementary=False)
     other = tuple(n for n in range(1, 50) if n not in main)[:6]
-    second = replace(first, numbers=other)
+    second = replace(first, numbers=other, supplementary=True)
     assert ledger.append_official_draws([first], archive_sha256=ARCHIVE_HASH) == 1
     assert ledger.append_official_draws(
         [replace(first, numbers=tuple(reversed(main))), second], archive_sha256=ARCHIVE_HASH,
@@ -138,6 +139,8 @@ def test_registration_and_official_same_day_evaluations_survive_restart(monkeypa
     assert one["official_archive_sha256"] == ARCHIVE_HASH
     assert one["date"] == two["date"] == original["target_day"]
     assert one["numbers"] != two["numbers"]
+    assert one["event_id"] != two["event_id"]
+    assert len(ledger.read_prospective_report()["active_evaluations"]) == 2
 
     with sqlite3.connect(local) as db:
         for statement in (
@@ -187,6 +190,7 @@ def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, lo
     extra = next(n for n in range(1, 41) if n not in expanded.pool)
     draw = official_prizes.PrizeDraw(
         "loto_5_40", "2026-11-26", (*numbers, extra), None, (), official_prizes.ARCHIVE_URLS["loto_5_40"],
+        supplementary=False,
     )
     assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH) == 1
     assert ledger.append_official_draws(
@@ -200,9 +204,13 @@ def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, lo
     assert first["grade"]["prize_counts"]["I"] >= 1
     assert "I" not in second["grade"]["prize_counts"]
     assert second["grade"]["prize_counts"]["II"] >= 1
+    report = ledger.read_prospective_report(include_audit=True)
+    assert report["active_evaluations"][0]["revision_id"] == second["revision_id"]
+    assert report["superseded_evaluations"][0]["revision_id"] == first["revision_id"]
+    assert second["supersedes_revision_id"] == first["revision_id"]
 
 
-def test_normal_import_evaluates_only_pending_official_targets_without_new_csv_rows(monkeypatch, local):
+def test_normal_import_evaluates_only_pending_official_targets_without_new_csv_rows(monkeypatch, local, capsys):
     import update_csv
 
     clock = [_moment()]
@@ -217,9 +225,9 @@ def test_normal_import_evaluates_only_pending_official_targets_without_new_csv_r
     assert ledger.refresh_official_evaluations() == (0, []) and not fetch.called
     clock[0] = _moment(hour=20)
     draw = official_prizes.PrizeDraw(
-        "joker", "2026-11-26", main, joker, (), official_prizes.ARCHIVE_URLS["joker"],
+        "joker", "2026-11-26", main, joker, (), official_prizes.ARCHIVE_URLS["joker"], supplementary=False,
     )
-    monkeypatch.setattr(official_prizes, "parse_month_html", lambda *_, draw_dates: [draw] if draw.draw_date in draw_dates else [])
+    monkeypatch.setattr(official_prizes, "parse_month_html", lambda *_, draw_dates, preserve_event_identity: [draw] if draw.draw_date in draw_dates else [])
     monkeypatch.setattr(update_csv, "GAME_CONFIGS", {})
     monkeypatch.setattr(update_csv, "_find_istoric_dir", lambda: local.parent)
     assert update_csv.update_all() == 0
@@ -227,6 +235,15 @@ def test_normal_import_evaluates_only_pending_official_targets_without_new_csv_r
     grade = _read(local, "evaluations")[0]["grade"]
     assert grade["max_hits"] == 5 and grade["prize_counts"]["I"] >= 1
     assert _read(local, "predictions")[0]["game"] == "joker"
+    assert "1 active" in capsys.readouterr().out
+    corrected = replace(draw, joker=1 + joker % 20)
+    official = Mock(return_value="corrected official page")
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", official)
+    monkeypatch.setattr(official_prizes, "parse_month_html", lambda *_, **__: [corrected])
+    assert update_csv.update_all() == 0
+    assert "1 active" in capsys.readouterr().out
+    active, = ledger.read_prospective_report()["active_evaluations"]
+    assert active["joker"] == corrected.joker and "I" not in active["grade"]["prize_counts"]
 
 
 def test_build_copies_get_source_fingerprint_without_git(monkeypatch, tmp_path):
@@ -292,3 +309,285 @@ def test_expired_prediction_cannot_be_written_or_committed(monkeypatch, local, d
     entries, errors = ledger.register_lr_recommendations([_plan()])
     assert not entries and "Ora-limită a trecut" in errors["6/49"]
     assert not _read(local, "predictions")
+
+
+def _register_observable_649(monkeypatch, local):
+    clock = [_moment()]
+    monkeypatch.setattr(ledger, "_clock", lambda: clock[0])
+    plan = _plan()
+    assert ledger.register_lr_recommendations([plan], registry_path=local)[0]
+    clock[0] = _moment(hour=20)
+    main = expand_plan(plan).variants[0][0]
+    return official_prizes.PrizeDraw(
+        "loto_6_49", "2026-11-26", main, None, (), official_prizes.ARCHIVE_URLS["loto_6_49"],
+        supplementary=False,
+    )
+
+
+def test_rectification_supersedes_and_old_page_does_not_reactivate(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    corrected = replace(draw, numbers=tuple(n for n in range(1, 50) if n not in draw.numbers)[:6])
+    assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH) == 1
+    immutable_prediction, = _read(local, "predictions")
+    original, = _read(local, "evaluations")
+    assert ledger.append_official_draws([corrected], archive_sha256=HASH) == 1
+    assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH) == 0
+    assert ledger.append_official_draws([corrected], archive_sha256=HASH) == 0
+    result = ledger.read_prospective_report(registry_path=local, include_audit=True)
+    active, = result["active_evaluations"]
+    obsolete, = result["superseded_evaluations"]
+    assert result["predictions_count"] == 1 and not result["conflicts"]
+    assert active["event_id"] == obsolete["event_id"]
+    assert active["revision"] == 2 and active["supersedes_revision_id"] == obsolete["revision_id"]
+    assert not active["grade"]["hit6"] and obsolete["grade"]["hit6"]
+    assert _read(local, "predictions") == [immutable_prediction]
+    assert _read(local, "evaluations")[0] == original
+    with sqlite3.connect(local) as db:
+        for table in ("official_events", "official_event_keys", "official_revisions"):
+            for statement in (
+                f"DELETE FROM {table}",
+                f"INSERT OR REPLACE INTO {table} SELECT * FROM {table}",
+            ):
+                with pytest.raises(sqlite3.IntegrityError):
+                    db.execute(statement)
+
+
+def _official_649_html(rows):
+    page = [
+        '<select name="select-year"><option value="2026" selected>2026</option></select>',
+        '<select name="select-month"><option value="11" selected>11</option></select>',
+    ]
+    payouts = "".join(
+        f"<tr><td>{category} (6)</td><td>REPORT</td><td>-</td><td>-</td></tr>"
+        for category in ("I", "II", "III")
+    )
+    for numbers, label, attrs in rows:
+        images = "".join(f'<img src="/images/bile/{n}.png">' for n in numbers)
+        page.append(
+            f'<div class="rezultate-extrageri-content" {attrs}>'
+            f'<div class="button-open-details">Detalii castiguri {label} la 6/49 din 26.11.2026</div>'
+            f'<div class="numere-extrase">{images}</div>'
+            f'<table class="results-table">{payouts}</table></div>'
+        )
+    return "".join(page)
+
+
+def test_official_page_keeps_two_same_combination_events(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    html = _official_649_html([
+        (draw.numbers, "EXTRAGERI SPECIALE", 'data-draw-id="loto-26-s" data-draw-order="2"'),
+        (draw.numbers, "", 'data-extragere-id="loto-26-p" data-ordine-extragere="1"'),
+    ])
+    assert len(official_prizes.parse_month_html("6/49", html, 2026, 11)) == 1
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", lambda *_: html)
+    assert ledger.refresh_official_evaluations() == (2, [])
+    assert ledger.refresh_official_evaluations() == (0, [])
+    results = ledger.read_prospective_report()["active_evaluations"]
+    assert len({ev["event_id"] for ev in results}) == 2
+    assert {ev["identity"]["supplementary"] for ev in results} == {False, True}
+    assert {ev["identity"]["official_id"] for ev in results} == {"loto-26-p", "loto-26-s"}
+    assert {ev["identity"]["draw_order"] for ev in results} == {1, 2}
+    assert all(ev["grade"]["hit6"] and ev["revision"] == 1 for ev in results)
+
+
+def test_same_result_roles_distinguish_events_without_source_ids(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    extras = replace(draw, supplementary=True)
+    assert ledger.append_official_draws([extras, draw], archive_sha256=ARCHIVE_HASH) == 2
+    assert ledger.append_official_draws([draw, extras], archive_sha256=ARCHIVE_HASH) == 0
+    active = ledger.read_prospective_report()["active_evaluations"]
+    assert len({row["event_id"] for row in active}) == 2
+
+
+def test_new_verified_order_and_id_are_aliases_and_conflicting_page_is_audited(monkeypatch, local):
+    observation = _register_observable_649(monkeypatch, local)
+    assert ledger.append_official_draws([observation], archive_sha256=ARCHIVE_HASH) == 1
+    original, = ledger.read_prospective_report()["active_evaluations"]
+    identified = replace(observation, official_id="verified", draw_order=1)
+    assert ledger.append_official_draws([identified], archive_sha256=ARCHIVE_HASH) == 0
+
+    corrected = replace(identified, numbers=tuple(n for n in range(1, 50) if n not in identified.numbers)[:6])
+    by_id = replace(corrected, draw_order=None, supplementary=None)
+    by_role = replace(observation, official_id=None, draw_order=None)
+    for _ in range(2):
+        assert ledger.append_official_draws([by_id, by_role], archive_sha256=HASH) == 0
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["conflicts"]) == 2 and report["active_evaluations"] == [original]
+    assert not report["superseded_evaluations"]
+    assert ledger.append_official_draws([by_id], archive_sha256="d" * 64) == 1
+    accepted, = ledger.read_prospective_report()["active_evaluations"]
+    assert accepted["event_id"] == original["event_id"]
+
+
+def test_unverified_role_conflict_does_not_guess_from_even_identical_numbers(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    html = _official_649_html([(draw.numbers, "EXTRAGERI SPECIALE", "")] * 2)
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", lambda *_: html)
+    assert ledger.refresh_official_evaluations()[0] == 0
+    assert ledger.refresh_official_evaluations()[1]
+    report = ledger.read_prospective_report(include_audit=True)
+    assert not report["active_evaluations"] and not report["event_revisions"]
+    assert len(report["conflicts"]) == 1
+    assert ledger.append_official_draws([replace(draw, supplementary=None)], archive_sha256=HASH) == 0
+    assert len(ledger.read_prospective_report()["conflicts"]) == 2
+
+
+def test_migration_keeps_legacy_rows_byte_exact_and_concurrent_writers_settle_once(monkeypatch, local):
+    stamped = ledger._snapshot(_plan(), {}, _moment(), {}, {"git_sha": None, "source_sha256": HASH})
+    prior_evaluation = '{ "date": "2026-11-26", "numbers": [1,2,3,4,5,6], "grade": {} }'
+    prior_prediction = json.dumps(stamped, ensure_ascii=False)
+    with sqlite3.connect(local) as db:
+        db.executescript(ledger._BASE_SCHEMA)
+        db.execute("INSERT INTO predictions VALUES (?, ?, ?, ?)",
+                   (stamped["id"], stamped["game"], stamped["target_day"], prior_prediction))
+        db.execute("INSERT INTO evaluations VALUES (?, ?, ?)",
+                   (stamped["id"], "legacy-content-key", prior_evaluation))
+    draw = official_prizes.PrizeDraw(
+        "loto_6_49", "2026-11-26", (15, 17, 22, 24, 36, 38), None, (), official_prizes.ARCHIVE_URLS["loto_6_49"],
+        supplementary=False,
+    )
+    monkeypatch.setattr(ledger, "_clock", lambda: _moment(year=2027, month=1, day=3, hour=20))
+    html = _official_649_html([(draw.numbers, "", "")])
+    fetch = Mock(return_value=html)
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", fetch)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        outcomes = list(workers.map(lambda _: ledger.refresh_official_evaluations(), range(2)))
+    assert sorted(outcomes) == [(0, []), (1, [])]
+    with sqlite3.connect(local) as db:
+        assert db.execute("PRAGMA user_version").fetchone() == (2,)
+        assert db.execute("SELECT payload FROM predictions").fetchone() == (prior_prediction,)
+        assert db.execute("SELECT payload FROM evaluations WHERE draw_id='legacy-content-key'").fetchone() == (prior_evaluation,)
+    fetch.reset_mock()
+    assert ledger.refresh_official_evaluations() == (0, []) and not fetch.called
+    assert ledger.refresh_official_evaluations(include_settled=True) == (0, [])
+    fetch.assert_called_once_with("loto_6_49", 2026, 11)
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["active_evaluations"]) == len(report["legacy_evaluations"]) == 1
+    assert report["legacy_pending_count"] == 1
+
+
+def test_error_between_two_official_events_rolls_back_all_writes(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    grader = ledger.grade_draw
+
+    def fail_second(portfolio, numbers, joker, **kwargs):
+        if numbers[0] == 1:
+            raise RuntimeError("interrupted")
+        return grader(portfolio, numbers, joker, **kwargs)
+
+    if draw.numbers[0] == 1:
+        draw = replace(draw, numbers=(4, 9, 10, 17, 19, 29))
+    monkeypatch.setattr(ledger, "grade_draw", fail_second)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        ledger.append_official_draws(
+            [draw, replace(draw, numbers=(1, 2, 3, 4, 5, 6), supplementary=True)],
+            archive_sha256=ARCHIVE_HASH,
+        )
+    report = ledger.read_prospective_report(include_audit=True)
+    assert report["predictions_count"] == 1 and not report["active_evaluations"] and not report["event_revisions"]
+
+
+def test_concurrent_observed_old_page_cannot_supersede_current_revision(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    old_page = replace(draw, numbers=(8, 9, 10, 11, 12, 13))
+    current = replace(draw, numbers=(4, 7, 16, 28, 40, 48))
+    assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH, observed_at=_moment(hour=17)) == 1
+    assert ledger.append_official_draws([current], archive_sha256=HASH, observed_at=_moment(hour=19)) == 1
+    assert ledger.append_official_draws([old_page], archive_sha256="e" * 64, observed_at=_moment(hour=18)) == 0
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["event_revisions"]) == 2 and len(report["conflicts"]) == 1
+    assert report["active_evaluations"][0]["numbers"] == list(current.numbers)
+
+
+@pytest.mark.parametrize("identical_supplement", [False, True])
+def test_legacy_offline_report_and_links_from_exact_old_archive(monkeypatch, local, identical_supplement):
+    stamped = ledger._snapshot(_plan(), {}, _moment(), {}, {"git_sha": None, "source_sha256": HASH})
+    numbers = (9, 14, 21, 22, 40, 45)
+    rows = [(numbers, "", "")]
+    if identical_supplement:
+        rows.append((numbers, "EXTRAGERI SPECIALE", ""))
+    html = _official_649_html(rows)
+    prior_evaluation = json.dumps({
+        "numbers": numbers, "joker": None, "official_archive_sha256": sha256(html.encode()).hexdigest(),
+    })
+    with sqlite3.connect(local) as db:
+        db.executescript(ledger._BASE_SCHEMA)
+        db.execute("INSERT INTO predictions VALUES (?, ?, ?, ?)",
+                   (stamped["id"], stamped["game"], stamped["target_day"], json.dumps(stamped)))
+        db.execute("INSERT INTO evaluations VALUES (?, ?, ?)",
+                   (stamped["id"], "old-balls-only", prior_evaluation))
+    assert ledger.read_prospective_report() == {
+        "predictions_count": 1, "active_evaluations": [], "conflicts": [], "legacy_pending_count": 1,
+    }
+    monkeypatch.setattr(ledger, "_clock", lambda: _moment(hour=20))
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", lambda *_: html)
+    assert ledger.refresh_official_evaluations() == (len(rows), [])
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["active_evaluations"]) == len(rows)
+    assert report["legacy_pending_count"] == int(identical_supplement)
+    legacy, = report["legacy_evaluations"]
+    assert legacy["verified_revision_id"] == (
+        None if identical_supplement else report["active_evaluations"][0]["revision_id"]
+    )
+    with sqlite3.connect(local) as db:
+        assert db.execute("SELECT payload FROM evaluations WHERE draw_id='old-balls-only'").fetchone() == (prior_evaluation,)
+
+
+def test_legacy_page_cannot_overwrite_the_first_verified_corrected_event(monkeypatch, local):
+    stamped = ledger._snapshot(_plan(), {}, _moment(), {}, {"git_sha": None, "source_sha256": HASH})
+    balls = (9, 14, 21, 22, 40, 45)
+    old_html = _official_649_html([(balls, "", "")])
+    corrected_html = _official_649_html([((1, 3, 6, 13, 27, 49), "", "")])
+    with sqlite3.connect(local) as db:
+        db.executescript(ledger._BASE_SCHEMA)
+        db.execute("INSERT INTO predictions VALUES (?, ?, ?, ?)",
+                   (stamped["id"], stamped["game"], stamped["target_day"], json.dumps(stamped)))
+        db.execute("INSERT INTO evaluations VALUES (?, ?, ?)", (stamped["id"], "old-balls-only", json.dumps({
+            "numbers": balls, "joker": None, "official_archive_sha256": sha256(old_html.encode()).hexdigest(),
+        })))
+    monkeypatch.setattr(ledger, "_clock", lambda: _moment(hour=20))
+    monkeypatch.setattr(official_prizes, "_fetch_month_html", Mock(side_effect=[corrected_html, old_html]))
+    assert ledger.refresh_official_evaluations() == (1, [])
+    accepted = ledger.read_prospective_report()["active_evaluations"]
+    count, problems = ledger.refresh_official_evaluations()
+    assert not count and problems
+    report = ledger.read_prospective_report(include_audit=True)
+    assert report["active_evaluations"] == accepted and report["legacy_pending_count"] == 1
+    assert len(report["event_revisions"]) == len(report["conflicts"]) == 1
+
+
+def test_verified_supplement_orders_remain_distinct_and_role_alone_becomes_ambiguous(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    ordered = [replace(draw, supplementary=True, draw_order=order) for order in (2, 3)]
+    assert ledger.append_official_draws(ordered, archive_sha256=ARCHIVE_HASH) == 2
+    assert ledger.append_official_draws(list(reversed(ordered)), archive_sha256=ARCHIVE_HASH) == 0
+    changed = replace(draw, supplementary=True, numbers=(2, 4, 13, 19, 24, 29))
+    assert ledger.append_official_draws([changed], archive_sha256=HASH) == 0
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["active_evaluations"]) == 2 and len(report["conflicts"]) == 1
+    assert not report["superseded_evaluations"]
+
+
+def test_id_only_and_role_only_need_common_evidence_before_being_counted_as_separate(monkeypatch, local):
+    first = _register_observable_649(monkeypatch, local)
+    id_only = replace(first, supplementary=None, official_id="new-id", numbers=(3, 4, 6, 8, 19, 43))
+    assert ledger.append_official_draws([first, id_only], archive_sha256=ARCHIVE_HASH) == 0
+    assert ledger.append_official_draws([first], archive_sha256=HASH) == 1
+    assert ledger.append_official_draws([id_only], archive_sha256="e" * 64) == 0
+    assert len(ledger.read_prospective_report()["active_evaluations"]) == 1
+    enriched = replace(id_only, supplementary=False)
+    assert ledger.append_official_draws([enriched], archive_sha256="d" * 64) == 1
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["active_evaluations"]) == len(report["superseded_evaluations"]) == 1
+
+
+@pytest.mark.parametrize("identity", [{}, {"official_id": "principal-26"}, {"draw_order": 1}])
+def test_repeated_principal_is_idempotent_but_conflicting_results_are_rejected(monkeypatch, local, identity):
+    draw = replace(_register_observable_649(monkeypatch, local), **identity)
+    repeated = replace(draw, numbers=tuple(reversed(draw.numbers)))
+    assert ledger.append_official_draws([draw, repeated], archive_sha256=ARCHIVE_HASH) == 1
+    changed = replace(draw, numbers=(3, 4, 6, 8, 19, 43))
+    assert ledger.append_official_draws([draw, changed], archive_sha256=HASH) == 0
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["active_evaluations"]) == 1 and len(report["conflicts"]) == 2
+    assert not report["superseded_evaluations"]

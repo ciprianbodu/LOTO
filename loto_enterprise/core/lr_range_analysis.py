@@ -25,7 +25,7 @@ from loto_enterprise.core.dynamic_winner import (
 )
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
-from loto_enterprise.core.lr_budget_forecast import ONLINE_TICKET_EXPERTS, _forecast_engine, budget_plan_scheme
+from loto_enterprise.core.lr_budget_forecast import ONLINE_TICKET_EXPERTS, _forecast_engine, budget_plan_scheme, main_pool_shortfall
 from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw
 from loto_enterprise.core.lr_range_timing import phase_evidence, range_timing
 from loto_enterprise.core.score_validation import has_usable_score_variance
@@ -223,6 +223,8 @@ def _decision(rows):
         return None, "Lipsesc rezultate valide din Urna 2 pentru a compara premiile pe perioada de test."
     restricted = rows[1]
     if not restricted["feasible_now"]:
+        if error := restricted.get("capacity_error"):
+            return None, error
         return None, "În intervalul 10–40, selectorul nu a produs bilete jucabile pentru schema din buget."
     if restricted["infeasible"]:
         return None, "Intervalul 10–40 nu a permis aceeași dimensiune a pool-ului la toate extragerile de validare."
@@ -286,6 +288,8 @@ def compare_budget_ranges(
             eligible_count, scheme.n,
         )
         row["feasible_now"] = current[index]
+        if error := main_pool_shortfall(scheme, base_count, scheme.n if inverse else 0, limits):
+            row["capacity_error"] = error
         rows.append(row)
     recommendation, reason = _decision(rows)
     each_origin = "fiecărei zile" if dates is not None else "fiecărei extrageri"

@@ -142,3 +142,41 @@ def test_global_bench_is_bound_to_the_available_prefix_per_urn(monkeypatch):
     assert set(_forecast_engine(lot, ("test.csv", corrected), 100)._lr_decision_snapshot) == {keys[0]}
     config["_meta"]["engine_signature"] = {}
     assert not _forecast_engine(lot, ("test.csv", history), 100)._lr_decision_snapshot
+
+
+def test_solver_change_invalidates_paid_forecast_and_the_ui_for_identical_input(monkeypatch):
+    from covering import lr_pool_milp
+
+    rng = np.random.default_rng(354)
+    history = pd.DataFrame([rng.choice(range(1, 50), 6, replace=False) for _ in range(100)],
+                           columns=[f"n{i}" for i in range(1, 7)])
+    history["date"] = pd.date_range("2026-01-01", periods=len(history)).strftime("%d-%m-%Y")
+    histories = {"6/49": ("six.csv", history)}
+    cache = forecast._live_budget_forecast
+    cache.cache_clear()
+
+    def play():
+        result, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", histories, pool_codes={})
+        assert result["tickets"] and result["forecast"]["selection"]["source"] == "paid_budget"
+        return result
+
+    def ui_key():
+        return ui_lr_budget._budget_input_snapshot(lambda _: {"histories": histories}, "6/49")[0]
+
+    initial = play()
+    assert play() == initial
+    assert (cache.cache_info().misses, cache.cache_info().hits) == (1, 1)
+    first_key = ui_key()
+    assert ui_key() == first_key
+    solver = lr_pool_milp.solve_zone_coverage
+    def replaced(*args, **kwargs):
+        return solver(*args, **kwargs)
+    monkeypatch.setattr(lr_pool_milp, "solve_zone_coverage", replaced)
+
+    after = play()
+    after_key = ui_key()
+    assert (cache.cache_info().misses, after_key != first_key) == (2, True)
+    assert ui_key() == after_key and play() == after
+    assert (cache.cache_info().misses, cache.cache_info().hits) == (2, 2)
+    cache.cache_clear()
+    assert after == play() == initial

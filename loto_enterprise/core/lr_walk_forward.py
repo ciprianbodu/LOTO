@@ -20,7 +20,7 @@ from loto_enterprise.benchmark.runner import fold_sizes
 from loto_enterprise.core.draw_validation import valid_draw_matrix
 from loto_enterprise.core.history import history_dates, training_cutoffs
 from loto_enterprise.core.lotteries import require_lottery
-from loto_enterprise.core.lr_budget_forecast import _forecast_engine, _profile_scores, _same_profile_recipe, budget_plan_scheme
+from loto_enterprise.core.lr_budget_forecast import _forecast_engine, _profile_scores, _same_profile_recipe, budget_plan_scheme, main_pool_shortfall
 from loto_enterprise.core.lr_played_portfolio import expand_plan, grade_draw, layout_identity
 from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
 from loto_enterprise.core.ranking import rank_by_score
@@ -203,8 +203,8 @@ def validate_lr_walk_forward(
         outside = {n for n in range(1, lot.max_n + 1) if not low <= n <= high}
     eligible = set(range(1, lot.max_n + 1)).difference(outside)
     available = len(eligible) - (scheme.n if inverse else 0)
-    if available < scheme.n:
-        raise ValueError(f"Urna principală: rămân {max(0, available)} numere eligibile. Cod {scheme.code} necesită {scheme.n}.")
+    if error := main_pool_shortfall(scheme, len(eligible), scheme.n if inverse else 0, _RANGE if restricted else None):
+        raise ValueError(error)
     capacity = lr_pool_capacity(eligible)
     if capacity < scheme.n:
         raise ValueError(

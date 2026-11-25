@@ -383,13 +383,14 @@ def _budget_input_snapshot(forecast_inputs, game):
     from covering import lr_schemes
     from covering.lr_catalog_cache import refresh_catalog
     from loto_enterprise.benchmark.lr_hypotheses import _methods
-    from loto_enterprise.benchmark.lr_provenance import method_formulas
+    from loto_enterprise.benchmark.lr_provenance import layout_formulas, method_formulas
 
     inputs = forecast_inputs(game)
     digest = hashlib.sha256(refresh_catalog(lr_schemes.LR_DIR).encode())
     methods = {name for lot in games_for_country("RO") if not game or game == lot.game_id
                for urn in lot.bench_keys for name in _methods(urn)}
     digest.update(method_formulas(methods).encode())
+    digest.update(layout_formulas().encode())
     for key, (name, frame) in sorted((inputs.get("histories") or {}).items()):
         digest.update(json.dumps([key, name, list(frame.columns)], default=str).encode())
         digest.update(pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes())

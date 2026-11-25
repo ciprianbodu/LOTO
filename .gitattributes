@@ -30,3 +30,6 @@ scripts/analysis/pool_adaptive_649_2026-10-19*.md text eol=lf
 scripts/analysis/pool_extension_2026-10-19*.json text eol=lf
 scripts/analysis/pool_extension_2026-10-19*.csv text eol=lf
 scripts/analysis/pool_extension_2026-10-19*.md text eol=lf
+
+# Preserve the source bytes used by the offline LR controls.
+testdata/portofolii_initiale_e6cad78.json text eol=lf

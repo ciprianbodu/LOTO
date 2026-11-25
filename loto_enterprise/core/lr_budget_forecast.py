@@ -21,7 +21,7 @@ from covering.lr_selection import lr_pool_sizes, resolve_lr_scheme, select_lr_sc
 from covering.probability import _integer
 from loto_engine import LotoEngine
 from loto_enterprise.benchmark import decision
-from loto_enterprise.benchmark.lr_provenance import dynamic_formulas, lr_semantics
+from loto_enterprise.benchmark.lr_provenance import dynamic_formulas, layout_formulas, lr_semantics
 from loto_enterprise.benchmark.methods import call_method, list_methods
 from loto_enterprise.benchmark.restricted_decision import restricted_bench_scores
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -61,7 +61,7 @@ def _dynamic_scores(game, code, draws, cutoffs, excluded_numbers=()):
     )
 
 
-@catalog_cache(maxsize=24, semantic_key=dynamic_formulas)
+@catalog_cache(maxsize=24, semantic_key=lambda: (dynamic_formulas(), layout_formulas()))
 def _live_budget_forecast(game, code, layout_json, draws, dates, bonus, inverse, dynamic, lookback, joker_size, limits):
     from loto_enterprise.benchmark.lr_budget_scoring import replay_budget_portfolios
 
@@ -362,6 +362,19 @@ def _number_range(limits):
     return low, high
 
 
+def main_pool_shortfall(scheme, base_size, excluded_count, number_range):
+    """Explain a cardinality shortfall before selecting or grading any tickets."""
+    # If even the direct pool does not fit, no excluded pool can be formed.
+    excluded = excluded_count if base_size >= scheme.n else 0
+    remaining = base_size - excluded
+    if remaining >= scheme.n:
+        return None
+    scope = f"În intervalul {number_range[0]}–{number_range[1]}" if number_range else "În urna principală"
+    exclusion = (f" după excluderea pool-ului normal ({base_size} − {excluded} = {remaining})"
+                 if excluded else "")
+    return f"{scope} rămân {remaining} numere eligibile{exclusion}. Cod {scheme.code} necesită {scheme.n}."
+
+
 def _range_exclusions(lot, scheme, number_range, normal_pool=()):
     """Fixed main-urn exclusions shared by historical ranking and the next draw."""
     blocked = set(normal_pool)
@@ -369,14 +382,10 @@ def _range_exclusions(lot, scheme, number_range, normal_pool=()):
         _check_capacity(lot.name, lot.max_n, scheme.n, blocked)
     else:
         low, high = number_range
-        blocked.update(n for n in range(1, lot.max_n + 1) if not low <= n <= high)
-        eligible = lot.max_n - len(blocked)
-        if eligible < scheme.n:
-            detail = " după excluderea pool-ului normal" if normal_pool else ""
-            raise ValueError(
-                f"În intervalul {low}–{high} rămân {eligible} numere eligibile{detail}. "
-                f"Cod {scheme.code} necesită {scheme.n}."
-            )
+        base = {n for n in range(1, lot.max_n + 1) if low <= n <= high}
+        if error := main_pool_shortfall(scheme, len(base), len(base & blocked), number_range):
+            raise ValueError(error)
+        blocked.update(set(range(1, lot.max_n + 1)).difference(base))
     return tuple(sorted(blocked))
 
 
@@ -402,6 +411,11 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
                      paid_snapshot=None):
     scheme = budget_plan_scheme(plan)
     number_range = _number_range(number_range)
+    if inverse and not exclude_generated_pool:
+        low, high = number_range or (1, lot.max_n)
+        size = max(0, min(high, lot.max_n) - max(1, low) + 1)
+        if error := main_pool_shortfall(scheme, size, scheme.n, number_range):
+            raise ValueError(error)
     filename = source[0] if source else Path(lot.csv).name
     if selection_policy == ONLINE_TICKET_EXPERTS:
         if exclude_generated_pool:

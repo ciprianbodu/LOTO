@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from functools import lru_cache
 from hashlib import sha256
+from itertools import combinations
 import json
 import os
 from pathlib import Path
@@ -18,7 +21,7 @@ from zoneinfo import ZoneInfo
 from covering.lr_schemes import LR_DIR
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_played_portfolio import CONTRACT_VERSION, PlayedPortfolio, expand_plan, grade_draw
-from loto_enterprise.core.official_prizes import normalize_game
+from loto_enterprise.core.official_prizes import PrizeDraw, normalize_game
 from runtime_paths import PROJECT_ROOT, RUNTIME_ROOT
 
 _TIME_ZONE = ZoneInfo("Europe/Bucharest")
@@ -26,6 +29,7 @@ _ONLINE_CLOSE = time(15, 30)
 # https://www.loto.ro/?page_id=1066
 _WEEKDAYS = {3, 6}
 _SCHEMA = 1
+_DB_SCHEMA = 2
 _RECENT_DRAW_DAYS = 31
 _HASH = re.compile(r"[0-9a-f]{64}")
 _ENGINE_HASH = re.compile(r"[0-9a-f]{16}")
@@ -136,6 +140,99 @@ def _git_identity():
     return code_sha
 
 
+_BASE_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS predictions (
+        id TEXT PRIMARY KEY,
+        game TEXT NOT NULL,
+        target_day TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS lr_predictions_by_day ON predictions(target_day, game);
+    CREATE TABLE IF NOT EXISTS evaluations (
+        prediction_id TEXT NOT NULL REFERENCES predictions(id),
+        draw_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        PRIMARY KEY (prediction_id, draw_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS lr_predictions_check_insert BEFORE INSERT ON predictions
+        WHEN EXISTS(SELECT 1 FROM predictions WHERE id=NEW.id)
+        BEGIN SELECT RAISE(ABORT, 'prediction already registered'); END;
+    CREATE TRIGGER IF NOT EXISTS lr_predictions_no_update BEFORE UPDATE ON predictions
+        BEGIN SELECT RAISE(ABORT, 'predictions are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS lr_predictions_no_delete BEFORE DELETE ON predictions
+        BEGIN SELECT RAISE(ABORT, 'predictions are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS lr_evaluations_check_insert BEFORE INSERT ON evaluations
+        WHEN EXISTS(SELECT 1 FROM evaluations
+                    WHERE prediction_id=NEW.prediction_id AND draw_id=NEW.draw_id)
+        BEGIN SELECT RAISE(ABORT, 'draw already evaluated'); END;
+    CREATE TRIGGER IF NOT EXISTS lr_evaluations_no_update BEFORE UPDATE ON evaluations
+        BEGIN SELECT RAISE(ABORT, 'evaluations are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS lr_evaluations_no_delete BEFORE DELETE ON evaluations
+        BEGIN SELECT RAISE(ABORT, 'evaluations are immutable'); END;
+"""
+
+_EVENT_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS official_events (
+        id TEXT PRIMARY KEY, game TEXT NOT NULL, draw_date TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS official_events_by_day ON official_events(game, draw_date);
+    CREATE TABLE IF NOT EXISTS official_event_keys (
+        key TEXT NOT NULL, event_id TEXT NOT NULL REFERENCES official_events(id), kind TEXT NOT NULL,
+        PRIMARY KEY (key, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS official_keys_by_event ON official_event_keys(event_id);
+    CREATE TABLE IF NOT EXISTS official_revisions (
+        id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES official_events(id),
+        sequence INTEGER NOT NULL, content_sha256 TEXT NOT NULL,
+        supersedes TEXT REFERENCES official_revisions(id), observed_at TEXT NOT NULL, payload TEXT NOT NULL,
+        UNIQUE (event_id, sequence), UNIQUE (event_id, content_sha256)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS official_revision_successor ON official_revisions(supersedes);
+    CREATE TABLE IF NOT EXISTS official_conflicts (
+        id TEXT PRIMARY KEY, payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS legacy_evaluation_links (
+        prediction_id TEXT NOT NULL, legacy_draw_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL REFERENCES official_revisions(id),
+        PRIMARY KEY (prediction_id, legacy_draw_id),
+        FOREIGN KEY (prediction_id, legacy_draw_id) REFERENCES evaluations(prediction_id, draw_id)
+    );
+    CREATE VIEW IF NOT EXISTS active_official_evaluations AS
+        SELECT e.prediction_id, e.draw_id, e.payload
+        FROM evaluations AS e JOIN official_revisions AS r ON r.id = e.draw_id
+        WHERE NOT EXISTS (SELECT 1 FROM official_revisions AS n WHERE n.supersedes = r.id);
+"""
+
+def _migrate(db):
+    if db.execute("PRAGMA user_version").fetchone()[0] >= _DB_SCHEMA:
+        return
+    statements = []
+    for table, identity in (
+        ("official_events", "id=NEW.id"),
+        ("official_event_keys", "key=NEW.key AND event_id=NEW.event_id"),
+        ("official_revisions", """id=NEW.id OR (event_id=NEW.event_id AND (
+            sequence=NEW.sequence OR content_sha256=NEW.content_sha256)) OR supersedes=NEW.supersedes"""),
+        ("official_conflicts", "id=NEW.id"),
+        ("legacy_evaluation_links", "prediction_id=NEW.prediction_id AND legacy_draw_id=NEW.legacy_draw_id"),
+    ):
+        statements.append(f"""
+            CREATE TRIGGER IF NOT EXISTS lr_{table}_insert BEFORE INSERT ON {table}
+            WHEN EXISTS (SELECT 1 FROM {table} WHERE {identity})
+            BEGIN SELECT RAISE(ABORT, 'official evidence already exists'); END;
+        """)
+        for action in ("UPDATE", "DELETE"):
+            statements.append(f"""
+                CREATE TRIGGER IF NOT EXISTS lr_{table}_{action.lower()} BEFORE {action} ON {table}
+                BEGIN SELECT RAISE(ABORT, 'official evidence is immutable'); END;
+            """)
+    # The old tables and bytes remain intact. Multiple readers may see an
+    # older version concurrently; the migration is idempotent under the lock.
+    db.executescript(
+        "BEGIN IMMEDIATE;\n" + _BASE_SCHEMA + _EVENT_SCHEMA + "\n".join(statements)
+        + f"PRAGMA user_version={_DB_SCHEMA}; COMMIT;"
+    )
+
+
 @contextmanager
 def _connect(path):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,42 +240,12 @@ def _connect(path):
     try:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS predictions (
-                id TEXT PRIMARY KEY,
-                game TEXT NOT NULL,
-                target_day TEXT NOT NULL,
-                payload TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS lr_predictions_by_day ON predictions(target_day, game);
-            CREATE TABLE IF NOT EXISTS evaluations (
-                prediction_id TEXT NOT NULL REFERENCES predictions(id),
-                draw_id TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                PRIMARY KEY (prediction_id, draw_id)
-            );
-            CREATE TRIGGER IF NOT EXISTS lr_predictions_check_insert BEFORE INSERT ON predictions
-                WHEN EXISTS(SELECT 1 FROM predictions WHERE id=NEW.id)
-                BEGIN SELECT RAISE(ABORT, 'prediction already registered'); END;
-            CREATE TRIGGER IF NOT EXISTS lr_predictions_no_update BEFORE UPDATE ON predictions
-                BEGIN SELECT RAISE(ABORT, 'predictions are immutable'); END;
-            CREATE TRIGGER IF NOT EXISTS lr_predictions_no_delete BEFORE DELETE ON predictions
-                BEGIN SELECT RAISE(ABORT, 'predictions are immutable'); END;
-            CREATE TRIGGER IF NOT EXISTS lr_evaluations_check_insert BEFORE INSERT ON evaluations
-                WHEN EXISTS(SELECT 1 FROM evaluations
-                            WHERE prediction_id=NEW.prediction_id AND draw_id=NEW.draw_id)
-                BEGIN SELECT RAISE(ABORT, 'draw already evaluated'); END;
-            CREATE TRIGGER IF NOT EXISTS lr_evaluations_no_update BEFORE UPDATE ON evaluations
-                BEGIN SELECT RAISE(ABORT, 'evaluations are immutable'); END;
-            CREATE TRIGGER IF NOT EXISTS lr_evaluations_no_delete BEFORE DELETE ON evaluations
-                BEGIN SELECT RAISE(ABORT, 'evaluations are immutable'); END;
-        """)
+        _migrate(db)
         yield db
     finally:
         if db.in_transaction:
             db.rollback()
         db.close()
-
 
 def _snapshot(plan, settings, captured, known_days, build, target_day=None, schedule=None):
     forecast = plan.get("forecast") or {}
@@ -285,84 +352,407 @@ def register_lr_recommendations(plans, *, settings=None, known_days=None, target
     return result, errors
 
 
-def _draw_identity(draw):
+@dataclass(frozen=True)
+class _Observation:
+    game: str
+    day: date
+    draw: PrizeDraw
+    content_sha: str
+    keys: dict[str, str]
+    evidence: dict
+
+    @property
+    def supplemental(self):
+        return self.evidence["supplementary"] is True
+
+
+def _observe(draw, captured):
+    day = _day(draw.draw_date)
+    source = urlsplit(draw.source_url)
+    if day > captured.date() or source.scheme != "https" or source.netloc not in {"www.loto.ro", "loto.ro"}:
+        raise ValueError("Rezultatul trebuie să provină din arhiva oficială și să fie deja publicat.")
+    game = {"loto_6_49": "6/49", "loto_5_40": "5/40", "joker": "joker"}[normalize_game(draw.game)]
+    lot = require_lottery(game, "RO")
     main = tuple(draw.numbers)
-    if normalize_game(draw.game) == "loto_5_40":
-        main = (*sorted(main[:-1]), main[-1])
-    else:
-        main = tuple(sorted(main))
-    return _hash([normalize_game(draw.game), draw.draw_date, main, draw.joker])
+    if (len(main) != lot.draw_n or len(set(main)) != lot.draw_n
+            or any(type(ball) is not int or not 1 <= ball <= lot.max_n for ball in main)):
+        raise ValueError("Arhiva oficială conține o geometrie de extragere invalidă.")
+    if lot.geo.second:
+        if type(draw.joker) is not int or not 1 <= draw.joker <= lot.geo.second.max_n:
+            raise ValueError("Arhiva oficială nu confirmă bila Joker.")
+    elif draw.joker is not None:
+        raise ValueError("Arhiva oficială a indicat o a doua urnă la un joc cu o singură urnă.")
+    if game == "5/40" and not draw.order_known:
+        raise ValueError("Arhiva oficială nu confirmă bila a șasea la Loto 5/40.")
+
+    identity = getattr(draw, "official_id", None)
+    order = getattr(draw, "draw_order", None)
+    supplementary = getattr(draw, "supplementary", None)
+    if identity is not None and (
+        not isinstance(identity, str) or not re.fullmatch(r"[a-zA-Z0-9:_./-]{1,128}", identity)
+    ):
+        raise ValueError("Identificator oficial de tragere invalid.")
+    if order is not None and (type(order) is not int or not 1 <= order <= 999):
+        raise ValueError("Ordinea oficială a tragerii este invalidă.")
+    if supplementary is not None and type(supplementary) is not bool:
+        raise ValueError("Tipul oficial al tragerii este invalid.")
+
+    evidence = {"official_id": identity, "draw_order": order, "supplementary": supplementary}
+    keys = {}
+    if identity is not None:
+        keys["id"] = _hash(["official-id", game, identity])
+    scope = [game, day.isoformat()]
+    if order is not None:
+        keys["order"] = _hash(["order", *scope, order])
+    if supplementary is not None:
+        keys["role"] = _hash(["role", *scope, supplementary])
+    return _Observation(game, day, draw, _result_fingerprint(game, main, draw.joker), keys, evidence)
 
 
-def append_official_draws(draws, *, archive_sha256, registry_path=None):
-    """Evaluate exact target dates against official results without editing entries."""
+def _result_fingerprint(game, numbers, joker):
+    main = (*sorted(numbers[:-1]), numbers[-1]) if game == "5/40" else sorted(numbers)
+    return _hash([main, joker])
+
+
+def _snapshot_conflicts(observations):
+    matches = defaultdict(list)
+    for index, observation in enumerate(observations):
+        for kind, key in observation.keys.items():
+            matches[kind, key].append(index)
+    rejected = {}
+    for (kind, _), indexes in matches.items():
+        if len(indexes) < 2:
+            continue
+        group = [observations[index] for index in indexes]
+        # The verified principal role is unique. Identical repeats of that
+        # result or of a verified ID or ordinal are idempotent.
+        signatures = {(_canonical(row.keys), _canonical(row.evidence), row.content_sha) for row in group}
+        first = group[0]
+        principal = first.evidence["supplementary"] is False
+        if len(signatures) == 1 and (principal or "id" in first.keys or "order" in first.keys):
+            continue
+        # Explicit IDs (or orders) can distinguish multiple supplements even
+        # when the archive assigns all of them the same generic heading.
+        if kind == "role" and all(row.supplemental for row in group):
+            discriminators = [{row.keys.get(key) for row in group} for key in ("id", "order")]
+            if any(None not in values and len(values) == len(group) for values in discriminators):
+                continue
+        for index in indexes:
+            rejected[index] = "Mai multe rezultate au aceeași identitate în acea pagină oficială."
+    return rejected
+
+
+class _IdentityConflict(ValueError):
+    pass
+
+
+def _record_conflict(db, observation, reason, archive_sha256, observed_at):
+    draw = observation.draw
+    payload = {
+        "game": observation.game, "date": observation.day.isoformat(), "identity": observation.evidence,
+        "content_sha256": observation.content_sha, "numbers": draw.numbers, "joker": draw.joker,
+        "official_url": draw.source_url, "official_archive_sha256": archive_sha256, "reason": reason,
+    }
+    conflict_id = _hash(payload)
+    if not db.execute("SELECT 1 FROM official_conflicts WHERE id=?", (conflict_id,)).fetchone():
+        db.execute("INSERT INTO official_conflicts VALUES (?, ?)", (
+            conflict_id, _canonical({**payload, "observed_at": observed_at.isoformat()}),
+        ))
+
+
+def _resolve_event(db, observation):
+    if not observation.keys:
+        raise _IdentityConflict("Sursa nu confirmă identitatea, tipul sau ordinea tragerii.")
+    keys = observation.keys
+    matches = {
+        kind: {row[0] for row in db.execute("SELECT event_id FROM official_event_keys WHERE key=?", (key,))}
+        for kind, key in keys.items()
+    }
+    stronger = matches.get("id", set()) | matches.get("order", set())
+    role = matches.get("role", set())
+    if len(stronger) > 1:
+        raise _IdentityConflict("Identificatorul oficial și ordinea indică trageri diferite.")
+
+    def bindings(event_id, kind):
+        return {row[0] for row in db.execute(
+            "SELECT key FROM official_event_keys WHERE event_id=? AND kind=?", (event_id, kind)
+        )}
+
+    # Supplemental role is non-unique when several known events share its
+    # label. An explicit identifier can still resolve each of these events.
+    if not stronger and observation.supplemental and ("id" in keys or "order" in keys):
+        role = {event for event in role
+                if not any(bindings(event, kind) - {keys[kind]} for kind in ("id", "order") if kind in keys)}
+    candidates = stronger or role
+    if len(candidates) > 1:
+        raise _IdentityConflict("Tipul tragerii nu identifică un singur eveniment oficial.")
+    if stronger and role and not observation.supplemental and stronger != role:
+        raise _IdentityConflict("Identificatorul oficial și tipul indică trageri diferite.")
+    event_id = next(iter(candidates), None)
+    if event_id is not None:
+        event = db.execute("SELECT game, draw_date FROM official_events WHERE id=?", (event_id,)).fetchone()
+        if tuple(event) != (observation.game, observation.day.isoformat()):
+            raise _IdentityConflict("Identificatorul oficial apare la o altă dată.")
+        if any(bindings(event_id, kind) - {key} for kind, key in keys.items()):
+            raise _IdentityConflict("Sursa a schimbat identitatea sau ordinea atribuită tragerii.")
+        return event_id
+
+    # A new identifier is separate only if there is evidence that it differs
+    # from every existing event on that date. An old role-only entry and a
+    # new ID-only entry could describe the same event.
+    nearby = defaultdict(dict)
+    for other_event, kind, key in db.execute("""
+        SELECT e.id, k.kind, k.key FROM official_events AS e
+        JOIN official_event_keys AS k ON e.id=k.event_id WHERE e.game=? AND e.draw_date=?
+    """, (observation.game, observation.day.isoformat())):
+        nearby[other_event][kind] = key
+    if any(not any(key != other_keys[kind] for kind, key in keys.items() if kind in other_keys)
+           for other_keys in nearby.values()):
+        raise _IdentityConflict("Sursa nu permite deosebirea de o tragere deja înregistrată în acea zi.")
+    return None
+
+
+def _accept_revision(db, observation, event_id, archive_sha256, observed_at, previous_archive):
+    draw = observation.draw
+    if event_id is None:
+        # Derive the opaque local key from the first confirmed official
+        # discriminator. Better evidence can later become an alias.
+        event_id = _hash(["lr-official-event", next(iter(observation.keys.values()))])
+        db.execute("INSERT INTO official_events VALUES (?, ?, ?)",
+                   (event_id, observation.game, observation.day.isoformat()))
+    latest = db.execute(
+        "SELECT * FROM official_revisions WHERE event_id=? ORDER BY sequence DESC LIMIT 1", (event_id,),
+    ).fetchone()
+    existing = db.execute(
+        "SELECT id FROM official_revisions WHERE event_id=? AND content_sha256=?",
+        (event_id, observation.content_sha),
+    ).fetchone()
+    if existing is not None and existing["id"] != latest["id"]:
+        return None
+    if existing is None and latest is not None:
+        if previous_archive:
+            raise _IdentityConflict("Pagina figurează în registrul vechi cu un rezultat anterior reviziei active.")
+        if observed_at < datetime.fromisoformat(latest["observed_at"]):
+            raise _IdentityConflict("Rezultatul diferit provine dintr-o pagină observată înainte de revizia activă.")
+
+    for kind, key in observation.keys.items():
+        if not db.execute("SELECT 1 FROM official_event_keys WHERE key=? AND event_id=?", (key, event_id)).fetchone():
+            db.execute("INSERT INTO official_event_keys VALUES (?, ?, ?)", (key, event_id, kind))
+    if existing is not None:
+        return latest
+
+    revision_id = _hash(["lr-official-revision", event_id, observation.content_sha])
+    supersedes = None if latest is None else latest["id"]
+    sequence = 1 if latest is None else latest["sequence"] + 1
+    body = {
+        "event_id": event_id, "revision_id": revision_id, "revision": sequence,
+        "supersedes_revision_id": supersedes, "content_sha256": observation.content_sha,
+        "game": observation.game, "date": observation.day.isoformat(),
+        "numbers": draw.numbers, "joker": draw.joker, "identity": observation.evidence,
+        "official_url": draw.source_url, "official_archive_sha256": archive_sha256,
+        "observed_at": observed_at.isoformat(),
+    }
+    payload = _canonical(body)
+    db.execute("INSERT INTO official_revisions VALUES (?, ?, ?, ?, ?, ?, ?)", (
+        revision_id, event_id, sequence, observation.content_sha, supersedes, body["observed_at"], payload,
+    ))
+    return {"id": revision_id, "payload": payload}
+
+
+def _evaluate_revision(db, entries, observation, revision, captured):
+    result = json.loads(revision["payload"])
+    written = 0
+    for entry in entries:
+        registered = json.loads(entry["payload"])
+        created = datetime.fromisoformat(registered["captured_at"])
+        closes = datetime.fromisoformat(registered["target_close"])
+        if not created < closes <= captured:
+            continue
+        if db.execute("SELECT 1 FROM evaluations WHERE prediction_id=? AND draw_id=?",
+                      (entry["id"], revision["id"])).fetchone():
+            continue
+        portfolio = PlayedPortfolio(
+            observation.game, frozenset(registered["main_pool"]),
+            tuple((tuple(main), joker, count) for main, joker, count in registered["variants"]),
+            registered["price_bani"], registered["paid_variants"],
+        )
+        # Both contracts agree for complete official results verified above.
+        rule = registered.get("evaluation_contract_version", 1)
+        if rule not in (1, CONTRACT_VERSION):
+            raise ValueError("Versiune necunoscută a regulii de evaluare înregistrate.")
+        actual = {
+            **result,
+            "evaluation_contract_version": rule,
+            "evaluated_at": captured.isoformat(),
+            "grade": grade_draw(portfolio, result["numbers"], result["joker"], draw_date=observation.day),
+        }
+        db.execute("INSERT INTO evaluations VALUES (?, ?, ?)", (entry["id"], revision["id"], _canonical(actual)))
+        written += 1
+    return written
+
+
+_LEGACY_FROM = """
+    FROM evaluations AS e LEFT JOIN official_revisions AS r ON r.id = e.draw_id
+    LEFT JOIN legacy_evaluation_links AS link
+        ON link.prediction_id=e.prediction_id AND link.legacy_draw_id=e.draw_id
+"""
+
+
+def _legacy_archive_matches(db, game, day, wanted_sha):
+    matches = defaultdict(list)
+    for entry in db.execute(
+        "SELECT e.* " + _LEGACY_FROM + """
+        JOIN predictions AS p ON p.id=e.prediction_id
+        WHERE r.id IS NULL AND p.game=? AND p.target_day=?
+        """, (game, day),
+    ):
+        content = json.loads(entry["payload"])
+        if content.get("official_archive_sha256") != wanted_sha or not content.get("numbers"):
+            continue
+        fingerprint = _result_fingerprint(game, content["numbers"], content.get("joker"))
+        matches[fingerprint].append((entry["prediction_id"], entry["draw_id"]))
+    return matches
+
+
+def append_official_draws(draws, *, archive_sha256, registry_path=None, observed_at=None, problems=None):
+    """Append evaluations for verified events on exact prediction target dates."""
     path = _location(registry_path)
     if not path.is_file():
         return 0
     if not isinstance(archive_sha256, str) or not _HASH.fullmatch(archive_sha256):
         raise ValueError("Rezultatele oficiale necesită amprenta paginii.")
     captured = _clock().astimezone(_TIME_ZONE)
+    if observed_at is None:
+        observed_at = captured
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None or observed_at > captured:
+        raise ValueError("Momentul consultării paginii oficiale este invalid.")
+    observations = [_observe(draw, captured) for draw in draws]
+    conflicts = _snapshot_conflicts(observations)
     written = 0
     with _connect(path) as db:
         db.execute("BEGIN IMMEDIATE")
-        for draw in draws:
-            day = _day(draw.draw_date)
-            source = urlsplit(draw.source_url)
-            if day > captured.date() or source.scheme != "https" or source.netloc not in {"www.loto.ro", "loto.ro"}:
-                raise ValueError("Rezultatul trebuie să provină din arhiva oficială și să fie deja publicat.")
-            game = {"loto_6_49": "6/49", "loto_5_40": "5/40", "joker": "joker"}[normalize_game(draw.game)]
-            lot = require_lottery(game, "RO")
-            if (len(draw.numbers) != lot.draw_n or len(set(draw.numbers)) != lot.draw_n
-                    or any(type(ball) is not int or not 1 <= ball <= lot.max_n for ball in draw.numbers)):
-                raise ValueError("Arhiva oficială conține o geometrie de extragere invalidă.")
-            if lot.geo.second:
-                if type(draw.joker) is not int or not 1 <= draw.joker <= lot.geo.second.max_n:
-                    raise ValueError("Arhiva oficială nu confirmă bila Joker.")
-            elif draw.joker is not None:
-                raise ValueError("Arhiva oficială a indicat o a doua urnă la un joc cu o singură urnă.")
-            if game == "5/40" and not draw.order_known:
-                raise ValueError("Arhiva oficială nu confirmă bila a șasea la Loto 5/40.")
-            draw_id = _draw_identity(draw)
+        # Resolve known aliases against one pre-import snapshot. Two incompatible
+        # rows for the same event must not become successive revisions merely
+        # because the archive lists one before the other.
+        by_event = defaultdict(list)
+        by_day = defaultdict(list)
+        for index, observation in enumerate(observations):
+            if index in conflicts:
+                continue
+            try:
+                event_id = _resolve_event(db, observation)
+            except _IdentityConflict as exc:
+                conflicts[index] = str(exc)
+                continue
+            if event_id is not None:
+                by_event[event_id].append(index)
+            by_day[observation.game, observation.day].append((index, event_id))
+        for rows in by_day.values():
+            for (left, left_id), (right, right_id) in combinations(rows, 2):
+                if (left_id is not None and right_id is not None
+                        or observations[left].keys.keys() & observations[right].keys.keys()):
+                    continue
+                conflicts[left] = conflicts[right] = "Pagina nu permite deosebirea celor două trageri raportate."
+        for indexes in by_event.values():
+            group = [observations[index] for index in indexes]
+            distinct_results = {row.content_sha for row in group}
+            distinct_ids = {row.keys["id"] for row in group if "id" in row.keys}
+            distinct_orders = {row.keys["order"] for row in group if "order" in row.keys}
+            if any(len(values) > 1 for values in (distinct_results, distinct_ids, distinct_orders)):
+                for index in indexes:
+                    conflicts[index] = "Aceeași tragere are date incompatibile în aceeași pagină oficială."
+        old_sources = {}
+        accepted = defaultdict(set)
+        for index, observation in enumerate(observations):
+            day = observation.day.isoformat()
+            scope = observation.game, day
             entries = db.execute("SELECT id, payload FROM predictions WHERE game=? AND target_day=?",
-                                 (game, day.isoformat())).fetchall()
-            for entry in entries:
-                registered = json.loads(entry["payload"])
-                created = datetime.fromisoformat(registered["captured_at"])
-                closes = datetime.fromisoformat(registered["target_close"])
-                if not created < closes <= captured:
-                    continue
-                if db.execute("SELECT 1 FROM evaluations WHERE prediction_id=? AND draw_id=?",
-                              (entry["id"], draw_id)).fetchone():
-                    continue
-                portfolio = PlayedPortfolio(
-                    game, frozenset(registered["main_pool"]),
-                    tuple((tuple(main), joker, count) for main, joker, count in registered["variants"]),
-                    registered["price_bani"], registered["paid_variants"],
+                                 (observation.game, day)).fetchall()
+            if not entries:
+                continue
+            try:
+                if index in conflicts:
+                    raise _IdentityConflict(conflicts[index])
+                if scope not in old_sources:
+                    old_sources[scope] = _legacy_archive_matches(db, *scope, archive_sha256)
+                event_id = _resolve_event(db, observation)
+                revision = _accept_revision(
+                    db, observation, event_id, archive_sha256, observed_at,
+                    observation.content_sha in old_sources[scope],
                 )
-                # Both contracts agree for complete official results verified above.
-                rule = registered.get("evaluation_contract_version", 1)
-                if rule not in (1, CONTRACT_VERSION):
-                    raise ValueError("Versiune necunoscută a regulii de evaluare înregistrate.")
-                actual = {
-                    "evaluation_contract_version": rule,
-                    "game": game,
-                    "date": day.isoformat(),
-                    "numbers": draw.numbers,
-                    "joker": draw.joker,
-                    "official_url": draw.source_url,
-                    "official_archive_sha256": archive_sha256,
-                    "evaluated_at": captured.isoformat(),
-                    "grade": grade_draw(portfolio, draw.numbers, draw.joker, draw_date=day),
-                }
-                db.execute("INSERT INTO evaluations VALUES (?, ?, ?)",
-                           (entry["id"], draw_id, _canonical(actual)))
-                written += 1
+                if revision is not None:
+                    written += _evaluate_revision(db, entries, observation, revision, captured)
+                    accepted[scope, observation.content_sha].add(revision["id"])
+            except _IdentityConflict as exc:
+                conflicts[index] = reason = str(exc)
+                _record_conflict(db, observation, reason, archive_sha256, observed_at)
+                if problems is not None:
+                    message = f"{observation.game} {day}: {reason}"
+                    if message not in problems:
+                        problems.append(message)
+        uncertain = {(observations[index].game, observations[index].day.isoformat()) for index in conflicts}
+        for (scope, content_sha), revisions in accepted.items():
+            if scope in uncertain or len(revisions) != 1:
+                continue
+            for prediction_id, legacy_id in old_sources[scope].get(content_sha, ()):
+                if db.execute("""
+                    SELECT 1 FROM legacy_evaluation_links WHERE prediction_id=? AND legacy_draw_id=?
+                """, (prediction_id, legacy_id)).fetchone() is None:
+                    db.execute("INSERT INTO legacy_evaluation_links VALUES (?, ?, ?)",
+                               (prediction_id, legacy_id, next(iter(revisions))))
         db.commit()
     return written
 
 
-def refresh_official_evaluations(*, registry_path=None):
-    """Import official monthly pages only for dates with registered predictions."""
+def read_prospective_report(*, registry_path=None, include_audit=False):
+    """Report active official evaluations. Historical and legacy rows are opt-in."""
+    report = {"predictions_count": 0, "active_evaluations": [], "conflicts": [], "legacy_pending_count": 0}
+    if include_audit:
+        report.update(superseded_evaluations=[], legacy_evaluations=[], event_revisions=[])
+    path = _location(registry_path)
+    if not path.is_file():
+        return report
+
+    def evaluations(db, sql):
+        return [{**json.loads(row["payload"]), "prediction_id": row["prediction_id"], "draw_id": row["draw_id"]}
+                for row in db.execute(sql)]
+    with _connect(path) as db:
+        # Every part of a report must refer to the same database snapshot.
+        db.execute("BEGIN")
+        report["predictions_count"] = db.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
+        report["active_evaluations"] = evaluations(db, """
+            SELECT * FROM active_official_evaluations ORDER BY prediction_id, draw_id
+        """)
+        report["conflicts"] = [json.loads(row[0]) for row in db.execute(
+            "SELECT payload FROM official_conflicts ORDER BY rowid"
+        )]
+        report["legacy_pending_count"] = db.execute(
+            "SELECT COUNT(*) " + _LEGACY_FROM + "WHERE r.id IS NULL AND link.revision_id IS NULL"
+        ).fetchone()[0]
+        if include_audit:
+            report["superseded_evaluations"] = evaluations(db, """
+                SELECT e.* FROM evaluations AS e
+                JOIN official_revisions AS successor ON successor.supersedes = e.draw_id
+                ORDER BY e.rowid
+            """)
+            report["legacy_evaluations"] = [
+                {**json.loads(row["payload"]), "prediction_id": row["prediction_id"], "draw_id": row["draw_id"],
+                 "verified_revision_id": row["revision_id"]}
+                for row in db.execute(
+                    "SELECT e.*, link.revision_id " + _LEGACY_FROM + "WHERE r.id IS NULL ORDER BY e.rowid"
+                )
+            ]
+            report["event_revisions"] = [json.loads(row[0]) for row in db.execute(
+                "SELECT payload FROM official_revisions ORDER BY rowid"
+            )]
+    return report
+
+
+def refresh_official_evaluations(*, registry_path=None, include_settled=False):
+    """Import monthly pages for registered predictions.
+
+    Set include_settled to check old, already verified targets for corrections.
+    """
     from loto_enterprise.core.official_prizes import _fetch_month_html, parse_month_html
 
     path = _location(registry_path)
@@ -375,9 +765,9 @@ def refresh_official_evaluations(*, registry_path=None):
     with _connect(path) as db:
         targets = db.execute(
             """SELECT DISTINCT p.game, p.target_day FROM predictions AS p
-               WHERE p.target_day <= ? AND (p.target_day >= ? OR NOT EXISTS (
-                   SELECT 1 FROM evaluations e WHERE e.prediction_id = p.id))""",
-            (through.isoformat(), recent.isoformat()),
+               WHERE p.target_day <= ? AND (? OR p.target_day >= ? OR NOT EXISTS (
+                   SELECT 1 FROM active_official_evaluations e WHERE e.prediction_id = p.id))""",
+            (through.isoformat(), include_settled, recent.isoformat()),
         ).fetchall()
     months = {}
     for game, day in targets:
@@ -390,11 +780,14 @@ def refresh_official_evaluations(*, registry_path=None):
         except (OSError, ValueError) as exc:
             errors.append(f"{game} {year:04}-{month:02}: {exc}")
             continue
+        observed_at = _clock().astimezone(_TIME_ZONE)
         fingerprint = sha256(html.encode("utf-8")).hexdigest()
         for target in sorted(days):
             try:
-                official = parse_month_html(game, html, year, month, draw_dates={target})
-                total += append_official_draws(official, archive_sha256=fingerprint, registry_path=path)
+                official = parse_month_html(game, html, year, month, draw_dates={target}, preserve_event_identity=True)
+                total += append_official_draws(
+                    official, archive_sha256=fingerprint, registry_path=path, observed_at=observed_at, problems=errors,
+                )
             except (OSError, ValueError, sqlite3.Error) as exc:
                 errors.append(f"{game} {target}: {exc}")
     return total, errors

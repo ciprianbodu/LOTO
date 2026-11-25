@@ -766,11 +766,16 @@ def update_all() -> int:
     # Registrul prospectiv este local și consultă loto.ro numai dacă are
     # predicții ajunse la termen. Un eșec aici nu anulează importul istoricului.
     try:
-        from loto_enterprise.core.lr_prospective import refresh_official_evaluations
+        from loto_enterprise.core.lr_prospective import read_prospective_report, refresh_official_evaluations
 
         settled, problems = refresh_official_evaluations()
-        if settled:
-            print(f"[REGISTRU-LR] +{settled} evaluări oficiale.")
+        if settled or problems:
+            report = read_prospective_report()
+            active = len(report["active_evaluations"])
+            conflicts = len(report["conflicts"])
+            pending = report["legacy_pending_count"]
+            print(f"[REGISTRU-LR] {settled} evaluări adăugate, {active} active, "
+                  f"{conflicts} conflicte consemnate, {pending} evaluări vechi în curs de reconciliere.")
         for problem in problems:
             print(f"[REGISTRU-LR] EROARE la evaluare: {problem}")
     except Exception as exc:
