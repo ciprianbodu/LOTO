@@ -145,7 +145,7 @@ def _compact_profile(entry, finished_at):
             return None
         urns.append({field: urn[field] for field in fields})
     captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
-    captured_settings.update({key: settings[key] for key in ("budget_lei", "objective") if key in settings})
+    captured_settings.update({key: settings[key] for key in ("budget_lei", "objective", "auto_range_policy") if key in settings})
     captured_settings["scheme"] = scheme
     return {
         "game": game, "source": entry["source"], "settings": captured_settings, "finished_at": finished_at,
@@ -300,6 +300,17 @@ def _persist_report(finished):
         merged["decision_history"] = _prior_history(merged, previous, finished)
         atomic_write_json(_RESULT_PATH, merged)
         _last, _loaded, _disk_stamp = merged, True, _file_stamp()
+        # A previous profile for the same game is still kept when this run fails.
+        # Only decisions from these exact entries may start an automatic follow-up.
+        if len(finished["entries"]) != finished["total"]:
+            return {}
+        accepted = {}
+        for entry in finished["entries"]:
+            game = entry["game"]
+            profile = _compact_profile(entry, finished["finished_at"])
+            if profile is not None and profile in merged["decision_profiles"].get(game, ()):
+                accepted.setdefault(game, []).append(profile)
+        return accepted
 
 
 def _changed():
@@ -327,14 +338,17 @@ def cancel_lr_rebench() -> bool:
 async def _run_games(jobs, report):
     global _active, _last, _notice
     cancel_path = report["cancel_path"]
+    decisions_saved = {}
     try:
-        for index, (entry, history, options, auto_budget) in enumerate(jobs, start=1):
+        for index, (entry, history, auto_budget) in enumerate(jobs, start=1):
             if report["cancelled"]:
                 break
             report["current"] = (index, entry["name"])
             report["comparing"] = bool(auto_budget and history is not None)
             _changed()
             outcome = {**entry}
+            options = dict(entry["settings"])
+            range_policy = options.pop("auto_range_policy", None)
             if history is None:
                 outcome["error"] = "Istoricul jocului este indisponibil."
             else:
@@ -347,12 +361,14 @@ async def _run_games(jobs, report):
                             inverse=options["inverse"], dynamic=options["dynamic"],
                             lookback=options["lookback"], hit_target=options["hit_target"],
                             joker_size=options["joker_size"], pool_codes={game: options["scheme"]}, return_recipe=True,
+                            **({"selection_policy": range_policy} if range_policy else {}),
                         )
                         if report["cancelled"]:
                             break
                         if comparison is None:
                             raise ValueError("Analiza bazelor nu a returnat un rezultat.")
                         options["restricted"] = comparison.get("recommended_range") is not None
+                        outcome["settings"]["restricted"] = options["restricted"]
                         if "paid_recipe" in comparison:
                             options = {**options, "recipe": comparison["paid_recipe"]}
                         report["comparing"] = False
@@ -380,11 +396,11 @@ async def _run_games(jobs, report):
             _changed()
         if report["cancelled"]:
             _notice = "Rularea Re-Bench pe baza aleasă a fost anulată."
-            return
+            return {}
         finished = {key: report[key] for key in ("schema", "entries", "total", "started_at")}
         finished["finished_at"] = datetime.now(_BUCHAREST).isoformat(timespec="microseconds")
         try:
-            await asyncio.to_thread(_persist_report, finished)
+            decisions_saved = await asyncio.to_thread(_persist_report, finished)
         except (OSError, ValueError, TypeError) as exc:
             previous = _last or {}
             _last = {**finished, "decision_profiles": _remember_profiles(finished, previous),
@@ -400,10 +416,11 @@ async def _run_games(jobs, report):
             logger.warning("[Re-Bench LR] Marcajul de oprire nu poate fi șters: %s", exc)
         _active = None
         _changed()
+    return {} if report["cancelled"] else decisions_saved
 
 
-async def run_lr_rebench(jobs) -> bool:
-    """Capturează setările și sursele la lansare. Rularea continuă la închiderea filei."""
+async def run_lr_rebench(jobs, *, require_decisions=False, completed_profiles=None, allow_partial=False) -> bool:
+    """Copiază deciziile salvate de rularea proprie, pentru toate jocurile sau numai cele evaluabile."""
     global _task, _active, _notice
     if lr_rebench_running():
         return False
@@ -421,7 +438,7 @@ async def run_lr_rebench(jobs) -> bool:
         auto_budget = options.pop("auto_budget", None)
         options["scheme"] = getattr(options["scheme"], "code", options["scheme"])
         entry = {"game": game, "name": lot.name, "source": source, "settings": options}
-        captured.append((entry, history, options, tuple(auto_budget) if auto_budget is not None else None))
+        captured.append((entry, history, tuple(auto_budget) if auto_budget is not None else None))
     if not captured:
         return False
     _notice = ""
@@ -433,8 +450,12 @@ async def run_lr_rebench(jobs) -> bool:
     }
     _task = asyncio.create_task(_run_games(captured, _active), name="lr-rebench")
     _changed()
-    await asyncio.shield(_task)
-    return True
+    decisions_saved = await asyncio.shield(_task)
+    complete = sum(map(len, decisions_saved.values())) == len(captured)
+    ready = bool(decisions_saved) and (allow_partial or complete)
+    if ready and completed_profiles is not None:
+        completed_profiles.update(deepcopy(decisions_saved))
+    return ready if require_decisions or allow_partial else True
 
 
 def _date_text(raw):

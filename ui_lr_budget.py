@@ -1,11 +1,12 @@
 """Compare Romanian reduced-scheme tickets within the selected budget."""
 
+import asyncio
 import logging
 import hashlib
 import json
 from collections import Counter
 from datetime import date, datetime
-from math import comb
+from math import comb, isfinite
 
 from nicegui import run, ui
 
@@ -298,7 +299,18 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
     choices = {"auto": f"Automată · {best}"}
     choices.update({_range_label(limits): _range_label(limits) for limits in RANGES})
     game = report["game"]
-    with ui.expansion(f"{game_name} · recomandare {best}", value=expanded).classes("w-full"):
+    with ui.expansion(f"{game_name} · recomandare {best}", value=expanded).classes("w-full") as game_panel:
+        release_confirmation = None
+
+        def select(event):
+            nonlocal release_confirmation
+            release_confirmation = select_base(game, event.value, actions)
+
+        def expanded_changed(event):
+            if not event.value and release_confirmation is not None:
+                release_confirmation()
+
+        game_panel.on_value_change(expanded_changed)
         if report.get("code") is not None:
             ui.label(f"Cod de evaluare {report['code']} · {count(report['pool_size'], 'numere în pool')}").classes("text-weight-bold")
         ui.label(report["reason"]).classes("text-body2")
@@ -344,7 +356,7 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
         with ui.row().classes("lr-choice-actions w-full items-center gap-2") as actions:
             picker = ui.select(
                 choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
-                on_change=lambda event: select_base(game, event.value, actions),
+                on_change=select,
             ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
             if forced:
                 picker.disable()
@@ -423,8 +435,9 @@ def _budget_input_snapshot(forecast_inputs, game, budget_settings=None):
     return digest.hexdigest(), inputs
 
 
-def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_policy=None):
-    decisions = lr_rebench_decisions()
+def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_policy=None, decisions=None):
+    if decisions is None:
+        decisions = lr_rebench_decisions()
     plans = []
     for game, limits in selections.items():
         plans.extend(recommend_playable_games(
@@ -433,6 +446,51 @@ def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_
             **({"selection_policy": selection_policy} if selection_policy else {}),
         ))
     return sorted(plans, key=playable_plan_order)
+
+
+def _generate_rebench_tickets(jobs, profiles):
+    """Play the completed run's exact decision, including the base chosen by Auto."""
+    selections, sources, codes = {}, {}, {}
+    options = jobs[0][2]
+    shared = ("budget_lei", "objective", "inverse", "lookback", "dynamic", "hit_target", "joker_size")
+    policy = options.get("selection_policy")
+    if set(profiles) != {game for game, _, _ in jobs}:
+        raise ValueError("Re-Bench nu a produs decizii pentru toate jocurile selectate.")
+    for game, source, config in jobs:
+        profile, = profiles[game]
+        if (source is None or any(config[key] != options[key] for key in shared)
+                or config.get("selection_policy") != policy):
+            raise ValueError("Istoricul sau setările jocurilor diferă de cererea de recomandare.")
+        settings = profile["settings"]
+        if (profile["source"] != source[0] or settings["scheme"] != config["scheme"]
+                or any(settings[key] != config[key] for key in shared)
+                or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])):
+            raise ValueError(f"Decizia pentru {game} nu corespunde setărilor de la Re-Bench.")
+        selections[game] = _INVERSE_RANGE if settings["restricted"] else None
+        sources[game] = source
+        codes[game] = settings["scheme"]
+    inputs = {key: options[key] for key in ("lookback", "dynamic", "hit_target", "joker_size")}
+    inputs.update(histories=sources, pool_codes=codes)
+    plans = _generate_selection(options["budget_lei"], options["objective"], selections, inputs,
+                                options["inverse"], selection_policy=policy, decisions=profiles)
+    expected_source = policy or "lr_rebench"
+    for plan in plans:
+        if plan.get("forecast_error") or not plan.get("tickets"):
+            continue
+        game = plan["game"]
+        forecast = plan["forecast"]
+        urns = ("selection", "joker_selection") if game == "joker" else ("selection",)
+        if (forecast.get("history_hash") != profiles[game][0]["result"]["history_hash"]
+                or not all((forecast.get(urn) or {}).get("source") == expected_source for urn in urns)):
+            raise ValueError(f"Biletul pentru {game} nu folosește istoricul și selecția confirmate la Re-Bench.")
+    return plans, inputs
+
+
+def _same_rebench_histories(forecast_inputs, sources):
+    game = next(iter(sources)) if len(sources) == 1 else None
+    current = forecast_inputs(game).get("histories", {})
+    return all(gid in current and current[gid][0] == name and frame.equals(current[gid][1])
+               for gid, (name, frame) in sources.items())
 
 
 def _register_live_plans(plans, inputs):
@@ -469,7 +527,7 @@ def initial_budget_amount(value, *, maximum_bani=None):
     return budget_in_lei(max(MIN_BUDGET_LEI * 100, min(maximum_bani, amount)))
 
 
-def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
+def lr_budget_slider(value=DEFAULT_BUDGET_LEI, *, with_entry=False):
     maximum_bani = max(MIN_BUDGET_LEI * 100, maximum_scheme_budget_bani())
     maximum = budget_in_lei(maximum_bani)
     value = initial_budget_amount(value, maximum_bani=maximum_bani)
@@ -493,7 +551,28 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
     with ui.row().classes("w-full justify-between text-caption"):
         ui.label(f"{MIN_BUDGET_LEI} lei")
         ui.label(lei_text(maximum))
-    return slider
+    return (slider, entry) if with_entry else slider
+
+
+def on_budget_click(button, handler, slider, entry):
+    """Carry the typed amount with the click, even before Quasar emits its blur update."""
+    if entry is None:
+        return button.on_click(handler)
+
+    def clicked(event):
+        # NiceGUI's browserless test client supplies no DOM payload.
+        amount = event.args.get("budget") if isinstance(event.args, dict) and "budget" in event.args else entry.value
+        if type(amount) not in (int, float) or not isfinite(amount):
+            ui.notify("Introdu un buget pentru bilete.", type="warning")
+            return
+        entry.set_value(amount)
+        entry.sanitize()
+        slider.set_value(entry.value)
+        return handler()
+
+    return button.on("click", clicked, js_handler=(
+        f"""() => emit({{budget: document.querySelector('input[id="{entry.html_id}"]')?.valueAsNumber ?? null}})"""
+    ))
 
 
 def lr_budget_panel(
@@ -502,6 +581,7 @@ def lr_budget_panel(
     initial_game="all", on_game_change=None,
     initial_inverse=False, initial_restricted=False, on_method_change=None,
     base_choices=None, on_base_change=None, initial_fixed_share=False, on_fixed_share_change=None,
+    on_generation_ready=None, budget_entry=None,
 ):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
@@ -585,6 +665,9 @@ def lr_budget_panel(
         comparison = ui.column().classes("w-full min-w-0 gap-2")
         revision = 0
         running = False
+        preview_idle = asyncio.Event()
+        preview_idle.set()
+        automatic_scope = None
         applied_budget = None
         cached_analysis = None
         displayed = None
@@ -605,9 +688,12 @@ def lr_budget_panel(
 
         def clear_confirmation():
             nonlocal confirm_button
-            if confirm_button is not None and not confirm_button.is_deleted:
-                confirm_button.delete()
-            confirm_button = None
+            if confirm_button is not None:
+                if not confirm_button.is_deleted:
+                    confirm_button.delete()
+                confirm_button = None
+                if not generate.is_deleted:
+                    generate.set_visibility(True)
 
         def change_base(game_id, value, actions):
             nonlocal revision, waiting_for_choice, confirm_button
@@ -619,20 +705,52 @@ def lr_budget_panel(
             revision += 1
             waiting_for_choice = True
             clear_confirmation()
+            generate.set_visibility(False)
             with actions:
                 confirm_button = ui.button(
-                    "Generează cu baza aleasă", icon="confirmation_number", on_click=confirm_generation,
+                    "Generează recomandarea", icon="confirmation_number",
+                    on_click=confirm_generation if budget_entry is None else None,
                 ).props("no-caps").classes("w-full sm:w-auto")
-            show_status(f"Confirmă baza aleasă lângă selectorul {game_options[game_id]} pentru a actualiza biletele.")
+                if budget_entry is not None:
+                    on_budget_click(confirm_button, confirm_generation, slider, budget_entry)
+            show_status(f"Apasă „Generează recomandarea” pentru a folosi baza aleasă la {game_options[game_id]}.")
+            local_button = confirm_button
+
+            def release():
+                if confirm_button is local_button:
+                    clear_confirmation()
+
+            return release
 
         def show_status(message):
             output.clear()
             with output:
                 ui.label(message).props('role="status"').classes("text-caption")
 
+        def display(plans, amount, goal, registered, registration_errors):
+            output.clear()
+            with output:
+                for entry in registered:
+                    created = datetime.fromisoformat(entry["captured_at"]).strftime("%d.%m.%Y %H:%M %z")
+                    target = date.fromisoformat(entry["target_day"]).strftime("%d.%m.%Y")
+                    ui.label(
+                        f"{game_options[entry['game']]} · înregistrat la {created} pentru {target}"
+                    ).props('role="status"').classes("text-caption")
+                for game_key, error in registration_errors.items():
+                    label = game_options.get(game_key, "Registru prospectiv")
+                    ui.label(f"{label} · {error}").props('role="alert"').classes("text-warning")
+                if plans is None:
+                    ui.label("Calculul recomandării a eșuat. Poți încerca din nou cu butonul verde.").props(
+                        'role="alert"'
+                    ).classes("text-warning")
+                else:
+                    _render_recommendations(plans, amount, goal)
+
         async def calculate():
             nonlocal revision, running, applied_budget, cached_analysis, displayed, waiting_for_choice
             nonlocal registration
+            if automatic_scope is not None and automatic_scope():
+                return
             revision += 1
             waiting_for_choice = False
             clear_confirmation()
@@ -646,8 +764,11 @@ def lr_budget_panel(
             if running:
                 return
             running = True
+            preview_idle.clear()
             try:
                 while panel.value and not output.is_deleted and not waiting_for_choice:
+                    if automatic_scope is not None and automatic_scope():
+                        return
                     current = revision
                     budget_settings, method_settings = selected_budget(), selected_method()
                     amount, goal, game_id = budget_settings
@@ -742,27 +863,12 @@ def lr_budget_panel(
                                 registration_errors = {"": "Registrul local nu a putut salva generarea."}
                     if obsolete():
                         continue
-                    output.clear()
-                    with output:
-                        for entry in registered:
-                            created = datetime.fromisoformat(entry["captured_at"]).strftime("%d.%m.%Y %H:%M %z")
-                            target = date.fromisoformat(entry["target_day"]).strftime("%d.%m.%Y")
-                            ui.label(
-                                f"{game_options[entry['game']]} · înregistrat la {created} pentru {target}"
-                            ).props('role="status"').classes("text-caption")
-                        for game_key, error in registration_errors.items():
-                            label = game_options.get(game_key, "Registru prospectiv")
-                            ui.label(f"{label} · {error}").props('role="alert"').classes("text-warning")
-                        if plans is None:
-                            ui.label("Calculul recomandării a eșuat. Poți încerca din nou cu butonul verde.").props(
-                                'role="alert"'
-                            ).classes("text-warning")
-                        else:
-                            _render_recommendations(plans, amount, goal)
+                    display(plans, amount, goal, registered, registration_errors)
                     return
             finally:
                 running = False
-                if not generate.is_deleted:
+                preview_idle.set()
+                if not generate.is_deleted and not (automatic_scope is not None and automatic_scope()):
                     generate.props("aria-busy=false", remove="loading")
 
         async def refresh():
@@ -778,6 +884,11 @@ def lr_budget_panel(
 
         async def generate_and_register():
             nonlocal registration
+            if automatic_scope is not None and automatic_scope():
+                return
+            if waiting_for_choice:
+                await confirm_generation()
+                return
             registration = registration_settings()
             await show_recommendation()
 
@@ -785,6 +896,51 @@ def lr_budget_panel(
             nonlocal registration
             registration = registration_settings()
             await calculate()
+
+        async def generate_after_rebench(jobs, still_current, profiles):
+            nonlocal revision, automatic_scope, registration, cached_analysis, displayed, waiting_for_choice
+            if not jobs or automatic_scope is not None or not still_current():
+                return False
+            automatic_scope = still_current
+            revision += 1
+            registration = None
+            cached_analysis = displayed = None
+            try:
+                if not output.is_deleted:
+                    waiting_for_choice = False
+                    clear_confirmation()
+                    panel.set_value(True)
+                    generate.props("loading aria-busy=true")
+                    show_status("Re-Bench s-a încheiat. Se generează biletele.")
+                await preview_idle.wait()
+                if not still_current():
+                    return False
+                plans, inputs = await run.io_bound(_generate_rebench_tickets, jobs, profiles)
+                if not still_current():
+                    return False
+                ready = ({plan["game"] for plan in plans if plan.get("tickets") and not plan.get("forecast_error")
+                          and refinement_complete(plan)} == set(profiles))
+                registered, errors = [], {}
+                if ready:
+                    if not await run.io_bound(_same_rebench_histories, forecast_inputs, inputs["histories"]):
+                        raise ValueError("Istoricul disponibil s-a schimbat după Re-Bench.")
+                    if not still_current():
+                        return False
+                    registered, errors = await run.io_bound(_register_live_plans, plans, inputs)
+                if not still_current():
+                    return False
+                if not output.is_deleted:
+                    settings = jobs[0][2]
+                    display(plans, settings["budget_lei"], settings["objective"], registered, errors)
+                return ready and not errors and {entry["game"] for entry in registered} == set(profiles)
+            except Exception as exc:
+                if not output.is_deleted and still_current():
+                    show_status(f"Recomandarea după Re-Bench s-a oprit. {exc}")
+                raise
+            finally:
+                automatic_scope = None
+                if not generate.is_deleted and not running:
+                    generate.props("aria-busy=false", remove="loading")
 
         def change_method(recalculate):
             if on_method_change is not None:
@@ -796,8 +952,10 @@ def lr_budget_panel(
                 callback(control.value)
             return refresh()
 
+        if on_generation_ready is not None:
+            on_generation_ready(generate_after_rebench)
         panel.on_value_change(refresh)
-        generate.on_click(generate_and_register)
+        on_budget_click(generate, generate_and_register, slider, budget_entry)
         inverse.on_value_change(lambda: change_method(refresh))
         range_filter.on_value_change(lambda: change_method(calculate))
         selection_policy.on_value_change(lambda: change_selection(on_fixed_share_change, selection_policy))

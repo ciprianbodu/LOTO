@@ -102,7 +102,7 @@ from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, budget_in_lei
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
-from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider
+from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider, on_budget_click
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_running, run_lr_walk_forward
 from ui_lr_walk_forward import lr_walk_forward_panel
@@ -607,7 +607,7 @@ def _bench_running() -> bool:
     return bool(alive)
 
 
-def _launch_bench(args: list[str], label: str) -> None:
+def _launch_bench(args: list[str], label: str, *, lr_workflow=False) -> subprocess.Popen | None:
     if STATE.get("virtual_wf_running") or STATE.get("wf_running") or STATE.get("active_job_id"):
         ui.notify("O generare sau validare este în curs; așteaptă sau anulează.", type="warning")
         return
@@ -626,6 +626,10 @@ def _launch_bench(args: list[str], label: str) -> None:
     try:
         from bench_outcome import save_context
         config = _bench_launch_history_config()
+        if lr_workflow:
+            captured = json.loads(config)
+            captured["after_general"] = "lr_recommendation"
+            config = json.dumps(captured)
         pools = {g.game_id: _pool_size_for(g.game_id) for g in _LOT.GAMES}
         lr_codes = json.loads(config).get("rebench_lr_codes", {})
         env[VALIDATION_CODES_ENV] = json.dumps({
@@ -648,6 +652,7 @@ def _launch_bench(args: list[str], label: str) -> None:
         atomic_write_text(BENCH_PID_FILE, f"{proc.pid}|{int(time.time())}|{run_id}|{config_digest}|ctx1")
         STATE["_bench_run_identity"] = (proc.pid, run_id, config_digest)
         STATE["_bench_context_required"] = run_id
+        STATE["_bench_general_lr_id"] = run_id if lr_workflow else None
         try:
             from rebench_history_store import mark_launch
             mark_launch(run_id)
@@ -671,8 +676,10 @@ def _launch_bench(args: list[str], label: str) -> None:
             clear_context(run_id)
         except OSError:
             pass
+        proc = None
         ui.notify(f"Nu pot porni bench-ul: {exc}", type="negative")
     _refresh_status()
+    return proc
 
 
 _PCTS = ",".join(map(str, VALIDATION_PERCENTILES))
@@ -892,7 +899,7 @@ def _bench_history_config(context: tuple[str, dict[str, int]]) -> str:
     return json.dumps(current)
 
 
-def _on_bench_finished(*, context=None, config_json=None) -> None:
+def _on_bench_finished(*, context=None, config_json=None, lr_workflow=False):
     """Actualizează starea bench-ului și pornește Auto-Pilot dacă e bifat."""
     if STATE.pop("bench_target_pending", False) or _decision_target_mismatch():
         # Ținta s-a schimbat cât rula bench-ul, care și-a scris decizia cu
@@ -922,10 +929,12 @@ def _on_bench_finished(*, context=None, config_json=None) -> None:
             countries = _history_decision_keys((task for ds in cfg.get("datasets", []) for task in ds.get("tasks", [])), simulated=True)
             STATE["_bench_history_pending"] = (cfg_text, countries, _virtual_decision_fingerprint(countries))
             STATE["_bench_history_snapshot"] = context is not None or config_json is not None
+            STATE["_bench_history_lr_workflow"] = lr_workflow
+            return True
         except Exception as exc:  # noqa: BLE001
             logger.warning("[BENCH] Istoricul automat nu poate fi planificat: %s", exc)
         return
-    autopilot = bool(SETTINGS.get("autopilot_after_bench") and STATE.get("datasets"))
+    autopilot = not lr_workflow and bool(SETTINGS.get("autopilot_after_bench") and STATE.get("datasets"))
     if autopilot and (context is not None or config_json is not None) and cfg_text != _build_config_json():
         # Nu genera bilete pe alte setări decât cele validate.
         autopilot = False
@@ -970,16 +979,17 @@ def _on_bench_finished(*, context=None, config_json=None) -> None:
         extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
         if _start_virtual_history(auto_generate_config=cfg_text if autopilot and not physical_errors else None,
                                   automatic=True, simulated=True, materialize_full=True, **extra):
-            return
+            return True
         if physical_errors or official_lr:
-            return
+            return True
     if not full and (not autopilot or physical_errors) and not STATE.get("active_job_id"):
         extra = {"config_json": cfg_text} if context is not None or config_json is not None else {}
         _start_virtual_history(automatic=True, simulated=True, materialize_full=True, **extra)
-        return
+        return True
     if autopilot and not STATE.get("active_job_id"):
         ui.notify("✅ Re-Bench terminat → pornesc Auto-Pilot automat.", type="positive")
         apply_autopilot_and_generate()
+    return True
 
 
 def _clear_bench_pid_if_matches(identity) -> None:
@@ -1024,6 +1034,7 @@ def _observe_bench_activity(bench_now: bool) -> None:
         identity = STATE.pop("_bench_run_identity", None)
         rc = None
         failure_reason = None
+        lr_workflow = False
         if identity is not None:
             pid, run_id, config_digest = identity
             if process is not None and process.poll() is None:
@@ -1038,9 +1049,20 @@ def _observe_bench_activity(bench_now: bool) -> None:
                 from bench_outcome import claim_exit, peek_exit, load_context
                 code = peek_exit(run_id, pid)
                 context = load_context(run_id, config_digest)
+                lr_workflow = bool(context and json.loads(context[0]).get("after_general") == "lr_recommendation")
+                if lr_workflow and process is None:
+                    # Another UI owns the continuation. A dead owner releases its kernel lock.
+                    try:
+                        with _general_lr_lock():
+                            pass
+                    except TimeoutError:
+                        STATE.pop("_bench_seen_run", None)
+                        return
                 try:
                     marker = BENCH_PID_FILE.read_text(encoding="utf-8").strip().split("|")
                     requires_context = (len(marker) >= 5 and marker[2] == run_id and "ctx1" in marker[4:])
+                    if requires_context and marker[-1] == "cancelled":
+                        STATE["bench_cancelled"] = True
                 except (OSError, UnicodeError):
                     requires_context = False
                 requires_context = requires_context or STATE.get("_bench_context_required") == run_id
@@ -1066,7 +1088,10 @@ def _observe_bench_activity(bench_now: bool) -> None:
                 logger.warning("[BENCH] Verificarea rezultatului a eșuat: %s", exc)
             _clear_bench_pid_if_matches(identity)
         if not STATE.get("bench_cancelled") and rc == 0:
-            if context is None:
+            if lr_workflow:
+                if _on_bench_finished(context=context, lr_workflow=True):
+                    STATE["_general_lr_completed"] = run_id
+            elif context is None:
                 _on_bench_finished()
             else:
                 _on_bench_finished(context=context)
@@ -1090,6 +1115,7 @@ def _continue_after_automatic_history(bench_now: bool) -> None:
         if waiting and not (bench_now or STATE.get("active_job_id") or STATE.get("wf_running") or STATE.get("virtual_wf_running")):
             STATE.pop("_bench_history_pending", None)
             is_snapshot = STATE.pop("_bench_history_snapshot", False)
+            lr_workflow = STATE.pop("_bench_history_lr_workflow", False)
         else:
             waiting = None
             is_snapshot = False
@@ -1101,7 +1127,9 @@ def _continue_after_automatic_history(bench_now: bool) -> None:
         except Exception:  # noqa: BLE001
             unchanged = False
         if unchanged and not STATE.get("bench_cancelled") and not _VIRTUAL_WF_CANCEL_REQUESTED.is_set():
-            if is_snapshot:
+            if lr_workflow:
+                _on_bench_finished(config_json=config, lr_workflow=True)
+            elif is_snapshot:
                 _on_bench_finished(config_json=config)
             else:
                 _on_bench_finished()
@@ -1122,6 +1150,8 @@ def _continue_after_automatic_history(bench_now: bool) -> None:
 def _bench_status_text() -> str:
     if STATE.get("bench_cancelled"):
         return "Anulare solicitată; oprirea bench-ului nu este confirmată. Auto-Pilot nu va porni la final."
+    if STATE.get("_bench_general_lr_id"):
+        return "Re-Bench general în curs. După finalizare se evaluează selecția LR pentru bilet."
     return "Testez toate metodele (CPU, pe toate nucleele). Auto-Pilot pornește la final."
 
 
@@ -1178,7 +1208,36 @@ def _istoric_has_data() -> bool:
     return False
 
 
-def run_rebench() -> None:
+def _general_lr_lock():
+    from process_lock import file_lock
+    return file_lock(str(BENCH_PID_FILE) + ".lr-workflow", timeout=0)
+
+
+async def _run_general_before_lr() -> bool:
+    """Wait for the successful receipt of this launch; another UI cannot consume it."""
+    import asyncio
+
+    try:
+        with _general_lr_lock():
+            epoch = STATE.get("_cancellation_epoch", 0)
+            process = run_rebench(lr_workflow=True)
+            if process is None:
+                return False
+            identity = STATE["_bench_run_identity"]
+            while process.poll() is None:
+                if STATE.get("bench_cancelled") or epoch != STATE.get("_cancellation_epoch", 0):
+                    return False
+                await asyncio.sleep(.5)
+            if STATE.get("_bench_process") is process:
+                _observe_bench_activity(False)
+            return (STATE.get("_general_lr_completed") == identity[1]
+                    and epoch == STATE.get("_cancellation_epoch", 0) and not STATE.get("bench_cancelled"))
+    except TimeoutError:
+        ui.notify("Un Re-Bench general pentru selecția LR este deja în curs.", type="warning")
+        return False
+
+
+def run_rebench(*, lr_workflow=False) -> subprocess.Popen | None:
     """Re-Bench UNIC, aliniat cu walk-forward-ul de producție.
 
     ``block-size=1`` recalculează scorul înaintea FIECĂREI extrageri testate,
@@ -1240,11 +1299,12 @@ def run_rebench() -> None:
         # decisions/<CC>/best_methods.json). România: argv-ul de dinainte.
         _args += ["--country", _cc]
     STATE["bench_country"] = _cc
-    _launch_bench(
+    return _launch_bench(
         _args,
         "Re-Bench walk-forward real (metodele fiecărui joc)"
         if _cc == _LOT.RO
         else f"Re-Bench {_country_label(_cc)}",
+        **({"lr_workflow": True} if lr_workflow else {}),
     )
 
 
@@ -4226,12 +4286,15 @@ def _apply_budget_plan(plans):
         _save_settings()
 
 
-def _lr_rebench_jobs(choices, amount):
+def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
     from covering.lr_budget import recommend_games
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
 
     selected = choices["lr_budget_game"]
     plans = recommend_games(amount, choices["lr_budget_objective"], None if selected == "all" else selected)
+    if sync_pool:
+        # The budget preview may still be running when the user clicks Re-Bench.
+        _apply_budget_plan(plans)
     games = [_LOT.require_lottery(plan["game"], _LOT.RO) for plan in plans]
     _load_missing_bench_histories(games)
     with STATE_LOCK:
@@ -4252,43 +4315,114 @@ def _lr_rebench_jobs(choices, amount):
             }
             if base == "auto":
                 options["auto_budget"] = (amount, choices["lr_budget_objective"])
+                if choices.get("lr_fixed_share_val"):
+                    from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
+                    options["auto_range_policy"] = ONLINE_TICKET_EXPERTS
             jobs.append((game, (source[0], source[1].copy(deep=True)) if source else None, options))
     return jobs
 
 
-async def _run_selected_rebench(choices, amount, on_scoped):
-    if lr_rebench_running():
-        ui.notify("Re-Bench pentru selecția LR este deja în curs.", type="warning")
-        return
+async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=None,
+                                selection_current=None, general=False):
     if _selected_country() != _LOT.RO:
         run_rebench()
         return
-    if _bench_running():
-        ui.notify("Un Re-Bench este deja în curs.", type="warning")
+    if STATE.get("_lr_ticket_flow_active") or lr_rebench_running() or _bench_running():
+        ui.notify("Un Re-Bench sau recomandarea aferentă este deja în curs.", type="warning")
         return
-    jobs = _lr_rebench_jobs(choices, amount)
+    if lr_walk_forward_running():
+        ui.notify("Validarea selecției LR este deja în curs.", type="info")
+        return
+
+    selection = deepcopy(choices)
+    jobs = _lr_rebench_jobs(selection, amount, sync_pool=generate_ticket is not None)
     on_scoped()
-    await run_lr_rebench(jobs)
+    if generate_ticket is None:
+        return await run_lr_rebench(jobs)
+
+    from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
+
+    depth = _int_setting("wf_depth_pct")
+    epoch = STATE.get("_cancellation_epoch", 0)
+    STATE["_lr_ticket_flow_active"] = True
+
+    def current():
+        return STATE.get("_cancellation_epoch", 0) == epoch and (selection_current is None or selection_current())
+
+    def stopped():
+        STATE["_lr_ticket_flow_status"] = "Secvența s-a oprit după anulare sau schimbarea selecției."
+
+    try:
+        if general:
+            STATE["_lr_ticket_flow_status"] = "Se evaluează catalogul general înainte de Re-Bench pentru bilet."
+            if not await _run_general_before_lr():
+                STATE["_lr_ticket_flow_status"] = "Re-Bench general nu a confirmat finalizarea. Secvența s-a oprit."
+                return
+            if not current():
+                stopped()
+                return
+
+        STATE["_lr_ticket_flow_status"] = "Se evaluează metodele pentru biletul ales."
+        profiles = {}
+        if not await run_lr_rebench(jobs, require_decisions=True, completed_profiles=profiles, allow_partial=True):
+            STATE["_lr_ticket_flow_status"] = "Re-Bench nu a salvat o decizie completă pentru selecție. Verifică raportul."
+            return
+        if not current():
+            stopped()
+            return
+
+        omitted = [game for game, _, _ in jobs if game not in profiles]
+        detail = (" Jocuri fără decizie utilizabilă: " + ", ".join(omitted) + ". Vezi raportul Re-Bench."
+                  if omitted else "")
+        jobs = [job for job in jobs if job[0] in profiles]
+        STATE["_lr_ticket_flow_status"] = "Re-Bench finalizat. Se generează și se înregistrează recomandarea." + detail
+        ticket_jobs = jobs
+        if selection.get("lr_fixed_share_val"):
+            ticket_jobs = [(game, history, {**options, "selection_policy": ONLINE_TICKET_EXPERTS})
+                           for game, history, options in jobs]
+        generated = await generate_ticket(ticket_jobs, current, profiles)
+        if not current():
+            stopped()
+            return
+        if not generated:
+            STATE["_lr_ticket_flow_status"] = "Recomandarea nu a fost înregistrată integral. Verifică rezultatul biletelor."
+            return
+
+        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Rulează validarea walk-forward." + detail
+        await _run_selected_lr_walk_forward(selection, amount, jobs=jobs, depth=depth)
+        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Starea validării apare în panoul walk-forward." + detail
+    except ValueError as exc:
+        STATE["_lr_ticket_flow_status"] = f"Secvența s-a oprit. {exc}"
+    except Exception:
+        logger.exception("[LR] Secvența Re-Bench, recomandare și validare a fost întreruptă")
+        STATE["_lr_ticket_flow_status"] = "Calculul s-a întrerupt. Verifică raportul ultimei etape."
+    finally:
+        STATE["_lr_ticket_flow_active"] = False
 
 
-async def _run_selected_lr_walk_forward(choices, amount):
+async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=None):
     if lr_walk_forward_running():
         ui.notify("Validarea walk-forward pentru selecția LR este deja în curs.", type="info")
         return
     from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 
-    depth = _int_setting("wf_depth_pct")
-    jobs = _lr_rebench_jobs(choices, amount)
-    for _, _, options in jobs:
+    if depth is None:
+        depth = _int_setting("wf_depth_pct")
+    if jobs is None:
+        jobs = _lr_rebench_jobs(choices, amount)
+    validation = []
+    for game, history, captured in jobs:
+        options = {**captured, "depth": depth}
+        options.pop("auto_range_policy", None)
         if choices.get("lr_fixed_share_val"):
             options["selection_policy"] = ONLINE_TICKET_EXPERTS
         if choices.get("replay_policy") == "daily":
             options["replay_policy"] = "daily"
         if options.pop("auto_budget", None) is not None:
-            # The validator resolves Auto using only the period preceding the test.
+            # A historical validation must select its base on its own training prefix.
             options["restricted"] = None
-        options.update(budget_lei=amount, objective=choices["lr_budget_objective"], depth=depth)
-    await run_lr_walk_forward(jobs)
+        validation.append((game, history, options))
+    return await run_lr_walk_forward(validation)
 
 
 def _lr_scope_text(choices):
@@ -4345,6 +4479,12 @@ def _generation_games_selector(country, refresh):
 def main_page() -> None:
     ui.dark_mode().enable()
     refresh_budget = None
+    generate_budget_ticket = None
+
+    def register_budget_generator(generate):
+        nonlocal generate_budget_ticket
+        generate_budget_ticket = generate
+
     budget_result = STATE.get("results")
     last_completed = STATE.get("_result_job_id")
     lr_choices = {
@@ -4442,13 +4582,15 @@ def main_page() -> None:
     with ui.left_drawer(fixed=False).props("width=360 bordered").classes("p-3") as drawer:
         _cc = _selected_country()
         _cc_name = _country_label(_cc)
-        budget_slider = None
+        budget_slider = budget_entry = None
         if _cc == _LOT.RO:
             from covering.lr_budget import recommend_games
 
-            budget_slider = lr_budget_slider(SETTINGS.get("lr_budget_lei"))
+            budget_slider, budget_entry = lr_budget_slider(SETTINGS.get("lr_budget_lei"), with_entry=True)
             budget_objective = _budget_objective()
-            _apply_budget_plan(recommend_games(budget_slider.value, budget_objective))
+            budget_game = lr_choices["lr_budget_game"]
+            _apply_budget_plan(recommend_games(budget_slider.value, budget_objective,
+                                              None if budget_game == "all" else budget_game))
             def return_to_recommendation():
                 drawer.hide()
                 focus_control(budget_access)
@@ -4495,14 +4637,10 @@ def main_page() -> None:
 
         _BTN = "w-full"
         _BTN_STYLE = "white-space:normal;line-height:1.2;min-height:40px"
-        ui.button(
-            "⚡ Auto-Pilot (arată selecția pe joc și generează)",
-            on_click=apply_autopilot_and_generate,
-        ).props("color=primary no-caps").classes(_BTN).style(_BTN_STYLE)
-        ui.button(
-            "🚀 Generează",
-            on_click=lambda: submit_generation(pure=False),
-        ).props("no-caps").classes(_BTN).style(_BTN_STYLE)
+        if _cc != _LOT.RO:
+            ui.button(
+                "Generează recomandarea", icon="confirmation_number", on_click=lambda: submit_generation(pure=False),
+            ).props("color=positive no-caps").classes(_BTN).style(_BTN_STYLE)
         ui.separator()
 
         async def _load_country_history() -> None:
@@ -4800,16 +4938,30 @@ def main_page() -> None:
         ui.separator()
         ui.label("Re-Bench și întreținere").classes("text-bold")
 
-        async def start_selected_rebench():
+        async def start_selected_rebench(*, general=False):
+            if budget_slider is None:
+                run_rebench()
+                return
+
+            def scope():
+                return (deepcopy(lr_choices), budget_slider.value, _effective_lookback_pct(),
+                        _clamped_bench_target(), _int_setting("joker_pool_size_val"),
+                        _int_setting("wf_depth_pct"), bool(SETTINGS["dynamic_method_enabled_val"]))
+
+            original = scope()
+
             def show_scoped():
                 drawer.hide()
                 focus_control(lr_report_anchor)
 
-            await _run_selected_rebench(lr_choices, budget_slider.value if budget_slider else 0, show_scoped)
+            await _run_selected_rebench(
+                lr_choices, budget_slider.value, show_scoped, generate_ticket=generate_budget_ticket,
+                selection_current=lambda: budget_slider.is_deleted or (_selected_country() == _LOT.RO and scope() == original),
+                general=general,
+            )
 
-        ui.button("🔬 RE-BENCH", on_click=start_selected_rebench).props(
-            "color=orange no-caps"
-        ).classes(_BTN).style(_BTN_STYLE)
+        bench_button = ui.button("🔬 RE-BENCH").props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
+        on_budget_click(bench_button, start_selected_rebench, budget_slider, budget_entry)
         if _cc == _LOT.RO:
             scope_label = ui.label().classes("text-caption text-info")
 
@@ -4817,10 +4969,12 @@ def main_page() -> None:
                 scope_label.set_text(f"Re-Bench · {_lr_scope_text(lr_choices)}")
 
             show_lr_scope()
-        bench_options = ui.expansion("Re-Bench general și Auto-Pilot").classes("w-full") if _cc == _LOT.RO else ui.column()
+            ui.label("După Re-Bench se generează biletul și pornește validarea walk-forward.").classes("text-caption")
+        bench_options = ui.expansion("Re-Bench general").classes("w-full") if _cc == _LOT.RO else ui.column()
         with bench_options:
             if _cc == _LOT.RO:
-                ui.button("Pornește Re-Bench general", on_click=run_rebench).props("outline no-caps").classes("w-full")
+                general_button = ui.button("Pornește Re-Bench general").props("outline no-caps").classes("w-full")
+                on_budget_click(general_button, lambda: start_selected_rebench(general=True), budget_slider, budget_entry)
             ui.label(_bench_intro_text(_cc)).bind_text_from(
                 SETTINGS, "bench_hit_target", lambda _: _bench_intro_text(_cc)
             ).classes("text-caption")
@@ -4878,10 +5032,11 @@ def main_page() -> None:
                             "cădea pe low_confidence. Adaugă-le în curated_methods.json."
                         ).classes("text-caption text-negative")
             _bench_freshness_panel(_cc)
-            _bind_save(
-                ui.checkbox("⚡ Pornește Auto-Pilot automat după Re-Bench"),
-                "autopilot_after_bench",
-            )
+            if _cc != _LOT.RO:
+                _bind_save(
+                    ui.checkbox("Generează recomandarea după Re-Bench general"),
+                    "autopilot_after_bench",
+                )
 
         ui.separator()
         ui.button("🔴 Anulează TOT Procesul", on_click=cancel_all).props(
@@ -4911,9 +5066,14 @@ def main_page() -> None:
             budget_access.bind_text_from(
                 budget_slider, "value", lambda amount: f"Buget · {lei_text(amount)}"
             )
+            STATE.setdefault("_lr_ticket_flow_status", "")
+            ui.label().props('role="status" aria-live="polite"').classes("text-body2").bind_text_from(
+                STATE, "_lr_ticket_flow_status",
+            ).bind_visibility_from(STATE, "_lr_ticket_flow_status", backward=bool)
             refresh_budget = lr_budget_panel(
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
+                on_generation_ready=register_budget_generator, budget_entry=budget_entry,
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
                 initial_fixed_share=lr_choices["lr_fixed_share_val"],
@@ -4929,7 +5089,6 @@ def main_page() -> None:
             lr_walk_forward_panel(
                 lambda: f"{_lr_scope_text(lr_choices)} · {lei_text(budget_slider.value)}"
                 + (" · Fixed Share pe bilete" if lr_choices["lr_fixed_share_val"] else ""),
-                lambda: _run_selected_lr_walk_forward(lr_choices, budget_slider.value),
                 on_replay_change=lambda value: lr_choices.update(replay_policy=value),
                 depth_control=lambda: _walk_forward_depth_selector("Istoric pentru validarea walk-forward LR"),
             )

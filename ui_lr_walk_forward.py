@@ -201,7 +201,8 @@ def _game_result(entry):
                 _draw_table(draws, result["inverse"], bool(lot.bench_key_urna2))
 
 
-def lr_walk_forward_panel(scope_text, start, *, depth_control=None, on_replay_change=None):
+def lr_walk_forward_panel(scope_text, start=None, *, depth_control=None, on_replay_change=None):
+    """Display validation started by the LR recommendation workflow."""
     with ui.card().classes("w-full min-w-0 gap-2").props('id="lr-walk-forward" tabindex="-1"') as panel:
         ui.label("Validare walk-forward pentru selecția LR").classes("text-h6 text-weight-bold")
         scope = ui.label(scope_text()).classes("text-body2")
@@ -212,7 +213,6 @@ def lr_walk_forward_panel(scope_text, start, *, depth_control=None, on_replay_ch
                 ui.select({"fixed": "Metoda fixată înainte de test", "daily": "Refă selecția la fiecare zi"},
                           value="fixed", label="Protocol de validare",
                           on_change=lambda e: on_replay_change(e.value)).classes("min-w-60")
-            launch = ui.button("Validează walk-forward", on_click=start).props("no-caps color=primary")
             cancel = ui.button("Anulează validarea", on_click=cancel_lr_walk_forward).props("outline no-caps")
         status = ui.label().classes("text-body2").props('role="status" aria-live="polite"')
         results = ui.column().classes("w-full min-w-0 gap-2")
@@ -230,9 +230,8 @@ def lr_walk_forward_panel(scope_text, start, *, depth_control=None, on_replay_ch
         if snapshot is None:
             return
         seen, active, latest, notice = snapshot
-        launch.set_enabled(not active)
         cancel.set_visibility(bool(active and not active["cancelled"]))
-        text = ""
+        text = "După Re-Bench, validarea pornește automat când recomandarea de bilet este gata."
         if active:
             if active["cancelled"]:
                 text = ("Validarea se va opri după jocul curent." if active.get("cancel_after_game")
