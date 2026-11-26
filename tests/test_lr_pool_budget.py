@@ -54,6 +54,17 @@ def test_lr_beam_can_improve_without_relaxing_other_prize_thresholds(game, objec
     assert new["gap"] >= 0
 
 
+def _assert_same_incumbent_on_cancel(stopped, timed):
+    evidence = timed["portfolio_refinement"]
+    assert evidence["complete"] is True and evidence["issues"] == []
+    assert timed["optimization"]["search"] == {"stopped": "timeout"}
+    assert stopped == {
+        **timed,
+        "portfolio_refinement": {**evidence, "complete": False, "issues": ["cancelled"]},
+        "optimization": {**timed["optimization"], "search": {"stopped": "cancelled"}},
+    }
+
+
 def test_stop_keeps_exact_legacy_incumbent_with_real_6_49_jackpot():
     from copy import deepcopy
     from math import comb
@@ -64,7 +75,7 @@ def test_stop_keeps_exact_legacy_incumbent_with_real_6_49_jackpot():
     plan, = recommend_games(300, FOUR_PLUS, "6/49")
     timed = restrict_to_pool(deepcopy(plan), FOUR_PLUS, pool, time_limit_s=0)
     stopped = restrict_to_pool(deepcopy(plan), FOUR_PLUS, pool, cancelled=lambda: True)
-    assert stopped == timed
+    _assert_same_incumbent_on_cancel(stopped, timed)
     results = exact(stopped, pool, ())
     assert results["6+"] == stopped["variants"] - results["duplicate_paid_variants"]
     assert results["denominator"] == comb(49, 6)
@@ -150,7 +161,8 @@ def test_optimizer_cache_keeps_budget_and_explicit_timing_separate(monkeypatch):
     monkeypatch.setattr(optimizer, "_refine_layout", observed)
     normal = restrict_to_pool(deepcopy(first), FOUR_PLUS, pool)
     abandoned = restrict_to_pool(deepcopy(first), FOUR_PLUS, pool, cancelled=lambda: True)
-    assert abandoned == restrict_to_pool(deepcopy(first), FOUR_PLUS, pool, time_limit_s=0)
+    timed = restrict_to_pool(deepcopy(first), FOUR_PLUS, pool, time_limit_s=0)
+    _assert_same_incumbent_on_cancel(abandoned, timed)
     assert normal == restrict_to_pool(deepcopy(first), FOUR_PLUS, pool)
     larger = restrict_to_pool(deepcopy(other), FOUR_PLUS, pool)
     assert abandoned["attained"] <= normal["attained"]
