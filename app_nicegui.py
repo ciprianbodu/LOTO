@@ -101,8 +101,11 @@ from ui_job_status import JobStatusProbe
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
 from covering.lr_budget import FOUR_PLUS, budget_in_lei
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
-from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider, on_budget_click
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE
+from ui_lr_budget import (
+    LR_RESTRICTED_BASE, LR_RESTRICTED_LABEL, initial_budget_amount, lr_base_choice, lr_budget_panel,
+    lr_budget_slider, on_budget_click,
+)
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_running, run_lr_walk_forward
 from ui_lr_walk_forward import lr_walk_forward_panel
@@ -3463,7 +3466,9 @@ def _prepare_mail_alternatives(snapshot: dict) -> None:
             )
         except Exception:
             logger.exception("[MAIL] Pool invers indisponibil pentru %s", record["game"])
-            record["pool_alternatives"] = {"inverse_reduced": {"error": "Calculul pool-ului invers a eșuat."}}
+            record["pool_alternatives"] = {"inverse_reduced": {
+                "number_range": LR_RESTRICTED_RANGE, "error": "Calculul pool-ului invers a eșuat.",
+            }}
 
 
 def _freeze_mail_ratings(snapshot: dict) -> dict:
@@ -4311,7 +4316,7 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
             options = {
                 "scheme": budget_plan_scheme(plan).code,
                 "budget_lei": amount, "objective": FOUR_PLUS,
-                "inverse": inverse, "restricted": base == "10–40",
+                "inverse": inverse, "restricted": base == LR_RESTRICTED_BASE,
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "lookback": _effective_lookback_pct(), "hit_target": 4,
                 "joker_size": _int_setting("joker_pool_size_val"),
@@ -4470,13 +4475,13 @@ def _lr_scope_text(choices):
         return f"{name} · Auto · alegere separată pentru fiecare joc"
     method = "Metoda inversă" if choices["lr_inverse_val"] else "Metoda normală"
     if "lr_auto_options_val" in choices:
-        base = "Pool restrâns între 10 și 40" if choices["lr_restricted_val"] else "Baza completă"
+        base = LR_RESTRICTED_LABEL if choices["lr_restricted_val"] else "Baza completă"
         return f"{name} · {method} · {base}"
     games = _LOT.games_for_country(_LOT.RO) if game == "all" else [_LOT.require_lottery(game, _LOT.RO)]
     bases = {}
     for lot in games:
         value = lr_base_choice(choices["base_choices"], lot.game_id, choices["lr_inverse_val"], choices["lr_restricted_val"])
-        bases[lot.name] = {"auto": "Bază automată", "10–40": "Pool restrâns între 10 și 40"}.get(value, value)
+        bases[lot.name] = {"auto": "Bază automată", LR_RESTRICTED_BASE: LR_RESTRICTED_LABEL}.get(value, value)
     base = next(iter(bases.values())) if len(set(bases.values())) == 1 else ", ".join(
         f"{title} ({value})" for title, value in bases.items()
     )

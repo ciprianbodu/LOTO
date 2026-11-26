@@ -35,7 +35,7 @@ def test_render_saved_joker_validation_alongside_changed_selection(monkeypatch):
                 assert "Loto 6/49 · Metoda normală" in labels
                 assert any("Metoda inversă" in text and "30%" in text and "joker.csv" in text for text in labels)
                 assert any("Cod LR 24" in text and "variante" in text and "cost total" in text for text in labels)
-                assert any("5 numere din urna principală au fost între 10 și 40" in text for text in labels)
+                assert any("5 numere din urna principală au fost între 5 și 40" in text for text in labels)
                 assert any("Urna 2" in text and "în pool" in text and "pe aceeași variantă cu cel puțin un număr principal" in text for text in labels)
                 summary = result["summary"]
                 rate = f"{summary['fallback_draws']} din {summary['evaluated']} extrageri jucate"

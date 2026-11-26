@@ -58,6 +58,7 @@ def main(project, runtime):
     import job_queue
     from covering.lr_budget import FOUR_PLUS, recommend_games
     from covering import lr_pool_budget
+    from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
     from loto_enterprise.core import lr_budget_forecast as forecast
     from loto_enterprise.core import lr_walk_forward
     from loto_enterprise.core.lr_played_portfolio import layout_identity
@@ -161,20 +162,26 @@ def main(project, runtime):
 
         game = "5/40"
         source = (Path(LABELS[game]).name, pd.read_csv(LABELS[game]))
+        # At 300 lei the direct 19-number pool leaves only 17 of the 36 eligible balls.
+        budget = 300
+        template, = recommend_games(budget, FOUR_PLUS, game)
+        required = forecast.budget_plan_scheme(template).n
+        available = LR_RESTRICTED_RANGE[1] - LR_RESTRICTED_RANGE[0] + 1 - required
+        assert (required, available) == (19, 17)
         impossible, = forecast.recommend_playable_games(
-            200, FOUR_PLUS, game, histories={game: source}, inverse=True, number_range=(10, 40),
+            budget, FOUR_PLUS, game, histories={game: source}, inverse=True, number_range=LR_RESTRICTED_RANGE,
             **forecast_options,
         )
-        template, = recommend_games(200, FOUR_PLUS, game)
-        assert not impossible.get("tickets") and "15" in impossible["forecast_error"] and "16" in impossible["forecast_error"]
+        assert not impossible.get("tickets")
+        assert str(available) in impossible["forecast_error"] and str(required) in impossible["forecast_error"]
         try:
             lr_walk_forward.validate_lr_walk_forward(
-                game, source, budget_lei=200, objective=FOUR_PLUS, scheme=forecast.budget_plan_scheme(template),
+                game, source, budget_lei=budget, objective=FOUR_PLUS, scheme=forecast.budget_plan_scheme(template),
                 inverse=True, restricted=True, dynamic=True, lookback=100, hit_target=4, joker_size=5,
                 depth=1, replay_policy="daily",
             )
         except ValueError as exc:
-            assert "15" in str(exc) and "16" in str(exc)
+            assert str(available) in str(exc) and str(required) in str(exc)
             phases["impossible"] = {"generator": impossible["forecast_error"], "walk_forward": str(exc)}
         else:
             raise AssertionError("An infeasible 5/40 layout got evaluated")

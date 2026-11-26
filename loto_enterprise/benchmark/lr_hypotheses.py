@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from covering.lr_selection import resolve_lr_scheme
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity, rank_lr_pool
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES, decision
 from loto_enterprise.benchmark.lr_provenance import lr_semantics
 from loto_enterprise.benchmark.curated import apply_curation, resolve_methods_per_game
@@ -340,11 +340,11 @@ def benchmark_lr_hypotheses(
         lot.bench_key, lot.name, "", [], lot.max_n, lot.draw_n,
         pool_extra=scheme.n - lot.pick_n, pick_n=lot.pick_n, history_cutoffs=training_cutoffs(engine.data),
     )
-    first, last = (10, min(40, lot.max_n)) if restricted else (1, lot.max_n)
+    first, last = LR_RESTRICTED_RANGE if restricted else (1, lot.max_n)
     main_target = decision.game_hit_target(main.key, hit_target)
     urns = [
         _bench_urn(
-            "Urna principală", matrix, main, scheme.n, tuple(range(first, last + 1)),
+            "Urna principală", matrix, main, scheme.n, tuple(range(first, min(last, lot.max_n) + 1)),
             scheme.n if inverse else 0, scheme.n, scheme, dynamic, lookback, main_target, cancel_path,
             calendar=dates is not None,
         ),
@@ -366,7 +366,7 @@ def benchmark_lr_hypotheses(
             calendar=dates is not None,
         )
         if report["protocol"]:
-            report["protocol"] += " Intervalul 10–40 privește numai urna principală. Urna 2 este evaluată la top-1."
+            report["protocol"] += " Intervalul restrâns se aplică numai urnei principale. Urna 2 este evaluată la top-1."
         urns.append(report)
     portfolio = None
     if layout is not None:
@@ -389,7 +389,7 @@ def benchmark_lr_hypotheses(
         "game": game_id, "scheme_code": scheme.code,
         "semantics": semantics, "portfolio": portfolio,
         **({"portfolio_refinement": portfolio["portfolio_refinement"]} if portfolio and "portfolio_refinement" in portfolio else {}),
-        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
+        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "restricted_range": list(LR_RESTRICTED_RANGE),
         "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(dates) else None,
         "inverse": bool(inverse), "restricted": bool(restricted), "lookback": lookback, "urns": urns,

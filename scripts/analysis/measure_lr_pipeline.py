@@ -53,6 +53,7 @@ def main():
     from covering.lr_budget import FOUR_PLUS, recommend_games
     from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, recommend_playable_games
+    from loto_enterprise.core.lr_range_analysis import RANGES
     from loto_enterprise.core.lr_walk_forward import validate_lr_walk_forward
     if not os.environ.get("LOTO_RUNTIME_DIR") or not os.environ.get("LOTO_WF_CACHE_DIR"):
         raise ValueError("Set isolated runtime and cache paths.")
@@ -67,7 +68,7 @@ def main():
     supports_budget = "budget_lei" in inspect.signature(benchmark_lr_hypotheses).parameters
     scenarios = {
         "generate": lambda: recommend_playable_games(budget, FOUR_PLUS, game, {game: source},
-                    inverse=args.inverse, number_range=(10,40) if args.restricted else None,
+                    inverse=args.inverse, number_range=RANGES[1] if args.restricted else None,
                     pool_codes={game: scheme}, dynamic=False, hit_target=4, joker_size=3)[0],
         "rebench": lambda: benchmark_lr_hypotheses(game, source, **options, **(
                     {"budget_lei": budget, "objective": FOUR_PLUS} if supports_budget else {})),
@@ -76,7 +77,7 @@ def main():
     }
     report = {"python": platform.python_version(), "system": platform.platform(), "game": game,
               "rows": len(frame), "csv_sha256": hashlib.sha256(frame.to_csv(index=False).encode()).hexdigest(),
-              "options": options, "budget_lei": budget, "timings": {}}
+              "options": options, "restricted_range": RANGES[1], "budget_lei": budget, "timings": {}}
     for name, fn in scenarios.items():
         runs = []
         for label in ("first", "repeat"):

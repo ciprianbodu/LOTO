@@ -13,7 +13,7 @@ import pandas as pd
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_catalog_cache import catalog_cache
 from covering.lr_pool_budget import positional_recipe, restrict_to_pool
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark.lr_provenance import lr_semantics
@@ -31,7 +31,7 @@ from loto_enterprise.core.lr_range_timing import phase_evidence, range_timing
 from loto_enterprise.core.score_validation import has_usable_score_variance
 
 
-RANGES = (None, (10, 40))
+RANGES = (None, LR_RESTRICTED_RANGE)
 VALIDATION_DRAWS = 100
 RECENT_DRAWS = 25
 
@@ -225,19 +225,21 @@ def _decision(rows):
     if not rows[0]["objective_evaluated"]:
         return None, "Lipsesc rezultate valide din Urna 2 pentru a compara premiile pe perioada de test."
     restricted = rows[1]
+    low, high = restricted["range"]
+    interval = f"{low}–{high}"
     if not restricted["feasible_now"]:
         if error := restricted.get("capacity_error"):
             return None, error
-        return None, "În intervalul 10–40, selectorul nu a produs bilete jucabile pentru schema din buget."
+        return None, f"În intervalul {interval}, selectorul nu a produs bilete jucabile pentru schema din buget."
     if restricted["infeasible"]:
-        return None, "Intervalul 10–40 nu a permis aceeași dimensiune a pool-ului la toate extragerile de validare."
+        return None, f"Intervalul {interval} nu a permis aceeași dimensiune a pool-ului la toate extragerile de validare."
     if restricted["adjusted_p"] > 0.05 or restricted["paired_wins"] <= restricted["paired_losses"]:
-        return None, "Pe aceleași extrageri, avantajul intervalului 10–40 față de baza completă nu a atins pragul statistic de 5%."
+        return None, f"Pe aceleași extrageri, avantajul intervalului {interval} față de baza completă nu a atins pragul statistic de 5%."
     if not restricted["stable"]:
-        return None, "Intervalul 10–40 a pierdut teren în una dintre perioadele de verificare."
+        return None, f"Intervalul {interval} a pierdut teren în una dintre perioadele de verificare."
     if not restricted["phase"]["supports"]:
-        return None, "La pauze similare sunt prea puține observații sau rezultatele intervalului 10–40 sunt mai slabe."
-    return restricted["range"], "Intervalul 10–40 a depășit baza completă pe variante și a trecut verificările de stabilitate și de pauză comparabilă."
+        return None, f"La pauze similare sunt prea puține observații sau rezultatele intervalului {interval} sunt mai slabe."
+    return restricted["range"], f"Intervalul {interval} a depășit baza completă pe variante și a trecut verificările de stabilitate și de pauză comparabilă."
 
 
 
@@ -325,7 +327,7 @@ def compare_budget_ranges(
         protocol += " La 5/40 se evaluează toate cele șase numere extrase."
     protocol += (
         " Validarea folosește ultimele 100 de extrageri eligibile. Avantajul se testează în perechi "
-        "între 10–40 și baza completă, cu un prag de 5%, și se verifică în ambele jumătăți, "
+        "între intervalul restrâns și baza completă, cu un prag de 5%, și se verifică în ambele jumătăți, "
         "în ultimele 25 de extrageri și la pauze similare."
     )
     if dates is not None:

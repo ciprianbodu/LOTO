@@ -134,7 +134,7 @@ def test_other_country_uses_general_rebench_with_any_saved_lr_options(monkeypatc
 
 def test_rebench_uses_individual_bases_until_the_global_range_is_forced(monkeypatch):
     choices = dict(lr_budget_game="all", lr_budget_objective=FOUR_PLUS, lr_inverse_val=False,
-                   lr_restricted_val=False, base_choices={("joker", False): "auto", ("5/40", False): "10–40"})
+                   lr_restricted_val=False, base_choices={("joker", False): "auto", ("5/40", False): "5–40"})
     monkeypatch.setitem(app.STATE, "datasets", [])
     monkeypatch.setattr(app, "_load_missing_bench_histories", lambda games: None)
     options = {game: settings for game, _, settings in app._lr_rebench_jobs(choices, 171)}

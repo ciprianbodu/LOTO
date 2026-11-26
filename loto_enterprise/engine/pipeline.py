@@ -88,8 +88,8 @@ class PipelineMixin:
         restrict_base_min / restrict_base_max: preferință OPȚIONALĂ a
             utilizatorului — restrânge candidații la intervalul [min, max]
             (0 pe oricare capăt = capătul rămâne liber; ambele 0 = fără
-            restricție, implicit). Exemplu: min 10 și max 40 înseamnă „6 din
-            10–40" în loc de „6 din 1–49".
+            restricție, implicit). Exemplu: min 5 și max 40 înseamnă „6 din
+            5–40" în loc de „6 din 1–49".
             NU are avantaj statistic demonstrat: probabilitatea de hit a unui pool
             de dimensiune fixă e identică matematic (hipergeometric) indiferent de
             care numere îl compun — confirmat empiric pe istoricul acestei

@@ -56,7 +56,7 @@ def test_daily_policy_replays_real_generator_and_ignores_later_draws():
     assert first["tickets"] == rerun["draws"][0]["tickets"]
     generated, = recommend_playable_games(
         100, FOUR_PLUS, "6/49", {"6/49": ("sample.csv", frame.iloc[:20])},
-        inverse=True, dynamic=True, number_range=(10, 40), pool_codes={"6/49": code}, hit_target=4)
+        inverse=True, dynamic=True, number_range=(5, 40), pool_codes={"6/49": code}, hit_target=4)
     assert first["tickets"] == generated["tickets"]
     assert generated["evaluation"]["version"] == 2
     assert generated["evaluation"]["layout"] == first["layout_id"]

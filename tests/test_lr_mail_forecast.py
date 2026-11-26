@@ -1,4 +1,4 @@
-"""The email adds just the inverse 10–40 option of each actual completed job."""
+"""The email adds just the inverse 5–40 option of each actual completed job."""
 
 from copy import deepcopy
 
@@ -33,7 +33,7 @@ def test_different_budget_width_keeps_exact_original_main_pool():
     assert set(result) == {"inverse_reduced"}
     forecast = result["inverse_reduced"]
     assert forecast["excluded_pool"] == original and forecast["code"] == 57 and forecast["dynamic"]
-    assert forecast["number_range"] == (10, 40) and forecast["eligible_count"] == 24
+    assert forecast["number_range"] == (5, 40) and forecast["eligible_count"] == 24
     assert forecast["rows"] == 12 and len(forecast["pool"]) == 12
     assert set(forecast["pool"]) <= set(range(17, 41))
     assert forecast["tickets"][0][0]["numbers"] == forecast["pool"]
@@ -52,7 +52,7 @@ def test_joker_bonus_uses_whole_displayed_pool_even_if_hard_core_has_only_one_ba
     record = _record("joker", [1, 2, 3, 4, 6, 8, 10], 45,
                      joker_pool=[20, 7, 10], hard_core_joker=[7], dynamic_method=False)
     f = mail.prepare_inverse_mail_pools(record, _source("joker"), budget_lei=100, joker_size=1)["inverse_reduced"]
-    assert f["code"] == 24 and f["number_range"] == (10, 40) and not f["dynamic"]
+    assert f["code"] == 24 and f["number_range"] == (5, 40) and not f["dynamic"]
     assert f["excluded_pool"] == record["data"]["hard_core"]
     assert f["excluded_jokers"] == (7, 10, 20) and f["eligible_joker_count"] == 17
     assert len(f["jokers"]) == 3 and set(f["jokers"]).isdisjoint({7, 10, 20})
@@ -68,10 +68,10 @@ def test_missing_or_mismatched_source_preserves_normal_without_substitution(miss
 
 
 def test_infeasible_range_stays_visible_without_silently_switching_to_full():
-    record = _record("6/49", list(range(10, 26)), 59)
-    result = mail.prepare_inverse_mail_pools(record, _source("6/49"), budget_lei=300)
+    record = _record("5/40", list(range(5, 24)), 48)
+    result = mail.prepare_inverse_mail_pools(record, _source("5/40"), budget_lei=300)
     assert set(result) == {"inverse_reduced"}
-    assert "15 numere eligibile" in result["inverse_reduced"]["error"]
+    assert "17 numere eligibile" in result["inverse_reduced"]["error"]
     assert "pool" not in result["inverse_reduced"]
 
 
@@ -89,7 +89,7 @@ def test_only_one_inverse_call_and_job_settings_win_over_later_controls(monkeypa
     assert len(calls) == 1
     budget, objective, game, options = calls[0]
     assert budget == 105 and objective == ANY_PRIZE and game == "6/49"
-    assert options["inverse"] and options["exclude_generated_pool"] and options["number_range"] == (10, 40)
+    assert options["inverse"] and options["exclude_generated_pool"] and options["number_range"] == (5, 40)
     assert options["lookback"] == 25 and not options["dynamic"] and options["hit_target"] == 5
     assert outcome["inverse_reduced"]["error"] == "eroare la un singur joc"
 

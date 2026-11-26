@@ -20,7 +20,7 @@ def history(game):
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
-@pytest.mark.parametrize("number_range", [(10, 40), (12, 38), (10, 36)])
+@pytest.mark.parametrize("number_range", [(5, 40), (12, 38), (10, 36)])
 def test_normal_and_inverse_benchmark_selected_main_range(monkeypatch, dynamic, number_range):
     first, last = number_range
     observed = []
@@ -77,7 +77,7 @@ def test_main_range_preserves_generated_joker_from_separate_urn():
 def test_each_distinct_range_is_part_of_dynamic_forecast_cache():
     options = dict(histories={"6/49": ("source.csv", history("6/49"))}, pool_codes={})
     budget._dynamic_scores.cache_clear()
-    for limits in [(10, 40), (12, 38), (15, 35), (12, 38)]:
+    for limits in [(5, 40), (12, 38), (15, 35), (12, 38)]:
         plan, = budget.recommend_playable_games(200, FOUR_PLUS, "6/49", number_range=limits, **options)
         assert plan["forecast"]["number_range"] == limits
     cache = budget._dynamic_scores.cache_info()

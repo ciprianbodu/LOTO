@@ -54,7 +54,7 @@ def _frequency(frame, allowed, count):
 def test_daily_scoring_matches_independent_frequency_and_official_variants(inverse, restricted):
     frame = _frame()
     frame.loc[18, "date"] = frame.loc[17, "date"]
-    frame.loc[18, [f"n{i}" for i in range(1, 7)]] = [10, 16, 22, 28, 34, 40]
+    frame.loc[18, [f"n{i}" for i in range(1, 7)]] = [5, 16, 22, 28, 34, 40]
     frame.loc[19, [f"n{i}" for i in range(1, 7)]] = range(41, 47)
     progress = []
     report = _run(
@@ -64,8 +64,8 @@ def test_daily_scoring_matches_independent_frequency_and_official_variants(inver
     assert report["summary"]["training_rows"] == 17 and report["training_end"] == "2024-01-17"
     assert report["summary"]["rows"] == 3 and report["summary"]["days"] == 2
     assert report["summary"]["evaluated"] == 3 and progress == [(0, 3), (1, 3), (2, 3), (3, 3)]
-    expected_in_range = frame.iloc[17:, :6].isin(range(10, 41)).all(axis=1).sum()
-    assert report["summary"]["all_main_in_10_40"] == expected_in_range
+    expected_in_range = frame.iloc[17:, :6].isin(range(5, 41)).all(axis=1).sum()
+    assert report["summary"]["all_main_in_5_40"] == expected_in_range
     assert report["summary"]["fallback_draws"] == report["summary"]["evaluated"] == 3
     assert report["summary"]["fallback_by_role"]["selected_method"] == 3
     assert report["summary"]["fallback_by_role"]["direct_selection"] == (3 if inverse else 0)
@@ -73,7 +73,7 @@ def test_daily_scoring_matches_independent_frequency_and_official_variants(inver
     assert report["methods"]["tested"]["loto_6_49"]["source"] == "training_frequency"
     assert (report["scheme_code"], report["price_bani"], report["variants"]) == (49, 12050, 15)
     assert report["max_consecutive_run"] == 2
-    base = set(range(10, 41) if restricted else range(1, 50))
+    base = set(range(5, 41) if restricted else range(1, 50))
     assert [row["training_rows"] for row in report["draws"]] == [17, 17, 19]
     for row in report["draws"]:
         origin = row["training_rows"]
@@ -103,7 +103,7 @@ def test_auto_and_both_fitted_decisions_use_only_the_pre_holdout_source(monkeypa
         assert source == "fixture.csv"
         assert earlier.index.tolist() == list(range(15))
         calls.append(("auto", options["inverse"]))
-        return {"recommended_range": (10, 40), "reason": "Justified in training"}
+        return {"recommended_range": (5, 40), "reason": "Justified in training"}
 
     def fit(game, training, **options):
         assert training[1].index.tolist() == list(range(15))
@@ -209,7 +209,7 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
                     "dynamic": True, "lookback": 65, "hit_target": 4,
                 },
                 "result": {
-                    "history_hash": fingerprint, "semantics": signature,
+                    "history_hash": fingerprint, "semantics": signature, "restricted_range": [5, 40],
                     "max_consecutive_run": 2,
                     "urns": [{"game_key": "loto_6_49", "decision": winner}],
                 },
@@ -218,7 +218,7 @@ def test_inverse_daily_pool_equals_generation_on_same_prefix_and_fitted_profiles
         ]
         generated, = recommend_playable_games(
             171, FOUR_PLUS, "6/49", {"6/49": prefix}, pool_codes={"6/49": 49}, inverse=True,
-            number_range=(10, 40) if restricted else None, lookback=65, hit_target=4, lr_rebench_entries=profiles,
+            number_range=(5, 40) if restricted else None, lookback=65, hit_target=4, lr_rebench_entries=profiles,
         )
         forecast = generated["forecast"]
         assert forecast["selection"]["source"] == "lr_rebench"
@@ -270,8 +270,8 @@ def test_joker_requires_at_least_one_valid_prior_bonus_day():
 
 def test_infeasible_range_rejected_before_fitting(monkeypatch):
     monkeypatch.setattr(wf, "benchmark_lr_hypotheses", lambda *args, **kwargs: pytest.fail("Fitting an infeasible pool"))
-    with pytest.raises(ValueError, match="rămân 15 numere eligibile.*necesită 16"):
-        _run(_frame(), budget_lei=400, restricted=True, inverse=True)
+    with pytest.raises(ValueError, match="rămân 17 numere eligibile.*necesită 19"):
+        _run(_frame(maximum=40), "5/40", budget_lei=300, restricted=True, inverse=True)
 
 
 def test_cancellation_keeps_the_run_from_finishing(tmp_path):

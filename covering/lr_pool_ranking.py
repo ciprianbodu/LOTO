@@ -8,6 +8,7 @@ from loto_enterprise.core.ranking import (
 )
 
 LR_MAX_CONSECUTIVE_RUN = 2
+LR_RESTRICTED_RANGE = (5, 40)
 
 
 def lr_pool_capacity(eligible: Iterable[int]) -> int:

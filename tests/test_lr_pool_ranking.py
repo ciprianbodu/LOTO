@@ -44,7 +44,7 @@ def test_best_legal_rank_is_skipped_only_when_it_blocks_completion():
 
 
 def test_capacity_uses_actual_labels_and_never_relaxes_or_shortens():
-    assert lr_pool_capacity(range(10, 41)) == 21
+    assert lr_pool_capacity(range(5, 41)) == 24
     assert lr_pool_capacity(range(1, 50)) == 33
     assert lr_pool_capacity([10, 11, 12, 14, 15, 16, 17, 20]) == 6
     with pytest.raises(ValueError, match="cel mult 6 din cele 8.*necesită 7"):

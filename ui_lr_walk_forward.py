@@ -11,6 +11,7 @@ from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_snapshot
+from ui_shared import report_restricted_range
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +20,20 @@ def _date(raw):
     return date.fromisoformat(str(raw)[:10]).strftime("%d.%m.%Y") if raw else "—"
 
 
-def _range_text(restricted):
+def _range_text(restricted, bounds):
+    if bounds is None:
+        return "Interval neconfirmat"
     if restricted is None:
         return "Bază aleasă automat"
-    return "Pool restrâns între 10 și 40" if restricted else "Baza completă"
+    return f"Pool restrâns între {bounds[0]} și {bounds[1]}" if restricted else "Baza completă"
 
 
-def _choices(settings):
+def _choices(settings, result=None):
+    bounds = report_restricted_range(settings, result)
     mode = "Metoda inversă" if settings.get("inverse") else "Metoda normală"
     goal = "orice premiu" if settings.get("objective") == ANY_PRIZE else "4+ pe o variantă"
     policy = " · Fixed Share pe bilete" if settings.get("selection_policy") == ONLINE_TICKET_EXPERTS else ""
-    return (f"{mode} · {_range_text(settings.get('restricted'))} · {lei_text(settings['budget_lei'])} · "
+    return (f"{mode} · {_range_text(settings.get('restricted'), bounds)} · {lei_text(settings['budget_lei'])} · "
             f"{goal} · fereastră de test {settings['depth']:g}%{policy}")
 
 
@@ -94,12 +98,16 @@ def _draw_table(draws, inverse, joker):
 
 def _game_result(entry):
     settings = entry["settings"]
+    result = entry.get("result") or {}
+    bounds = report_restricted_range(settings, result)
+    if bounds is None:
+        ui.label(f"{entry['name']} · Intervalul din validarea salvată este nevalid sau contradictoriu.").classes("text-warning")
+        return
     with ui.column().classes("w-full min-w-0 gap-1"):
         ui.label(entry["name"]).classes("text-subtitle1 text-weight-bold")
-        ui.label(f"{_choices(settings)} · {entry['source']}").classes("text-body2")
+        ui.label(f"{_choices(settings, result)} · {entry['source']}").classes("text-body2")
         selector = "dinamic" if settings["dynamic"] else "fix"
         lookback = settings["lookback"] or 100
-        result = entry.get("result") or {}
         code = f"Cod LR {settings['scheme']}"
         if "variants" in result and "price_bani" in result:
             price = f"{result['price_bani'] / 100:.2f}".replace(".", ",")
@@ -128,16 +136,17 @@ def _game_result(entry):
         summary = result["summary"]
         if result.get("requested_restricted") is None:
             base_label = "Baza inițială" if result.get("replay_policy") == "daily" else "Baza folosită în test"
-            ui.label(f"{base_label} · {_range_text(result['restricted'])}").classes("text-body2")
+            ui.label(f"{base_label} · {_range_text(result['restricted'], bounds)}").classes("text-body2")
         ui.label(
             f"Antrenare inițială până la {_date(result['training_end'])} · {summary['training_rows']} extrageri. "
             f"Test de la {_date(summary['first_date'])} până la {_date(summary['last_date'])} · "
             f"{summary['rows']} extrageri în {summary['days']} zile."
         ).classes("text-caption")
-        if (in_range := summary.get("all_main_in_10_40")) is not None:
+        low, high = bounds
+        if (in_range := summary.get(f"all_main_in_{low}_{high}")) is not None:
             total = summary["rows"]
             share = f"{100 * in_range / total:.2f}%".replace(".", ",")
-            ui.label(f"Toate cele {lot.draw_n} numere din urna principală au fost între 10 și 40 "
+            ui.label(f"Toate cele {lot.draw_n} numere din urna principală au fost între {low} și {high} "
                      f"în {share} dintre extragerile testate ({in_range} din {total}).").classes("text-body2")
         evaluated = summary["objective_evaluated"]
         hits = summary["objective_hits"]

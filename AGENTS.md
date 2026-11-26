@@ -2104,18 +2104,18 @@ maximul catalogului. Fiecare zonă de pe bilet păstrează o schemă redusă
 oficială, iar costul total include taxa de bilet.
 
 „Metoda inversă” pornește de la pool-ul normal pentru același joc, cod,
-istoric și aceeași bază de selecție. Cu intervalul 10–40 activ, calculează
-pool-ul normal între 10 și 40 inclusiv, apoi alege numerele inverse dintre
+istoric și aceeași bază de selecție. Cu intervalul 5–40 activ, calculează
+pool-ul normal între 5 și 40 inclusiv, apoi alege numerele inverse dintre
 cele rămase în interval. Excluderea se aplică tuturor zonelor biletului. În modul dinamic, candidații și martorul sunt
 evaluați pe variantele schemei oficiale. În modul fix, Re-Bench reevaluează
 metodele pe numerele eligibile în ferestrele istorice obișnuite, în memorie.
 La Joker, excluderea se aplică separat și pool-ului Urnei 2. Dacă numerele
 rămase sunt insuficiente, panoul arată câte sunt disponibile și câte ar trebui.
 Înainte de generarea biletelor, panoul compară baza completă cu numerele între
-10 și 40 inclusiv, separat pentru fiecare joc. Bugetul stabilește
+5 și 40 inclusiv, separat pentru fiecare joc. Bugetul stabilește
 aceleași scheme reduse pentru toate bazele. În modul invers, fiecare comparație
 folosește complementul pool-ului normal disponibil înainte de extragerea
-respectivă. Intervalul restrânge numai urna principală. În detaliile biletului
+respectivă. Intervalul 5–40 cuprinde 36 de numere și restrânge numai urna principală. Rapoartele salvate pentru 10–40 păstrează intervalul evaluat. În detaliile biletului
 apar pool-ul exclus și numerele de jucat.
 
 Pentru jocurile românești, pool-ul principal se formează în ordinea scorurilor.
@@ -2127,7 +2127,7 @@ este semnalată la generare.
 
 Pentru jocurile românești, butonul „RE-BENCH” evaluează metoda normală sau
 inversă cu schema din recomandarea LR, pe istoricul încărcat la lansare.
-Cu Auto oprit, utilizatorul stabilește separat metoda inversă, intervalul 10–40
+Cu Auto oprit, utilizatorul stabilește separat metoda inversă, intervalul 5–40
 și Fixed Share. Bifele manuale se păstrează când se revine din Auto. Cu Auto pornit,
 aplicația compară cele opt combinații pentru fiecare joc în bugetul cerut, pe cel mult
 12 zile complete anterioare validării finale. Numără extragerile cu cel puțin o
@@ -2136,7 +2136,7 @@ variantă de 4+, păstrează explicația cazurilor imposibile și, la egalitate,
 trei opțiuni alese pentru fiecare joc. Fixed Share selectează regula de ordonare
 a numerelor după istoricul biletelor, respectând baza și excluderile decise.
 Cu ambele bife active, la fiecare zi de
-test se exclud din 10–40 numerele pool-ului direct calculat pe același
+test se exclud din 5–40 numerele pool-ului direct calculat pe același
 interval din extragerile anterioare. Toate extragerile din ferestrele de
 test participă la evaluare. La Joker, intervalul privește prima urnă.
 „Generează recomandarea” aplică metodele și ponderile rezultate din Re-Bench
@@ -2164,7 +2164,7 @@ folosind numai extragerile din zilele precedente. În modul invers, tabelul arat
 pool-ul normal exclus și pool-ul jucat pe aceeași bază. Rezultatele numără
 separat potrivirile în pool și pe cea mai bună variantă oficială a biletelor.
 Raportul arată și la câte extrageri din perioada de test toate numerele
-principale au fost între 10 și 40, indiferent de metoda folosită.
+principale au fost între 5 și 40, indiferent de metoda folosită.
 
 Pentru fiecare interval, panoul numără extragerile în care toate numerele
 principale au fost în interval, dintre ultimele 100 de extrageri valide. Arată
@@ -2175,14 +2175,14 @@ aceeași zi au aceeași informație disponibilă înainte de evaluare.
 
 Selecția automată evaluează rezultatele pe variantele oficiale în ordine
 cronologică și compară rezultatele fiecărui interval cu baza completă la aceleași
-extrageri. Verifică avantajul intervalului 10–40 la pragul statistic de 5%,
+extrageri. Verifică avantajul intervalului 5–40 la pragul statistic de 5%,
 stabilitatea în ambele jumătăți ale perioadei și rezultatele recente. Verifică
 și cum s-au comparat biletele la pauze similare în trecut, folosind grupe de
 0–7, 8–14, 15–28 și cel puțin 29 de zile. Când lipsesc datele calendaristice,
 folosește pauza în extrageri. Pentru această verificare cere cel puțin opt
 date comparabile și un bilanț cel puțin egal. Dacă dovezile sunt insuficiente,
 recomandă baza completă disponibilă în modul ales. Utilizatorul poate alege
-manual baza completă sau intervalul 10–40, dacă schema încape în baza aleasă. În modul
+manual baza completă sau intervalul 5–40, dacă schema încape în baza aleasă. În modul
 fix, comparația estimează efectul filtrului păstrând pentru ambele baze metoda
 Re-Bench aleasă înaintea perioadei evaluate. În modul dinamic, selectorul se
 recalculează pentru fiecare dată. La Joker, pentru obiectivul „Orice premiu”,
@@ -2190,7 +2190,7 @@ simularea asociază fiecărei zone bila din urna secundară și arată câte rez
 au putut fi evaluate cu informațiile disponibile despre acea bilă.
 
 În mailul de rezultate, fiecare joc românesc are și o singură alternativă de
-joc, „Pool invers · baza redusă 10–40 inclusiv”. Aceasta exclude exact pool-ul
+joc, „Pool invers · baza redusă 5–40 inclusiv”. Aceasta exclude exact pool-ul
 normal afișat în același mesaj, inclusiv când bugetul cere o altă schemă pentru
 alternativă. Bugetul, obiectivul și istoricul provin din jobul de generare.
 Mesajul arată numerele selectate, câte au fost eligibile, codurile LR și zonele

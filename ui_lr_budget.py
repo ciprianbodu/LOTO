@@ -15,6 +15,7 @@ from covering.lr_budget import (
     maximum_scheme_budget_bani, recommend_games,
 )
 from covering.lr_pool_budget import positional_recipe
+from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, playable_plan_order, recommend_playable_games
 from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
@@ -23,10 +24,12 @@ from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 from loto_enterprise.core.ro_text import count, lei_text
 from ui_lr_portfolio import _percent, _price
 from ui_lr_rebench import lr_rebench_decisions
+from ui_shared import report_restricted_range
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
-_INVERSE_RANGE = (10, 40)
+LR_RESTRICTED_BASE = f"{LR_RESTRICTED_RANGE[0]}–{LR_RESTRICTED_RANGE[1]}"
+LR_RESTRICTED_LABEL = f"Pool restrâns între {LR_RESTRICTED_RANGE[0]} și {LR_RESTRICTED_RANGE[1]}"
 
 
 def _columns(fields):
@@ -59,19 +62,29 @@ def _ticket_validation(plan, result, *, auto_job=None):
     summary = result["summary"]
     if not summary.get("objective_evaluated") or not summary.get("evaluated"):
         raise ValueError(f"Validarea pentru {game} nu conține extrageri evaluabile.")
+    settings = result["settings"]
+    uses_range = auto_job is not None or ("restricted" in settings and settings["restricted"] is not False)
+    bounds = report_restricted_range(settings, result)
+    actual_bounds = plan["forecast"].get("number_range")
+    if (bounds is None or (uses_range and bounds != LR_RESTRICTED_RANGE)
+            or (settings.get("restricted") and actual_bounds not in (LR_RESTRICTED_RANGE, list(LR_RESTRICTED_RANGE)))):
+        raise ValueError(f"Intervalul validării pentru {game} diferă de intervalul biletului solicitat.")
     evidence = {key: result[key] for key in ("game", "source", "settings", "scheme_code", "history_hash", "summary")}
     if auto_job is not None:
         compared = auto_job["auto_options_result"]
         matched = ("scheme", "budget_lei", "objective", "lookback", "dynamic", "hit_target", "joker_size",
                    "inverse", "restricted", "selection_policy")
-        if (any(result["settings"].get(key) != auto_job.get(key) for key in matched)
+        if (report_restricted_range(settings, compared) != LR_RESTRICTED_RANGE
+                or any(settings.get(key) != auto_job.get(key) for key in matched)
                 or result.get("scheme_code") != auto_job["scheme"]
                 or compared["inverse"] != auto_job["inverse"] or compared["restricted"] != auto_job["restricted"]
                 or compared["fixed_share"] != (auto_job.get("selection_policy") == ONLINE_TICKET_EXPERTS)):
             raise ValueError(f"Validarea pentru {game} nu corespunde opțiunilor Auto ale biletului.")
         receipt = {key: compared[key] for key in ("inverse", "restricted", "fixed_share", "hits", "evaluated",
                                                   "days", "first_date", "last_date", "validation_start")}
-        evidence["settings"] = {**evidence["settings"], "auto_options_result": receipt}
+        if "restricted_range" in compared:
+            receipt["restricted_range"] = compared["restricted_range"]
+        evidence["settings"] = {**settings, "auto_options_result": receipt}
     return evidence
 
 
@@ -399,7 +412,7 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
                 "wait": _pair_label(chron.get("draws_since"), chron.get("days_since")),
                 "median": _pair_label(chron.get("median_gap_draws"), chron.get("median_gap_days")),
             })
-        value = "10–40" if forced else selected
+        value = LR_RESTRICTED_BASE if forced else selected
         if select_base is not None:
             with ui.row().classes("lr-choice-actions w-full items-center gap-2") as actions:
                 picker = ui.select(
@@ -460,6 +473,7 @@ def _budget_input_snapshot(forecast_inputs, game, budget_settings=None):
 
     inputs = forecast_inputs(game)
     digest = hashlib.sha256(refresh_catalog(lr_schemes.LR_DIR).encode())
+    digest.update(json.dumps(LR_RESTRICTED_RANGE).encode())
     methods = {name for lot in games_for_country("RO") if not game or game == lot.game_id
                for urn in lot.bench_keys for name in _methods(urn)}
     digest.update(method_formulas(methods).encode())
@@ -512,8 +526,11 @@ def _generate_rebench_tickets(jobs, profiles):
                                   or config.get("selection_policy") != options.get("selection_policy")))):
             raise ValueError("Istoricul sau setările jocurilor diferă de cererea de recomandare.")
         settings = profile["settings"]
+        bounds = report_restricted_range(settings, profile["result"])
+        uses_range = settings["restricted"] is not False or auto or config.get("auto_budget")
         if (profile["source"] != source[0] or settings["scheme"] != config["scheme"]
                 or any(settings[key] != config[key] for key in (*shared, "inverse"))
+                or bounds is None or (uses_range and bounds != LR_RESTRICTED_RANGE)
                 or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])
                 or (auto and (settings.get("selection_policy") != config.get("selection_policy")
                               or settings.get("auto_options_result") != config["auto_options_result"]))):
@@ -525,7 +542,7 @@ def _generate_rebench_tickets(jobs, profiles):
     plans = []
     for game, _, config in jobs:
         profile, = profiles[game]
-        limits = _INVERSE_RANGE if profile["settings"]["restricted"] else None
+        limits = LR_RESTRICTED_RANGE if profile["settings"]["restricted"] else None
         policy = config.get("selection_policy")
         plan, = _generate_selection(config["budget_lei"], config["objective"], {game: limits}, inputs,
                                     config["inverse"], selection_policy=policy, decisions=profiles)
@@ -566,8 +583,9 @@ def _register_live_plans(plans, inputs):
 
 def lr_base_choice(manual_choices, game, inverse, restricted):
     if restricted:
-        return _range_label(_INVERSE_RANGE)
-    return manual_choices.get((game, inverse), _range_label(None))
+        return LR_RESTRICTED_BASE
+    choice = manual_choices.get((game, inverse), _range_label(None))
+    return LR_RESTRICTED_BASE if choice == "10–40" else choice
 
 
 def initial_budget_amount(value, *, maximum_bani=None):
@@ -678,13 +696,13 @@ def lr_budget_panel(
                 'aria-label="Auto · alege cele trei opțiuni"'
             )
             ui.label("La generare, Auto alege separat pentru fiecare joc dacă folosește metoda inversă, "
-                     "pool-ul 10–40 și Fixed Share.").classes("text-caption")
+                     f"pool-ul {LR_RESTRICTED_BASE} și Fixed Share.").classes("text-caption")
         with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1") as manual_controls:
             inverse = ui.switch("Metoda inversă", value=initial_inverse is True).props('aria-label="Metoda inversă"').tooltip(
                 "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
             )
-            range_filter = ui.switch("Pool restrâns între 10 și 40", value=initial_restricted is True).props(
-                'aria-label="Pool restrâns între 10 și 40"'
+            range_filter = ui.switch(LR_RESTRICTED_LABEL, value=initial_restricted is True).props(
+                f'aria-label="{LR_RESTRICTED_LABEL}"'
             ).classes("max-w-full").tooltip(
                 "Limitele sunt incluse. La Joker, intervalul se aplică numai numerelor din prima urnă."
             )
@@ -704,7 +722,7 @@ def lr_budget_panel(
                  "generatorul trece la următorul din clasament.").classes("text-caption")
 
         with ui.column().classes("w-full gap-1 border-l-4 border-primary pl-3"):
-            low, high = _INVERSE_RANGE
+            low, high = LR_RESTRICTED_RANGE
             ui.label(
                 f"Șansa ca toate numerele principale extrase să fie între {low} și {high} inclusiv"
             ).classes("text-subtitle2 text-weight-bold")
@@ -766,7 +784,7 @@ def lr_budget_panel(
                         ui.label(game_options[game_id]).classes("text-body2 text-weight-bold")
                         for label, selected in (
                             ("Metoda inversă", config["inverse"]),
-                            ("Pool restrâns între 10 și 40", config["restricted"]),
+                            (LR_RESTRICTED_LABEL, config["restricted"]),
                             ("Fixed Share pe bilete", config.get("selection_policy") == ONLINE_TICKET_EXPERTS),
                         ):
                             ui.switch(label, value=selected).props(f'aria-label="{game_options[game_id]} · {label}"').disable()
@@ -945,8 +963,8 @@ def lr_budget_panel(
                         for report in reports:
                             gid = report["game"]
                             choice = lr_base_choice(manual_choices, gid, inverse_mode, forced)
-                            if choice == _range_label(_INVERSE_RANGE):
-                                limits = _INVERSE_RANGE
+                            if choice == LR_RESTRICTED_BASE:
+                                limits = LR_RESTRICTED_RANGE
                             elif choice == "auto":
                                 auto_reports[gid] = report
                                 limits = report.get("recommended_range")

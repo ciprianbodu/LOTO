@@ -150,7 +150,7 @@ def test_fixed_share_live_and_replay_agree_and_exclude_the_exact_direct_pool():
     frame.loc[8, "date"] = frame.loc[7, "date"]
     frame["joker"] = [n % 20 + 1 for n in range(len(frame))]
     frame.loc[12, "joker"] = None
-    settings = {"number_range": (10, 40), "lookback": 100, "joker_size": 5}
+    settings = {"number_range": (5, 40), "lookback": 100, "joker_size": 5}
     inputs = {"pool_codes": {}, "histories": {lot.game_id: ("joker.csv", frame)}}
     direct, = recommend_playable_games(
         100, FOUR_PLUS, lot.game_id, selection_policy=ONLINE_TICKET_EXPERTS, **inputs, **settings,
@@ -166,7 +166,7 @@ def test_fixed_share_live_and_replay_agree_and_exclude_the_exact_direct_pool():
     assert pools[1]["excluded_jokers"] == sorted(pools[0]["jokers"])
     assert not set(pools[0]["pool"]) & set(pools[1]["pool"])
     assert not set(pools[0]["jokers"]) & set(pools[1]["jokers"])
-    assert all(10 <= num <= 40 for pool in pools for num in pool["pool"])
+    assert all(5 <= num <= 40 for pool in pools for num in pool["pool"])
     assert all(longest_consecutive_run(pool["pool"]) <= 2 for pool in pools)
     assert pools[0]["selection"]["training_days"] == 14
     assert pools[0]["selection"]["training_draws"] == 15

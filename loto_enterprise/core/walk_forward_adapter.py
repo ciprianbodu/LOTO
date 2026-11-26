@@ -590,7 +590,7 @@ def _restrict_base_sig(
 ) -> str:
     """Sufix de cheie pentru restrângerea bazei; gol când e oprită.
 
-    Capătul de jos apare separat, ca 1..40 și 10..40 să nu împartă același cache.
+    Capătul de jos apare separat, ca 1..40 și 5..40 să nu împartă același cache.
     Capetele pe care motorul le tratează ca inexistente sunt aduse la aceeași
     formă înainte de hash: `min=1` e identic cu „fără capăt de jos", iar
     `max=max_num` e identic cu „fără capăt de sus" — altfel aceeași rulare

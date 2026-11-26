@@ -37,7 +37,7 @@ def test_range_bench_counts_draws_outside_interval_among_the_targets():
     result = _run(frame)
     urn, = result["urns"]
     assert (result["scheme_code"], result["inverse"], result["restricted"]) == (48, False, True)
-    assert (urn["pool_size"], urn["eligible_count"], urn["target"]) == (9, 31, 4)
+    assert (urn["pool_size"], urn["eligible_count"], urn["target"]) == (9, 36, 4)
     assert urn["folds"] == [10, 100]
     assert {row["method"] for row in urn["rows"]} == {"random", "frequency"}
     assert all((row["evaluated"], row["hit_rate"], row["avg_hits"]) == (20, 0.0, 0.0) for row in urn["rows"])
@@ -58,7 +58,7 @@ def test_undated_bench_states_that_the_csv_row_order_is_used():
     assert "înaintea primei extrageri evaluate" in urn["protocol"]
 
 
-@pytest.mark.parametrize(("restricted", "first_ball", "width"), [(False, 1, 49), (True, 10, 31)])
+@pytest.mark.parametrize(("restricted", "first_ball", "width"), [(False, 1, 49), (True, 5, 36)])
 def test_dynamic_inverse_uses_a_direct_pool_from_its_base_without_same_day_leakage(
     monkeypatch, restricted, first_ball, width,
 ):
@@ -109,8 +109,8 @@ def test_fixed_reference_is_trained_before_the_first_target_and_based_in_range(m
 
     monkeypatch.setattr(bench, "restricted_bench_scores", reference)
     urn, = _run(frame, inverse=True)["urns"]
-    assert calls == [(79, 9, set(range(1, 10)) | set(range(41, 50)), 4)]
-    assert urn["eligible_count"] == 22
+    assert calls == [(79, 9, set(range(1, 5)) | set(range(41, 50)), 4)]
+    assert urn["eligible_count"] == 27
     assert "fixată pe datele disponibile înaintea primei zile" in urn["protocol"]
     assert urn["decision"]["reference_members"] == [{"method": "frequency", "weight": 1.0}]
 
@@ -141,7 +141,8 @@ def test_inverse_excludes_unplayable_dates_equally_and_preserves_later_prefixes(
     frame = _history(maximum=40)
     frame.loc[83, "date"] = frame.loc[82, "date"]
     leaves_room = tuple(range(10, 40, 2))
-    too_compact = (40, 39, 37, 36, 34, 33, 31, 30, 28, 27, 25, 24, 22, 21, 19)
+    # The remaining 21 balls form seven triples, with room for only 14 picks.
+    too_compact = tuple(n for n in range(5, 41) if (n - 5) % 5 < 2)
     monkeypatch.setattr(bench, "_dynamic_predictor", lambda *_:
                         lambda origin: lambda _: too_compact if all_infeasible or origin % 2 == 0 else leaves_room)
     lengths = []
@@ -168,9 +169,9 @@ def test_inverse_excludes_unplayable_dates_equally_and_preserves_later_prefixes(
 
 
 def test_infeasible_inverse_range_preserves_true_capacity():
-    urn, = _run(_history(), scheme=59, inverse=True)["urns"]
-    assert (urn["pool_size"], urn["eligible_count"], urn["rows"]) == (16, 15, [])
-    assert "Sunt necesare 16" in urn["error"]
+    urn, = _run(_history(maximum=40), "5/40", scheme=48, inverse=True)["urns"]
+    assert (urn["pool_size"], urn["eligible_count"], urn["rows"]) == (19, 17, [])
+    assert "Sunt necesare 19" in urn["error"]
     assert urn["decision"] is None
 
 
@@ -180,7 +181,7 @@ def test_joker_range_affects_only_first_urn_and_bonus_uses_valid_prior_days():
     frame.loc[85, "joker"] = 0
     result = _run(frame, "joker", scheme=24, inverse=True, joker_size=5)
     main, bonus = result["urns"]
-    assert (main["pool_size"], main["eligible_count"]) == (10, 21)
+    assert (main["pool_size"], main["eligible_count"]) == (10, 26)
     assert (bonus["pool_size"], bonus["eligible_count"], bonus["target"]) == (1, 15, 1)
     assert len(bonus["rows"]) == 2
     assert all(row["evaluated"] == 19 for row in bonus["rows"])

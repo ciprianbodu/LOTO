@@ -10,7 +10,7 @@ import pandas as pd
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_pool_budget import positional_recipe, restrict_to_pool
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity, rank_lr_pool
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES
@@ -29,7 +29,6 @@ from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
 from loto_enterprise.core.ranking import rank_by_score
 
 
-_RANGE = (10, 40)
 _SELECTION_ROLES = ("selected_method", "joker_selection", "direct_selection", "direct_joker_selection")
 
 
@@ -134,12 +133,12 @@ def _day_forecast(
 
 def _summary(draws, days, start):
     scored = [draw for draw in draws if draw["pool_hits"] is not None]
-    low, high = _RANGE
+    low, high = LR_RESTRICTED_RANGE
     fallbacks = [{role for role in _SELECTION_ROLES if (draw.get(role) or {}).get("fallback")} for draw in scored]
     return {
         "rows": len(draws), "days": days, "evaluated": len(scored), "infeasible": len(draws) - len(scored),
         "first_date": draws[0]["date"], "last_date": draws[-1]["date"], "training_rows": start,
-        "all_main_in_10_40": sum(all(low <= n <= high for n in draw["numbers"]) for draw in draws),
+        f"all_main_in_{low}_{high}": sum(all(low <= n <= high for n in draw["numbers"]) for draw in draws),
         **{f"pool_{k}plus": sum(draw["pool_hits"] >= k for draw in scored) for k in range(3, 7)},
         **{f"ticket_{k}plus": sum(draw["ticket_hits"] >= k for draw in scored) for k in range(3, 7)},
         "paid_winning_variants": sum(d["winning_variants"] for d in scored)
@@ -212,17 +211,17 @@ def validate_lr_walk_forward(
             lookback=lookback, hit_target=hit_target, joker_size=joker_size, recipe=recipe,
             **({"selection_policy": selection_policy} if selection_policy else {}),
         )
-        restricted = comparison["recommended_range"] == _RANGE
+        restricted = comparison["recommended_range"] == LR_RESTRICTED_RANGE
         auto_reason = comparison["reason"]
     check(force=True)
 
     outside = set()
     if restricted:
-        low, high = _RANGE
+        low, high = LR_RESTRICTED_RANGE
         outside = {n for n in range(1, lot.max_n + 1) if not low <= n <= high}
     eligible = set(range(1, lot.max_n + 1)).difference(outside)
     available = len(eligible) - (scheme.n if inverse else 0)
-    if error := main_pool_shortfall(scheme, len(eligible), scheme.n if inverse else 0, _RANGE if restricted else None):
+    if error := main_pool_shortfall(scheme, len(eligible), scheme.n if inverse else 0, LR_RESTRICTED_RANGE if restricted else None):
         raise ValueError(error)
     capacity = lr_pool_capacity(eligible)
     if capacity < scheme.n:
@@ -294,7 +293,7 @@ def validate_lr_walk_forward(
         paid_by_scope = {
             base: replay_budget_portfolios(
                 plan, lot, scheme, matrix, frame, origins, inverse=inverse and not use_paid_reference,
-                dynamic=dynamic, lookback=lookback, joker_size=joker_size, number_range=_RANGE if base else None,
+                dynamic=dynamic, lookback=lookback, joker_size=joker_size, number_range=LR_RESTRICTED_RANGE if base else None,
                 check=check, recipe=recipe,
             ) for base in scopes
         }
@@ -313,12 +312,12 @@ def validate_lr_walk_forward(
                                                    inverse=inverse, lookback=lookback, hit_target=hit_target,
                                                    joker_size=joker_size, recipe=recipe,
                                                    **({"selection_policy": selection_policy} if selection_policy else {}))
-                    daily_restricted = range_report["recommended_range"] == _RANGE
+                    daily_restricted = range_report["recommended_range"] == LR_RESTRICTED_RANGE
                 if selection_policy == "online_ticket_experts":
                     from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
                     daily_plan = online_ticket_forecast(
                         lot, plan, scheme, frame.iloc[:origin], inverse=inverse,
-                        number_range=_RANGE if daily_restricted else None, lookback=lookback,
+                        number_range=LR_RESTRICTED_RANGE if daily_restricted else None, lookback=lookback,
                         joker_size=joker_size, objective=objective, cancelled=check, recipe=recipe)
                 else:
                     snapshot = paid_by_scope.get(daily_restricted, {}).get(origin)
@@ -326,7 +325,7 @@ def validate_lr_walk_forward(
                     daily_plan, = recommend_playable_games(
                         budget_lei, objective, game_id, prefix, pool_codes={game_id: scheme.code},
                         lookback=lookback, dynamic=dynamic, joker_size=joker_size, inverse=inverse,
-                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None,
+                        hit_target=hit_target, number_range=LR_RESTRICTED_RANGE if daily_restricted else None,
                         paid_recipes={game_id: recipe}, **options)
                 forecast = daily_plan.get("forecast")
                 if not forecast or not daily_plan["tickets"]:
@@ -411,7 +410,7 @@ def validate_lr_walk_forward(
         "game": game_id, "scheme_code": scheme.code, "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": day_labels[-1], "training_end": day_labels[start - 1], "depth": depth,
         "inverse": bool(inverse), "restricted": bool(restricted), "requested_restricted": requested_restricted,
-        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
+        "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "restricted_range": list(LR_RESTRICTED_RANGE),
         "dynamic": bool(dynamic), "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
         "selection_policy": selection_policy, "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
         "auto_reason": auto_reason, "summary": _summary(draws, len(days), start), "draws": draws,

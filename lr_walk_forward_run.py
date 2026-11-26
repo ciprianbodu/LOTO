@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from nicegui import run
 
+from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from loto_enterprise.core.lotteries import require_lottery
 from runtime_paths import RUNTIME_ROOT
 from ui_shared import atomic_write_json
@@ -115,6 +116,9 @@ def _validated_games(finished):
         if not isinstance(summary, dict) or not isinstance(draws, list) or not isinstance(refinement, dict):
             continue
         game, settings = entry["game"], entry["settings"]
+        if (settings.get("restricted") is not False and "restricted_range" in settings
+                and result.get("restricted_range") != settings["restricted_range"]):
+            continue
         if (entry.get("error") or result.get("error") or refinement.get("complete") is not True
                 or result.get("game") != game or result.get("scheme_code") != settings.get("scheme")
                 or result.get("objective") != settings.get("objective") or not result.get("history_hash")):
@@ -154,8 +158,9 @@ async def _run_games(jobs, report, cancel_path):
                 try:
                     from loto_enterprise.core.lr_walk_forward import validate_lr_walk_forward
 
+                    options = {k: v for k, v in entry["settings"].items() if k != "restricted_range"}
                     result = await run.io_bound(
-                        validate_lr_walk_forward, entry["game"], history, **entry["settings"],
+                        validate_lr_walk_forward, entry["game"], history, **options,
                         cancel_path=cancel_path, progress_cb=progress_cb,
                     )
                     if not isinstance(result, dict):
@@ -213,6 +218,7 @@ async def run_lr_walk_forward(jobs, *, completed_results=None) -> bool:
             source = "Istoric încărcat"
             history = (source, history.copy(deep=True))
         settings = deepcopy(options)
+        settings["restricted_range"] = list(LR_RESTRICTED_RANGE)
         settings["scheme"] = getattr(settings["scheme"], "code", settings["scheme"])
         captured.append(({"game": game, "name": lot.name, "source": source, "settings": settings}, history))
     if not captured:

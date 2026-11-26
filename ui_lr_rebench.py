@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from nicegui import run, ui
 
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from loto_enterprise.core.ro_text import lei_text
 from covering.lr_budget import recommend_games
@@ -27,7 +27,7 @@ from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_range_analysis import compare_budget_ranges
 from process_lock import file_lock
 from runtime_paths import RUNTIME_ROOT
-from ui_shared import atomic_write_json
+from ui_shared import atomic_write_json, report_restricted_range
 
 
 logger = logging.getLogger(__name__)
@@ -145,15 +145,21 @@ def _compact_profile(entry, finished_at):
             return None
         urns.append({field: urn[field] for field in fields})
     captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
-    for key in ("budget_lei", "objective", "auto_range_policy", "selection_policy", "auto_options_result"):
+    for key in ("budget_lei", "objective", "auto_range_policy", "selection_policy", "auto_options_result", "restricted_range"):
         if key in settings:
             captured_settings[key] = settings[key]
+    bounds = report_restricted_range(settings, result)
+    if bounds is None:
+        return None
+    if "restricted_range" in result:
+        captured_settings["restricted_range"] = list(bounds)
     captured_settings["scheme"] = scheme
     return {
         "game": game, "source": entry["source"], "settings": captured_settings, "finished_at": finished_at,
         "result": {
             "game": game, "scheme_code": scheme, "history_hash": history_hash, "history_rows": history_rows,
             "semantics": result["semantics"],
+            **({"restricted_range": result["restricted_range"]} if "restricted_range" in result else {}),
             **({"portfolio_refinement": result["portfolio_refinement"]} if "portfolio_refinement" in result else {}),
             "as_of": result.get("as_of"), "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "urns": urns,
         },
@@ -167,6 +173,7 @@ def _profile_key(entry):
         settings["lookback"] or 100, settings["hit_target"], settings["joker_size"] if entry["game"] == "joker" else None,
         settings.get("budget_lei"), settings.get("objective"), settings.get("selection_policy"),
         "auto_options_result" in settings,
+        report_restricted_range(settings, entry["result"]) if settings["restricted"] or "auto_options_result" in settings else None,
     )
 
 
@@ -227,7 +234,12 @@ def _decision_summary(entry, finished_at):
         return None
     semantics = result.get("semantics")
     signature = hashlib.sha256(json.dumps(semantics, sort_keys=True).encode()).hexdigest() if semantics else None
-    return {"game": entry["game"], "source": entry.get("source"), "settings": entry["settings"],
+    settings = entry["settings"]
+    if report_restricted_range(settings, result) is None:
+        return None
+    if "restricted_range" in result:
+        settings = {**settings, "restricted_range": result["restricted_range"]}
+    return {"game": entry["game"], "source": entry.get("source"), "settings": settings,
             "finished_at": finished_at, "as_of": result.get("as_of"), "history_rows": result.get("history_rows"),
             "history_hash": result.get("history_hash"), "signature": signature,
             "max_consecutive_run": result.get("max_consecutive_run"), "urns": urns}
@@ -358,7 +370,7 @@ async def _run_games(jobs, report):
             report["auto_progress"] = (0, 8) if auto_options and history is not None else None
             report["comparing"] = bool(auto_budget and history is not None)
             _changed()
-            outcome = {**entry, "settings": dict(entry["settings"])}
+            outcome = {**entry, "settings": {**entry["settings"], "restricted_range": list(LR_RESTRICTED_RANGE)}}
             options = dict(entry["settings"])
             options.pop("auto_options", None)
             range_policy = options.pop("auto_range_policy", None)
@@ -562,7 +574,11 @@ def _report_compatibility(entry, source_for):
 def _game_report(entry, source_for=None):
     settings = entry["settings"]
     mode = "Inversă" if settings["inverse"] else "Directă"
-    scope = "10–40 inclusiv" if settings["restricted"] else "Baza completă"
+    bounds = report_restricted_range(settings, entry.get("result"))
+    if bounds is None:
+        ui.label(f"{entry['name']} · Intervalul din raportul Re-Bench este nevalid sau contradictoriu.").classes("text-warning")
+        return
+    scope = f"{bounds[0]}–{bounds[1]} inclusiv" if settings["restricted"] else "Baza completă"
     lookback = f"{settings['lookback']}%" if 0 < settings["lookback"] < 100 else "integral"
     with ui.card().props("flat bordered").classes("w-full min-w-0 gap-2"):
         ui.label(entry["name"]).classes("text-h6")
@@ -624,7 +640,11 @@ def _game_report(entry, source_for=None):
 def _historical_decision(summary):
     settings = summary["settings"]
     method = "Metoda inversă" if settings.get("inverse") else "Metoda normală"
-    scope = "10–40" if settings.get("restricted") else "Baza completă"
+    bounds = report_restricted_range(settings)
+    if bounds is None:
+        ui.label(f"{summary['game']} · Intervalul din decizia istorică este nevalid.").classes("text-warning")
+        return
+    scope = f"{bounds[0]}–{bounds[1]}" if settings.get("restricted") else "Baza completă"
     finished = datetime.fromisoformat(summary["finished_at"]).strftime("%d.%m.%Y, %H:%M")
     with ui.expansion(f"{finished} · {summary['game']} · Cod LR {settings.get('scheme')} · {method} · {scope}").classes("w-full"):
         ui.label(f"{summary['source']} · Ultima extragere {_date_text(summary.get('as_of'))}").classes("text-caption")

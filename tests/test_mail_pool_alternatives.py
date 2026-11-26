@@ -1,4 +1,4 @@
-"""Render the normal selection and its inverse 10–40 companion in one result email."""
+"""Render the normal selection and its inverse 5–40 companion in one result email."""
 
 from datetime import datetime
 
@@ -14,7 +14,7 @@ REDUCED = [12, 16, 17, 18, 19, 23, 25, 26, 27, 30, 39, 40]
 
 def _reduced():
     return {
-        "code": 57, "eligible_count": 25, "pool": REDUCED.copy(), "budget_lei": 200,
+        "code": 57, "number_range": [5, 40], "eligible_count": 28, "pool": REDUCED.copy(), "budget_lei": 200,
         "tickets": [[{"code": 57, "numbers": REDUCED.copy()}]],
     }
 
@@ -23,7 +23,7 @@ def test_only_inverse_reduced_is_rendered_and_single_zone_uses_the_shown_pool():
     body = "\n".join(mail_pool_alternative_lines({
         "inverse_full": {"pool": [1, 41, 45]}, "inverse_reduced": _reduced(),
     }, {"hard_core": NORMAL}, has_joker=False))
-    assert "Pool invers · baza redusă 10–40 inclusiv · Cod de evaluare 57 · 25 de numere eligibile" in body
+    assert "Pool invers · baza redusă 5–40 inclusiv · Cod de evaluare 57 · 28 de numere eligibile" in body
     assert body.count("12 16 17 18 19 23 25 26 27 30 39 40") == 1
     assert "Bilet 1 · zona A · Cod LR 57" in body and "200 lei" in body
     assert "baza completă" not in body and "1 41 45" not in body
@@ -79,13 +79,13 @@ def test_per_game_error_and_normal_pool_survive_in_the_actual_email(monkeypatch)
              "pool_alternatives": {"inverse_reduced": _reduced()}},
             {"fname": "joker.csv", "game": "joker", "spec": lottery_by_id("joker"),
              "data": {"hard_core": [1, 2, 3], "hard_core_joker": [2], "joker_pool": [2, 7]},
-             "pool_alternatives": {"inverse_reduced": {"error": "Urna 2 nu conține destule bile eligibile."}}},
+             "pool_alternatives": {"inverse_reduced": {"number_range": [5, 40], "error": "Urna 2 nu conține destule bile eligibile."}}},
         ],
     }
     body = app._build_mail_body(snapshot)
     assert prepared == [snapshot]
     assert "POOL:   2 3 4 5 9 10 13 20 32 33 36 46  (pool normal)" in body
     assert "POOL:   1 2 3  | joker: 2 7  (pool normal)" in body
-    assert body.count("Pool invers · baza redusă 10–40 inclusiv") == 2
+    assert body.count("Pool invers · baza redusă 5–40 inclusiv") == 2
     assert "Indisponibil. Urna 2 nu conține destule bile eligibile." in body
     assert "Numere principale · 12 16 17 18 19 23 25 26 27 30 39 40" in body

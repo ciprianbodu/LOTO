@@ -109,7 +109,7 @@ def test_scoped_inverse_joker_and_unsaved_selector_share_the_paid_reference(monk
     assert all(urn["decision"]["reference_policy"] == paid.LIVE_BUDGET_REFERENCE for urn in result["urns"])
     prof = {"game": lot.game_id, "settings": settings, "result": result}
     options = dict(pool_codes={}, histories={lot.game_id: ("joker.csv", frame)}, dynamic=True, hit_target=4,
-                   number_range=(10, 40), joker_size=5)
+                   number_range=(5, 40), joker_size=5)
     normal, = forecast.recommend_playable_games(100, FOUR_PLUS, lot.game_id, **options)
     unsaved, = forecast.recommend_playable_games(100, FOUR_PLUS, lot.game_id, inverse=True, **options)
     saved, = forecast.recommend_playable_games(

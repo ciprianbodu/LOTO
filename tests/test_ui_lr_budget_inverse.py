@@ -43,7 +43,7 @@ def test_game_and_method_can_be_set_before_first_generation_with_fixed_objective
     view.toggle.assert_not_called()
     assert any("4 numere pe aceeași variantă" in call.args[0] for call in view.label.call_args_list if call.args)
     inverse = view.switch_by_label["Metoda inversă"]
-    reduced = view.switch_by_label["Pool restrâns între 10 și 40"]
+    reduced = view.switch_by_label["Pool restrâns între 5 și 40"]
     panel = view.expansion.return_value
 
     async def scenario():
@@ -70,7 +70,7 @@ def test_panel_restores_preferences_and_saves_each_change_before_calculating(mon
         initial_objective=budget.ANY_PRIZE, on_objective_change=objectives,
     )
     inverse = view.switch_by_label["Metoda inversă"]
-    restricted = view.switch_by_label["Pool restrâns între 10 și 40"]
+    restricted = view.switch_by_label["Pool restrâns între 5 și 40"]
     game = view.select.return_value
     assert (inverse.value, restricted.value, game.value) == (True, True, "joker")
     view.toggle.assert_not_called()
@@ -122,11 +122,11 @@ def test_unknown_saved_game_uses_all_games(monkeypatch):
 def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(monkeypatch):
     inputs, io_bound = MagicMock(), MagicMock()
     monkeypatch.setattr(budget.run, "io_bound", io_bound)
-    heading = "Șansa ca toate numerele principale extrase să fie între 10 și 40 inclusiv"
+    heading = "Șansa ca toate numerele principale extrase să fie între 5 și 40 inclusiv"
     rates = {
-        "6/49": "Loto 6/49 (6 numere) · 5,27%",
-        "5/40": "Loto 5/40 (6 numere) · 19,18%",
-        "joker": "Joker (5 numere din prima urnă) · 13,91%",
+        "6/49": "Loto 6/49 (6 numere) · 13,93%",
+        "5/40": "Loto 5/40 (6 numere) · 50,75%",
+        "joker": "Joker (5 numere din prima urnă) · 30,86%",
     }
 
     async def scenario():
@@ -141,7 +141,7 @@ def test_interval_odds_follow_the_selected_game_in_both_modes_before_generation(
             )
             reduced = next(
                 node for node in host.descendants()
-                if isinstance(node, ui.switch) and node.text == "Pool restrâns între 10 și 40"
+                if isinstance(node, ui.switch) and node.text == "Pool restrâns între 5 și 40"
             )
             odds = {
                 node.text: node for node in host.descendants()
@@ -216,7 +216,7 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         monkeypatch.setattr(budget.run, "io_bound", calculate)
         refresh = budget.lr_budget_panel(slider, lambda game: {}, on_budget_plan=apply_budget)
         switch = view.switch_by_label["Metoda inversă"]
-        filtered = view.switch_by_label["Pool restrâns între 10 și 40"]
+        filtered = view.switch_by_label["Pool restrâns între 5 și 40"]
         assert filtered.value is False
         panel = view.expansion.return_value
         button = view.button.return_value
@@ -238,17 +238,17 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         assert "200 lei" in view.label.call_args.args[0]
         finish.set()
         await pending
-        assert calls == [(180, False, None), (200, True, (10, 40))]
-        assert rendered == [([(200, True, (10, 40))], 200, budget.FOUR_PLUS)]
+        assert calls == [(180, False, None), (200, True, (5, 40))]
+        assert rendered == [([(200, True, (5, 40))], 200, budget.FOUR_PLUS)]
         assert settings == [(180, budget.FOUR_PLUS, None), (200, budget.FOUR_PLUS, None)]
 
         await refresh()
         assert len(settings) == 2
-        assert rendered[-1] == ([(200, True, (10, 40))], 200, budget.FOUR_PLUS)
+        assert rendered[-1] == ([(200, True, (5, 40))], 200, budget.FOUR_PLUS)
         switch.value = False
         await switch.on_value_change.call_args.args[0]()
         assert filtered.value is True
-        assert calls[-1] == (200, False, (10, 40))
+        assert calls[-1] == (200, False, (5, 40))
         filtered.value = False
         await filtered.on_value_change.call_args.args[0]()
         assert calls[-1] == (200, False, None)
@@ -309,7 +309,7 @@ def test_obsolete_or_closed_plan_does_not_update_benchmark_controls(monkeypatch)
 
 @pytest.mark.parametrize(("limits", "remaining", "label"), [
     (None, 38, "38 de numere eligibile"),
-    ((10, 40), 31, "31 de numere eligibile între 10 și 40 inclusiv"),
+    ((5, 40), 36, "36 de numere eligibile între 5 și 40 inclusiv"),
 ])
 def test_inverse_ticket_shows_excluded_pools_eligible_counts_and_official_zone(monkeypatch, limits, remaining, label):
     view = _widgets(monkeypatch)
@@ -339,7 +339,7 @@ def test_inverse_ticket_shows_excluded_pools_eligible_counts_and_official_zone(m
 
 def test_unplayable_range_displays_reason_without_zone_numbers(monkeypatch):
     view = _widgets(monkeypatch)
-    reason = "Rămân 10 numere eligibile între 10 și 40 inclusiv. Sunt necesare 12."
+    reason = "Rămân 10 numere eligibile între 5 și 40 inclusiv. Sunt necesare 12."
     budget._render_recommendations(
         [{"game": "6/49", "game_name": "Loto 6/49", "tickets": [], "forecast_error": reason}],
         180, budget.FOUR_PLUS,
@@ -362,7 +362,7 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         if fn is budget._compare_games:
             analysed.append(tuple(games))
             return [
-                {"game": game, "recommended_range": (10, 40) if game == "6/49" else None}
+                {"game": game, "recommended_range": (5, 40) if game == "6/49" else None}
                 for game in games
             ]
         assert fn is budget._generate_selection
@@ -379,7 +379,7 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         callbacks["6/49"]("6/49", "auto", first_actions)
         first_button = view.button.return_value
         first_actions.__enter__.assert_called_once()
-        callbacks["5/40"]("5/40", "10–40", latest_actions)
+        callbacks["5/40"]("5/40", "5–40", latest_actions)
         latest_button = view.button.return_value
         first_button.delete.assert_called_once()
         latest_actions.__enter__.assert_called_once()
@@ -389,7 +389,7 @@ def test_automatic_and_manual_bases_per_game_reuse_analysis(monkeypatch):
         await view.button.call_args.kwargs["on_click"]()
         latest_button.delete.assert_called_once()
         assert len(analysed) == 1
-        assert assigned[-1] == {"6/49": (10, 40), "5/40": (10, 40), "joker": None}
+        assert assigned[-1] == {"6/49": (5, 40), "5/40": (5, 40), "joker": None}
     asyncio.run(scenario())
 
 
@@ -399,7 +399,7 @@ def test_range_evidence_displays_number_and_calendar_gaps(monkeypatch):
         "game": "6/49", "code": 57, "pool_size": 12, "recommended_range": None,
         "reason": "Date insuficiente pentru o bază restrânsă.", "metric": "4+ pe bilet",
         "ranges": [{
-            "range": (10, 40), "eligible_now": 25, "feasible_now": True, "evaluated": 100,
+            "range": (5, 40), "eligible_now": 25, "feasible_now": True, "evaluated": 100,
             "pool_3plus": 17, "pool_4plus": 4, "ticket_3plus": 17, "ticket_4plus": 2,
             "recent_successes": 1, "recent_evaluated": 25, "infeasible": 0,
             "successes": 9, "objective_evaluated": 98, "objective_missing": 2,
@@ -410,7 +410,7 @@ def test_range_evidence_displays_number_and_calendar_gaps(monkeypatch):
         "first_date": "2025-11-01", "as_of": "2026-11-19", "rows": 100,
     }
     budget._range_comparison(report, "Loto 6/49", "auto", lambda *args: None, False, expanded=True)
-    assert list(view.select.call_args.args[0]) == ["auto", "Baza completă", "10–40"]
+    assert list(view.select.call_args.args[0]) == ["auto", "Baza completă", "5–40"]
     performance, chronology = [c.kwargs["rows"][0] for c in view.table.call_args_list]
     assert (performance["recent"], performance["ticket"], performance["eligible"]) == ("1 / 25 (4,0%)","17 / 2","25")
     assert performance["objective"] == "9 / 98 (9,2%) · 2 extrageri fără date complete"
@@ -500,7 +500,7 @@ def test_fixed_share_policy_is_forwarded_only_when_selected(monkeypatch):
     assert [call.args for call in choice.call_args_list] == [(True,), (False,)]
 
 
-def test_540_inverse_200_lei_shows_exact_capacity_in_generation_comparison_and_validation(monkeypatch):
+def test_540_inverse_300_lei_shows_exact_capacity_in_generation_comparison_and_validation(monkeypatch):
     import numpy as np
     import pandas as pd
     from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
@@ -513,24 +513,24 @@ def test_540_inverse_200_lei_shows_exact_capacity_in_generation_comparison_and_v
     frame["date"] = pd.date_range("2020-01-01", periods=len(frame)).strftime("%d-%m-%Y")
     source = ("5-40.csv", frame)
     histories = {"5/40": source}
-    reason = "În intervalul 10–40 rămân 15 numere eligibile după excluderea pool-ului normal (31 − 16 = 15). Cod 37 necesită 16."
-    args = 200, budget.FOUR_PLUS, "5/40", histories
+    reason = "În intervalul 5–40 rămân 17 numere eligibile după excluderea pool-ului normal (36 − 19 = 17). Cod 48 necesită 19."
+    args = 300, budget.FOUR_PLUS, "5/40", histories
     for policy in (None, "online_ticket_experts"):
-        plan, = recommend_playable_games(*args, inverse=True, pool_codes={}, number_range=(10, 40),
+        plan, = recommend_playable_games(*args, inverse=True, pool_codes={}, number_range=(5, 40),
                                          selection_policy=policy)
         assert not plan["tickets"] and not plan["variants"] and not plan["price_bani"]
         assert plan["forecast_error"] == f"5-40.csv · {reason}"
     view = _widgets(monkeypatch)
-    budget._render_recommendations([plan], 200, budget.FOUR_PLUS)
+    budget._render_recommendations([plan], 300, budget.FOUR_PLUS)
     view.label.assert_any_call(plan["forecast_error"])
     view.table.assert_not_called()
     comparison = compare_budget_ranges(*args, inverse=True)
     assert comparison["reason"] == reason
-    budget._range_comparison(comparison, "Loto 5/40", "10–40", lambda *_: None, True, expanded=True)
+    budget._range_comparison(comparison, "Loto 5/40", "5–40", lambda *_: None, True, expanded=True)
     view.label.assert_any_call(reason)
     for replay in ("fixed", "daily"):
         with pytest.raises(ValueError) as error:
-            validate_lr_walk_forward("5/40", source, budget_lei=200, objective=budget.FOUR_PLUS, scheme=37,
+            validate_lr_walk_forward("5/40", source, budget_lei=300, objective=budget.FOUR_PLUS, scheme=48,
                                      inverse=True, restricted=True, dynamic=True, lookback=100, hit_target=4,
                                      joker_size=5, depth=10, replay_policy=replay)
         assert str(error.value) == reason
@@ -562,7 +562,7 @@ def test_panel_retries_a_provisional_range_without_restarting(monkeypatch):
         refresh = budget.lr_budget_panel(MagicMock(value=200), lambda game: {})
         view.expansion.return_value.value = True
         await refresh()
-        toggle = view.switch_by_label["Pool restrâns între 10 și 40"]
+        toggle = view.switch_by_label["Pool restrâns între 5 și 40"]
         recalculate = toggle.on_value_change.call_args.args[0]
         for value in (True, False):
             toggle.value = value

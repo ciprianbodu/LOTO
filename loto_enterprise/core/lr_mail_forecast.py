@@ -1,4 +1,4 @@
-"""Prepare the inverse 10–40 pool accompanying a completed job's normal numbers."""
+"""Prepare the inverse 5–40 pool accompanying a completed job's normal numbers."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS
+from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
 
 
@@ -24,7 +25,7 @@ def prepare_inverse_mail_pools(
     audit = data.get("audit") or {}
     budget_lei = data.get("lr_budget_lei", budget_lei)
     objective = data.get("lr_budget_objective", objective)
-    alternative = {"budget_lei": budget_lei, "objective": objective}
+    alternative = {"budget_lei": budget_lei, "objective": objective, "number_range": LR_RESTRICTED_RANGE}
     # A canonical file can replace a missing detached frame only if its full
     # content hash matches the generating job. The budget forecaster verifies it.
     if source is None and not (filename == Path(lot.csv).name and audit.get("hash")):
@@ -47,17 +48,17 @@ def prepare_inverse_mail_pools(
             budget_lei, objective, lot.game_id, histories={lot.game_id: (filename, source)} if source is not None else {},
             generated={lot.game_id: (filename, data)}, pool_codes={}, dynamic=dynamic, lookback=lookback,
             joker_size=len(bonus) or joker_size, hit_target=data.get("bench_hit_target", hit_target),
-            inverse=True, number_range=(10, 40), exclude_generated_pool=True,
+            inverse=True, number_range=LR_RESTRICTED_RANGE, exclude_generated_pool=True,
         )
         if not plans:
             raise ValueError("Nicio schemă oficială nu încape în buget.")
         plan = plans[0]
         if not plan["tickets"] or plan.get("forecast_error"):
-            raise ValueError(plan.get("forecast_error") or "Pool-ul invers 10–40 nu poate fi completat.")
+            raise ValueError(plan.get("forecast_error") or "Pool-ul invers 5–40 nu poate fi completat.")
         alternative.update(plan["forecast"], tickets=plan["tickets"], price_bani=plan["price_bani"], variants=plan["variants"])
     except (ValueError, OSError) as exc:
         alternative["error"] = str(exc)
     except Exception:
-        logger.exception("Calculul pool-ului invers 10–40 pentru e-mail a eșuat (%s)", filename)
-        alternative["error"] = "Calculul pool-ului invers 10–40 a eșuat."
+        logger.exception("Calculul pool-ului invers 5–40 pentru e-mail a eșuat (%s)", filename)
+        alternative["error"] = "Calculul pool-ului invers 5–40 a eșuat."
     return {"inverse_reduced": alternative}

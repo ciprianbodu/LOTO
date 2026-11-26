@@ -17,7 +17,7 @@ import pandas as pd
 from covering.lr_budget import recommend_games
 from covering.lr_pool_budget import positional_recipe, required_pool_size, restrict_to_pool
 from covering.lr_refinement_status import merge_refinements, refinement_complete
-from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
+from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity, rank_lr_pool
 from covering.lr_selection import lr_pool_sizes, resolve_lr_scheme, select_lr_scheme
 from covering.probability import _integer
 from loto_engine import LotoEngine
@@ -156,7 +156,7 @@ def _stored_members_valid(members, methods):
 def _rebench_candidates(entries, lot, scheme, number_range, dynamic, lookback, hit_target, joker_size, layout,
                         current_recipe):
     """Keep complete, reusable profiles for this geometry before validating the full CSV hash."""
-    if not entries or number_range not in (None, (10, 40)):
+    if not entries or number_range not in (None, LR_RESTRICTED_RANGE):
         return []
     urn_keys = {lot.bench_key}
     if lot.bench_key_urna2:
@@ -173,6 +173,11 @@ def _rebench_candidates(entries, lot, scheme, number_range, dynamic, lookback, h
                 or report.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN
                 or report.get("semantics") != semantics):
             continue
+        if number_range is not None:
+            expected_range = list(number_range)
+            if (report.get("restricted_range") != expected_range
+                    or settings.get("restricted_range", expected_range) != expected_range):
+                continue
         if (settings.get("restricted") is not (number_range is not None)
                 or settings.get("dynamic") is not dynamic or type(settings.get("inverse")) is not bool
                 or str(settings.get("scheme")) != str(scheme.code)

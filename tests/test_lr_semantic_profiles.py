@@ -32,7 +32,7 @@ def test_saved_selector_rechecks_executed_formula_roster_layout_and_history(monk
     def play(budget=171):
         plan, = forecast.recommend_playable_games(
             budget, FOUR_PLUS, "6/49", {"6/49": ("six.csv", history)}, pool_codes={},
-            number_range=(10, 40), joker_size=1, hit_target=4, lr_rebench_entries=[profile])
+            number_range=(5, 40), joker_size=1, hit_target=4, lr_rebench_entries=[profile])
         assert plan["tickets"]
         return plan
 

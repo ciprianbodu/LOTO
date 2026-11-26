@@ -116,25 +116,47 @@ def load_mail_config(project_root=PROJECT_ROOT):
     return cfg
 
 
+# Snapshots written before bounds were recorded used the inclusive interval 10–40.
+_LEGACY_LR_RANGE = (10, 40)
+
+
+def report_restricted_range(settings, result=None):
+    """Read both saved bounds. Missing legacy bounds mean 10–40; conflicting metadata is unusable."""
+    bounds = None
+    for record in (settings, result or {}):
+        if "restricted_range" not in record:
+            continue
+        pair = record["restricted_range"]
+        if (not isinstance(pair, (list, tuple)) or len(pair) != 2
+                or any(type(limit) is not int for limit in pair) or not 1 <= pair[0] <= pair[1]
+                or (bounds is not None and tuple(pair) != bounds)):
+            return None
+        bounds = tuple(pair)
+    return bounds if bounds is not None else _LEGACY_LR_RANGE
+
+
 def mail_pool_alternative_lines(alternatives, normal, *, has_joker):
-    """Render the inverse 10–40 selection belonging to this game's normal pool."""
+    """Render the inverse selection using the bounds recorded with the result."""
     if not isinstance(alternatives, dict) or "inverse_reduced" not in alternatives:
         return []
-    title = "Pool invers · baza redusă 10–40 inclusiv"
+    title = "Pool invers · baza redusă"
     item = alternatives["inverse_reduced"]
     if not isinstance(item, dict):
         return [title, "  Indisponibil. Datele acestei selecții sunt incomplete."]
-    if error := item.get("error"):
-        return [title, f"  Indisponibil. {error}"]
-
     from loto_enterprise.core.ro_text import count
     try:
+        low, high = item.get("number_range") or item.get("inverse_range") or _LEGACY_LR_RANGE
+        if type(low) is not int or type(high) is not int or not 1 <= low <= high:
+            raise ValueError("Interval invalid.")
+        title += f" {low}–{high} inclusiv"
+        if error := item.get("error"):
+            return [title, f"  Indisponibil. {error}"]
         pool = sorted(int(n) for n in item["pool"])
         code, eligible = int(item["code"]), int(item["eligible_count"])
         if (not pool or eligible < len(pool) or len(set(pool)) != len(pool)
-                or pool[0] < 10 or pool[-1] > 40
+                or pool[0] < low or pool[-1] > high
                 or set(pool).intersection(int(n) for n in normal.get("hard_core", ()))):
-            return [title, "  Indisponibil. Numerele principale nu formează un pool invers valid în intervalul 10–40."]
+            return [title, f"  Indisponibil. Numerele principale nu formează un pool invers valid în intervalul {low}–{high}."]
         lines = [
             f"{title} · Cod de evaluare {code} · {count(eligible, 'numere eligibile', 'număr eligibil')}",
             "  Numere principale · " + " ".join(map(str, pool)),

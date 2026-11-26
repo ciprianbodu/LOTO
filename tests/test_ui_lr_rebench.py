@@ -34,7 +34,7 @@ def _settings(scheme):
 
 def _result(game, code):
     urns = [
-        {"name": "Urna principală", "pool_size": 10, "target": 4, "eligible_count": 21,
+        {"name": "Urna principală", "pool_size": 10, "target": 4, "eligible_count": 26,
          "method": "frequency", "folds": [10, 30, 70, 90], "fallback": False,
          "protocol": "Se evaluează toate extragerile din ferestre.",
          "rows": [{"method": "frequency", "evaluated": 40, "hit_rate": 0.5, "avg_hits": 1.125}]},
@@ -43,7 +43,7 @@ def _result(game, code):
         urns.append({"name": "Urna 2 Joker", "pool_size": 1, "target": 1, "eligible_count": 18,
                      "method": "random", "folds": [10], "fallback": True,
                      "rows": [{"method": "random", "evaluated": 30, "hit_rate": 0.1, "avg_hits": 0.1}]})
-    return {"game": game, "scheme_code": code, "as_of": "2026-11-22", "urns": urns}
+    return {"game": game, "scheme_code": code, "restricted_range": [5, 40], "as_of": "2026-11-22", "urns": urns}
 
 
 def test_reports_restore_after_navigation_and_show_both_urns_and_per_game_errors(monkeypatch, tmp_path):
@@ -77,7 +77,7 @@ def test_reports_restore_after_navigation_and_show_both_urns_and_per_game_errors
         assert ordinary.read_text(encoding="utf-8") == '{"ordinary":true}'
         stored = json.loads(panel._RESULT_PATH.read_text(encoding="utf-8"))
         assert [record["game"] for record in stored["entries"]] == ["joker", "5/40", "6/49"]
-        assert stored["entries"][0]["settings"] == _settings(24)
+        assert stored["entries"][0]["settings"] == {**_settings(24), "restricted_range": [5, 40]}
 
         monkeypatch.setattr(panel, "_last", None)
         monkeypatch.setattr(panel, "_loaded", False)
@@ -90,7 +90,7 @@ def test_reports_restore_after_navigation_and_show_both_urns_and_per_game_errors
             assert {"Urna principală", "Urna 2 Joker", "Fereastră indisponibilă.",
                     "Istoricul jocului este indisponibil."} <= labels
             assert any("jocuri.csv" in text and "22.11.2026" in text and "80%" in text for text in labels)
-            assert any("Cod LR 24" in text and "inversă" in text and "10–40" in text for text in labels)
+            assert any("Cod LR 24" in text and "inversă" in text and "5–40" in text for text in labels)
             tables = [node for node in rendered.descendants() if isinstance(node, ui.table)]
             assert [(table.rows[0]["evaluated"], table.rows[0]["hit_rate"]) for table in tables] == [
                 (40, "50,00%"), (30, "10,00%"),
@@ -358,7 +358,7 @@ def test_new_formula_same_history_and_settings_preserves_previous_weights():
     assert old["history_hash"] == latest["result"]["history_hash"]
 
 
-@pytest.mark.parametrize("chosen", [None, (10, 40)])
+@pytest.mark.parametrize("chosen", [None, (5, 40)])
 def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_choice(monkeypatch, chosen):
     frame = pd.DataFrame({"n1": [6]})
     settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+")}
@@ -401,7 +401,7 @@ def test_cancelling_during_automatic_scope_does_not_start_benchmark(monkeypatch)
             assert function is panel.compare_budget_ranges
             comparing.set()
             await release.wait()
-            return {"recommended_range": (10, 40)}
+            return {"recommended_range": (5, 40)}
 
         monkeypatch.setattr(panel.run, "io_bound", execute)
         task = asyncio.create_task(panel.run_lr_rebench([("joker", ("input.csv", frame), settings)]))

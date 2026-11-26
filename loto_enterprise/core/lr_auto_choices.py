@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from covering.lr_budget import budget_in_bani
+from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from loto_enterprise.benchmark.lr_budget_scoring import MIN_PORTFOLIO_DAYS
 from loto_enterprise.benchmark.lr_hypotheses import _cancellation
 from loto_enterprise.core.history import history_dates, training_cutoffs
@@ -101,4 +102,5 @@ def select_lr_auto_choices(game_id, history, options, *, depth, replay_policy="f
         raise ValueError(f"Nicio combinație a bifelor nu a putut fi evaluată integral la {game_id}. {reasons}")
 
     return {**winner, "first_date": labels[0], "last_date": labels[-1], "days": len(set(labels)),
-            "validation_start": validation_start, "training_rows": len(source[1]), "candidates": candidates}
+            "restricted_range": list(LR_RESTRICTED_RANGE), "validation_start": validation_start,
+            "training_rows": len(source[1]), "candidates": candidates}

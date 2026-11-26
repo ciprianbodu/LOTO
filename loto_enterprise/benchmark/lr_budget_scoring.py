@@ -9,7 +9,7 @@ import json
 import numpy as np
 
 from covering.lr_pool_budget import positional_recipe, restrict_to_pool
-from covering.lr_pool_ranking import rank_lr_pool
+from covering.lr_pool_ranking import LR_RESTRICTED_RANGE, rank_lr_pool
 from loto_enterprise.benchmark.lr_provenance import dynamic_formulas
 from loto_enterprise.benchmark.methods import EVALUATION_METHODS, call_method
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -46,8 +46,9 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
     origins = tuple(dict.fromkeys(b for b in bounds if b >= 80))[-PORTFOLIO_DAYS:]
     if not origins:
         return {"error": "Nu există o zi de test după prefixul minim de 80 de extrageri."}
-    limits = (10, 40) if restricted else None
-    base = range(10, min(40, lot.max_n) + 1) if restricted else range(1, lot.max_n + 1)
+    limits = LR_RESTRICTED_RANGE if restricted else None
+    low, high = limits or (1, lot.max_n)
+    base = range(low, min(high, lot.max_n) + 1)
     outside = set(range(1, lot.max_n + 1)).difference(base)
     slots = joker_size if lot.geo.second else 0
     if recipe is None or not recipe.matches(layout, scheme.n, slots):

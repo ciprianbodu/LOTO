@@ -39,7 +39,7 @@ def _rebench_entry(history, members, *, game="6/49", inverse=False, dynamic=True
     return {"game": game, "settings": {"inverse": inverse, "restricted": True, "dynamic": dynamic,
             "lookback": lookback, "hit_target": 4, "joker_size": 2, "scheme": code},
             "result": {"history_hash": engine.audit["hash"], "scheme_code": code, "urns": urns,
-                       "max_consecutive_run": 2, "semantics": signature}}
+                       "restricted_range": [5, 40], "max_consecutive_run": 2, "semantics": signature}}
 
 
 @pytest.mark.parametrize("dynamic", [True, False])
@@ -55,7 +55,7 @@ def test_saved_rebench_ranks_actual_tickets_and_excludes_current_direct_pool(mon
     monkeypatch.setattr(forecast, "call_method", scores)
     monkeypatch.setattr(forecast, "_dynamic_scores", lambda *a, **k: pytest.fail("reselected"))
     monkeypatch.setattr(forecast, "restricted_bench_scores", lambda *a, **k: pytest.fail("rebench repeated"))
-    arguments = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, number_range=(10, 40),
+    arguments = dict(pool_codes={}, histories={"6/49": ("current.csv", history)}, number_range=(5, 40),
                      dynamic=dynamic, hit_target=4, lr_rebench_entries=[inverse, direct],
                      generated={"6/49": ("old.csv", {"lr_scheme_code":49, "audit":{"hash":"old"},
                                                      "hard_core":list(range(1, 11))})})
@@ -63,14 +63,14 @@ def test_saved_rebench_ranks_actual_tickets_and_excludes_current_direct_pool(mon
     alternative, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **arguments)
     pool, inv = plan["forecast"], alternative["forecast"]
     expected = forecast.combine_ensemble_scores([
-        (name, {n: s for n, s in scores(name, None, 49)[0].items() if 10 <= n <= 40}, weight)
+        (name, {n: s for n, s in scores(name, None, 49)[0].items() if 5 <= n <= 40}, weight)
         for name, weight in direct_weights
     ])
     assert pool["pool"] == sorted(forecast.rank_lr_pool(expected, 10)) == plan["tickets"][0][0]["numbers"]
     assert pool["selection"]["members"] == direct["result"]["urns"][0]["decision"]["members"]
     assert pool["selection"]["source"] == inv["selection"]["source"] == "lr_rebench"
     assert inv["selection"]["method"] == "compact_renewal_hazard"
-    assert inv["eligible_count"] == 21 and inv["excluded_pool"] == pool["pool"]
+    assert inv["eligible_count"] == 26 and inv["excluded_pool"] == pool["pool"]
     assert set(alternative["tickets"][0][0]["numbers"]).isdisjoint(pool["pool"])
 
 
@@ -79,7 +79,7 @@ def test_matching_inverse_reference_is_used_for_displayed_direct_and_exclusion(m
     inverse = _rebench_entry(history, [("frequency", 1)], dynamic=False, inverse=True,
                              reference=[("compact_transition_prior", 1)])
     monkeypatch.setattr(forecast, "restricted_bench_scores", lambda *a, **k: pytest.fail("rebench repeated"))
-    args = dict(pool_codes={}, histories={"6/49": ("sample.csv", history)}, number_range=(10, 40),
+    args = dict(pool_codes={}, histories={"6/49": ("sample.csv", history)}, number_range=(5, 40),
                 lr_rebench_entries=[inverse], dynamic=False, hit_target=4)
     direct, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", **args)
     other, = forecast.recommend_playable_games(171, FOUR_PLUS, "6/49", inverse=True, **args)
@@ -138,7 +138,7 @@ def test_stale_or_incompatible_saved_rebench_keeps_current_selector(monkeypatch,
                         ({n: n for n in range(1, 50)}, {"method":"legacy"}))
     plan, = forecast.recommend_playable_games(
         171, FOUR_PLUS, "6/49", {"6/49": ("sample.csv", history)}, pool_codes={}, hit_target=4,
-        number_range=(11, 40) if mismatch == "custom_range" else (10, 40), lr_rebench_entries=[entry],
+        number_range=(11, 40) if mismatch == "custom_range" else (5, 40), lr_rebench_entries=[entry],
     )
     assert plan["tickets"] and plan["forecast"]["selection"] == {"method":"legacy"}
 
@@ -156,7 +156,7 @@ def test_joker_saved_winners_use_separate_urns_and_valid_bonus_lookback(monkeypa
     monkeypatch.setattr(forecast, "call_method", score)
     plan, = forecast.recommend_playable_games(
         100, FOUR_PLUS, "joker", {"joker": ("joker.csv", history)}, pool_codes={}, hit_target=4,
-        number_range=(10, 40), lr_rebench_entries=[direct, inverse], lookback=50, joker_size=2, inverse=True, dynamic=False,
+        number_range=(5, 40), lr_rebench_entries=[direct, inverse], lookback=50, joker_size=2, inverse=True, dynamic=False,
     )
     record = plan["forecast"]
     assert record["selection"]["method"] == "compact_renewal_hazard"
@@ -477,7 +477,7 @@ def test_inverse_paid_profile_requires_the_actual_reference_in_both_joker_urns(m
     monkeypatch.setattr(forecast, "restricted_bench_scores", fallback)
     inputs = dict(
         histories={"joker": ("joker.csv", history)}, pool_codes={}, hit_target=4,
-        number_range=(10, 40), dynamic=dynamic, joker_size=2,
+        number_range=(5, 40), dynamic=dynamic, joker_size=2,
         lr_rebench_entries=[direct, inverse] if both_profiles else [inverse],
     )
     normal, = forecast.recommend_playable_games(100, FOUR_PLUS, "joker", **inputs)
