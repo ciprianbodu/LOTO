@@ -104,6 +104,35 @@ def _progress(report, index, done, total):
         _state.revision += 1
 
 
+def _validated_games(finished):
+    """Extrage dovezile utilizabile din raportul acestei rulări."""
+    validated = {}
+    for entry in finished["entries"]:
+        result = entry.get("result") or {}
+        summary = result.get("summary")
+        draws = result.get("draws")
+        refinement = result.get("portfolio_refinement") or {}
+        if not isinstance(summary, dict) or not isinstance(draws, list) or not isinstance(refinement, dict):
+            continue
+        game, settings = entry["game"], entry["settings"]
+        if (entry.get("error") or result.get("error") or refinement.get("complete") is not True
+                or result.get("game") != game or result.get("scheme_code") != settings.get("scheme")
+                or result.get("objective") != settings.get("objective") or not result.get("history_hash")):
+            continue
+        training_rows = summary.get("training_rows")
+        scored, evaluated, hits = (summary.get(key) for key in ("evaluated", "objective_evaluated", "objective_hits"))
+        if (type(training_rows) is not int or training_rows < 1 or training_rows + len(draws) != result.get("history_rows")
+                or summary.get("rows") != len(draws) or summary.get("provisional_draws") != 0
+                or not all(type(value) is int for value in (scored, evaluated, hits))
+                or evaluated < 1 or not (0 <= hits <= evaluated <= scored <= len(draws))):
+            continue
+        validated[game] = {
+            "game": game, "source": entry["source"], "settings": settings, "scheme_code": result["scheme_code"],
+            "history_hash": result["history_hash"], "finished_at": finished["finished_at"], "summary": summary,
+        }
+    return validated
+
+
 async def _run_games(jobs, report, cancel_path):
     loop = asyncio.get_running_loop()
     try:
@@ -147,15 +176,17 @@ async def _run_games(jobs, report, cancel_path):
             _state.revision += 1
         if report["cancelled"]:
             _state.notice = "Validarea walk-forward LR a fost anulată."
-            return
+            return {}
         finished = {key: report[key] for key in ("schema", "entries", "total", "started_at")}
         finished["finished_at"] = datetime.now(_BUCHAREST).isoformat(timespec="seconds")
         _state.latest = finished
         try:
-            atomic_write_json(_RESULT_PATH, finished)
+            await asyncio.to_thread(atomic_write_json, _RESULT_PATH, finished)
         except (OSError, ValueError, TypeError) as exc:
             logger.warning("[WF LR] Raportul local nu poate fi salvat: %s", exc)
             _state.notice = "Raportul este disponibil în această sesiune. Salvarea locală a eșuat."
+            return {}
+        return {} if report["cancelled"] else _validated_games(finished)
     finally:
         try:
             cancel_path.unlink(missing_ok=True)
@@ -166,8 +197,8 @@ async def _run_games(jobs, report, cancel_path):
         _state.revision += 1
 
 
-async def run_lr_walk_forward(jobs) -> bool:
-    """Pornește o singură validare pe instantaneele sesiunii, independent de fila activă."""
+async def run_lr_walk_forward(jobs, *, completed_results=None) -> bool:
+    """Cu completed_results, confirmă numai jocurile evaluabile salvate de această rulare."""
     if lr_walk_forward_running():
         return False
     captured = []
@@ -196,5 +227,8 @@ async def run_lr_walk_forward(jobs) -> bool:
     _state.cancel_path = _RESULT_PATH.with_name(f".lr-walk-forward-{uuid4().hex}.cancel")
     _state.task = asyncio.create_task(_run_games(captured, _state.active, _state.cancel_path), name="lr-walk-forward")
     _state.revision += 1
-    await asyncio.shield(_state.task)
+    validated = await asyncio.shield(_state.task)
+    if completed_results is not None:
+        completed_results.update(deepcopy(validated))
+        return bool(validated)
     return True

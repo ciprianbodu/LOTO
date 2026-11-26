@@ -2096,7 +2096,7 @@ din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
 jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
 Jocul, obiectivul și metoda se pot alege înainte de prima generare. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
-analiză”. Numerele de jucat apar înaintea comparațiilor istorice. Bugetul, jocul și obiectivul aleg codurile oficiale și
+analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică. Bugetul, jocul și obiectivul aleg codurile oficiale și
 actualizează dimensiunile folosite la generare și la următorul Re-Bench. La o
 singură zonă se folosește exact codul recomandat. Pentru mai multe zone se alege
 cea mai mică dimensiune oficială care cuprinde pozițiile necesare, până la
@@ -2140,14 +2140,16 @@ Joker verifică ambele urne. Pe bilet apare sursa metodei folosite. O modificare
 a istoricului cere o nouă evaluare pentru a aplica decizia Re-Bench acelui istoric.
 Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport și deciziile
 pentru fiecare ipoteză în `.nicegui/lr_rebench_latest.json` din directorul de
-rulare. În România, „RE-BENCH” evaluează selecția curentă. Pentru jocurile cu decizii valide
-salvate de această rulare, aplicația generează biletele, le înregistrează în
-registrul prospectiv și pornește validarea walk-forward. Jocurile fără decizie
-utilizabilă sunt indicate separat în raport. Toate etapele
-folosesc bugetul, setările și extragerile de la pornire. Anularea sau eșecul
-unei etape oprește continuarea. „Generează recomandarea” permite și obținerea
-directă a biletului. Opțiunea „Pornește Re-Bench general” evaluează întâi
-catalogul general, apoi continuă cu același flux pentru biletul ales.
+rulare. În România, „RE-BENCH” și „Generează recomandarea” pornesc aceeași secvență.
+Re-Bench alege metoda pentru selecția curentă. Validarea walk-forward măsoară pe
+extrageri ulterioare antrenării rezultatul biletelor istorice la obiectivul ales.
+Aplicația generează și înregistrează apoi biletul pentru tragerea viitoare,
+împreună cu rezultatul istoric al acelei validări. Sunt necesare extrageri
+evaluabile. Dacă niciuna dintre acestea nu atinge obiectivul, raportul și biletul
+arată zero reușite. Aplicația indică separat jocurile omise. Toate etapele
+folosesc bugetul, setările și istoricul capturate la pornire. Anularea întrerupe
+secvența. „Pornește Re-Bench general” evaluează întâi catalogul general, apoi
+continuă cu aceeași secvență pentru selecția curentă.
 
 Panoul „Validare walk-forward pentru selecția LR” afișează progresul și
 rezultatele pentru jocul, bugetul, obiectivul, metoda și baza selectate. Procentul de istoric stabilește perioada de test de la sfârșitul

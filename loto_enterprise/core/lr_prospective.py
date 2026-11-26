@@ -367,6 +367,8 @@ def _snapshot(plan, settings, captured, known_days, build, target_day=None, sche
     }
     if plan.get("portfolio_refinement") is not None:
         support["portfolio_refinement"] = plan["portfolio_refinement"]
+    if "walk_forward" in plan:
+        support["walk_forward"] = plan["walk_forward"]
     identity = _hash(support)
     return {**support, "id": identity, "captured_at": captured.isoformat()}
 

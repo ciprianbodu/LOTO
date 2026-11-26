@@ -4371,26 +4371,40 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
             stopped()
             return
 
-        omitted = [game for game, _, _ in jobs if game not in profiles]
-        detail = (" Jocuri fără decizie utilizabilă: " + ", ".join(omitted) + ". Vezi raportul Re-Bench."
+        jobs_with_decision = [job for job in jobs if job[0] in profiles]
+        validation_results = {}
+        STATE["_lr_ticket_flow_status"] = "Re-Bench finalizat. Se testează biletele istorice prin walk-forward."
+        if not await _run_selected_lr_walk_forward(
+            selection, amount, jobs=jobs_with_decision, depth=depth, completed_results=validation_results,
+        ):
+            STATE["_lr_ticket_flow_status"] = (
+                "Validarea walk-forward nu a produs un rezultat utilizabil. Vezi raportul înainte de a genera bilete."
+            )
+            return
+        if not current():
+            stopped()
+            return
+
+        ticket_jobs = [job for job in jobs_with_decision if job[0] in validation_results]
+        if not ticket_jobs:
+            STATE["_lr_ticket_flow_status"] = "Niciun joc selectat nu are extrageri evaluate pentru obiectivul ales."
+            return
+        accepted = {game: profiles[game] for game, _, _ in ticket_jobs}
+        omitted = [game for game, _, _ in jobs if game not in accepted]
+        detail = (" Jocuri omise: " + ", ".join(omitted) + ". Vezi rapoartele Re-Bench și walk-forward."
                   if omitted else "")
-        jobs = [job for job in jobs if job[0] in profiles]
-        STATE["_lr_ticket_flow_status"] = "Re-Bench finalizat. Se generează și se înregistrează recomandarea." + detail
-        ticket_jobs = jobs
+        STATE["_lr_ticket_flow_status"] = "Validare walk-forward finalizată. Se generează recomandarea." + detail
         if selection.get("lr_fixed_share_val"):
             ticket_jobs = [(game, history, {**options, "selection_policy": ONLINE_TICKET_EXPERTS})
-                           for game, history, options in jobs]
-        generated = await generate_ticket(ticket_jobs, current, profiles)
+                           for game, history, options in ticket_jobs]
+        generated = await generate_ticket(ticket_jobs, current, accepted, validation_results)
         if not current():
             stopped()
             return
         if not generated:
-            STATE["_lr_ticket_flow_status"] = "Recomandarea nu a fost înregistrată integral. Verifică rezultatul biletelor."
+            STATE["_lr_ticket_flow_status"] = "Recomandarea nu a fost înregistrată integral. Verifică rezultatul biletelor." + detail
             return
-
-        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Rulează validarea walk-forward." + detail
-        await _run_selected_lr_walk_forward(selection, amount, jobs=jobs, depth=depth)
-        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Starea validării apare în panoul walk-forward." + detail
+        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Rezultatul walk-forward apare lângă bilet." + detail
     except ValueError as exc:
         STATE["_lr_ticket_flow_status"] = f"Secvența s-a oprit. {exc}"
     except Exception:
@@ -4400,7 +4414,7 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
         STATE["_lr_ticket_flow_active"] = False
 
 
-async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=None):
+async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=None, completed_results=None):
     if lr_walk_forward_running():
         ui.notify("Validarea walk-forward pentru selecția LR este deja în curs.", type="info")
         return
@@ -4422,7 +4436,9 @@ async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=Non
             # A historical validation must select its base on its own training prefix.
             options["restricted"] = None
         validation.append((game, history, options))
-    return await run_lr_walk_forward(validation)
+    if completed_results is None:
+        return await run_lr_walk_forward(validation)
+    return await run_lr_walk_forward(validation, completed_results=completed_results)
 
 
 def _lr_scope_text(choices):
@@ -4969,7 +4985,7 @@ def main_page() -> None:
                 scope_label.set_text(f"Re-Bench · {_lr_scope_text(lr_choices)}")
 
             show_lr_scope()
-            ui.label("După Re-Bench se generează biletul și pornește validarea walk-forward.").classes("text-caption")
+            ui.label("După Re-Bench, walk-forward verifică biletele istorice. Apoi primești recomandarea și rezultatul validării.").classes("text-caption")
         bench_options = ui.expansion("Re-Bench general").classes("w-full") if _cc == _LOT.RO else ui.column()
         with bench_options:
             if _cc == _LOT.RO:
@@ -5074,6 +5090,7 @@ def main_page() -> None:
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
                 on_generation_ready=register_budget_generator, budget_entry=budget_entry,
+                on_request_recommendation=start_selected_rebench,
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
                 initial_fixed_share=lr_choices["lr_fixed_share_val"],

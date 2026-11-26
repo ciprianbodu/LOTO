@@ -376,15 +376,16 @@ def _button_labels() -> dict[str, str]:
     return out
 
 
-def test_generate_buttons_do_not_suggest_that_one_skips_the_bench_decision():
-    """Ambele butoane generează cu metoda din decizia bench; Auto-Pilot doar o
-    arată întâi. „setări manuale” sugera un scorer fără decizie, care nu există."""
+def test_generation_buttons_use_the_recommendation_label_and_retire_autopilot():
     labels = _button_labels()
-    manual = labels["lambda: submit_generation(pure=False)"]
-    auto = labels["apply_autopilot_and_generate"]
-    assert manual == "🚀 Generează"
-    assert auto == "⚡ Auto-Pilot (arată selecția pe joc și generează)"
-    assert "manual" not in manual
+    assert labels["lambda: submit_generation(pure=False)"] == "Generează recomandarea"
+    assert "apply_autopilot_and_generate" not in labels
+    assert "🚀 Generează" not in labels.values()
+    page = ast.parse((ROOT / "app_nicegui.py").read_text(encoding="utf-8"))
+    panel, = (node for node in ast.walk(page) if isinstance(node, ast.Call)
+              and isinstance(node.func, ast.Name) and node.func.id == "lr_budget_panel")
+    handlers = {kw.arg: ast.unparse(kw.value) for kw in panel.keywords}
+    assert handlers["on_request_recommendation"] == "start_selected_rebench"
     assert not app.apply_autopilot_and_generate.__doc__.startswith("Aplică scorer")
 
 

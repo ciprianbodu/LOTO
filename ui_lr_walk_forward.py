@@ -231,7 +231,7 @@ def lr_walk_forward_panel(scope_text, start=None, *, depth_control=None, on_repl
             return
         seen, active, latest, notice = snapshot
         cancel.set_visibility(bool(active and not active["cancelled"]))
-        text = "După Re-Bench, validarea pornește automat când recomandarea de bilet este gata."
+        text = "După Re-Bench, validarea pornește automat. Recomandarea folosește rezultatele validării încheiate."
         if active:
             if active["cancelled"]:
                 text = ("Validarea se va opri după jocul curent." if active.get("cancel_after_game")
