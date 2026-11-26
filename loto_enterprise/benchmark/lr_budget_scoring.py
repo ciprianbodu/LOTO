@@ -3,10 +3,12 @@
 from collections import Counter, deque
 from copy import deepcopy
 from functools import lru_cache
+from hashlib import sha256
+import json
 
 import numpy as np
 
-from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_pool_budget import positional_recipe, restrict_to_pool
 from covering.lr_pool_ranking import rank_lr_pool
 from loto_enterprise.benchmark.lr_provenance import dynamic_formulas
 from loto_enterprise.benchmark.methods import EVALUATION_METHODS, call_method
@@ -31,7 +33,7 @@ def _recipes(urn):
 
 
 def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urns, *, restricted,
-                            inverse, dynamic, lookback, joker_size, check):
+                            inverse, dynamic, lookback, joker_size, check, recipe=None):
     from loto_enterprise.benchmark.lr_hypotheses import _training
     from loto_enterprise.core.lr_budget_forecast import _profile_scores
 
@@ -47,9 +49,12 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
     limits = (10, 40) if restricted else None
     base = range(10, min(40, lot.max_n) + 1) if restricted else range(1, lot.max_n + 1)
     outside = set(range(1, lot.max_n + 1)).difference(base)
+    slots = joker_size if lot.geo.second else 0
+    if recipe is None or not recipe.matches(layout, scheme.n, slots):
+        recipe = positional_recipe(layout, scheme.n, slots, solver=restrict_to_pool)
     references = replay_budget_portfolios(
         layout, lot, scheme, matrix, frame, origins, inverse=False, dynamic=dynamic,
-        lookback=lookback, joker_size=joker_size, number_range=limits, check=check,
+        lookback=lookback, joker_size=joker_size, number_range=limits, check=check, recipe=recipe,
     ) if inverse else {}
     main_recipes = _recipes(urns[0])
     bonus_recipes = {"": []}
@@ -99,7 +104,7 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
                         continue
         outcomes = [(matrix[i], bonus_values.get(i)) for i in range(origin, end)]
         day = dates.iloc[origin].date().isoformat()
-        evaluated = measure_paid_portfolios(layout, main, bonus, outcomes, day, objective)
+        evaluated = measure_paid_portfolios(layout, main, bonus, outcomes, day, objective, recipe=recipe)
         daily_evaluations.append(evaluated)
         for pair, tally in evaluated.items():
             recipes.setdefault(pair, Counter()).update(tally)
@@ -117,7 +122,7 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
                  key=lambda k: (recipes[k][objective], k == incumbent), default=incumbent)
     if not recipes[winner]["objective_evaluated"]:
         return {"error": "Obiectivul comun nu a putut fi evaluat pe biletele disponibile.",
-                "n_eval": recipes[winner]["n_eval"]}
+                "n_eval": recipes[winner]["n_eval"], "portfolio_refinement": recipe.portfolio_refinement}
     for u, name, choices in zip(urns, winner, (main_recipes, bonus_recipes)):
         u["decision"].update(
             members=choices[name], portfolio_objective=objective, evaluated=recipes[winner]["objective_evaluated"],
@@ -130,6 +135,7 @@ def evaluate_budget_recipes(layout, scheme, lot, frame, matrix, dates, game, urn
         for urn in urns:
             urn["protocol"] += " Excluderea se recalculează din portofoliul direct disponibil înaintea fiecărei zile."
     return {"layout": layout_identity(layout), "objective": objective, "days": len(origins),
+            "portfolio_refinement": recipe.portfolio_refinement,
             "first_date": dates.iloc[origins[0]].date().isoformat(), "draws": len(matrix) - origins[0],
             "pool_choice": list(incumbent), "ticket_choice": list(winner), "changed": winner != incumbent,
             "candidates": [
@@ -145,7 +151,7 @@ _MIN_TRAINING_ROWS = 80
 _HIT_KEYS = ("hit4", "hit5", "hit6")
 
 
-def measure_paid_portfolios(layout, main, bonus, outcomes, day, objective, *, pairs=None):
+def measure_paid_portfolios(layout, main, bonus, outcomes, day, objective, *, pairs=None, recipe=None):
     """Score the same observed draws for all playable portfolios on that date."""
     if pairs is None:
         pairs = [(m, b) for m in main for b in bonus]
@@ -159,7 +165,8 @@ def measure_paid_portfolios(layout, main, bonus, outcomes, day, objective, *, pa
             continue
         positions = tuple(pool), tuple(jokers)
         if positions not in shared:
-            plan = restrict_to_pool(deepcopy(layout), layout["objective"], pool, jokers)
+            plan = (recipe.place(pool, jokers) if recipe is not None else
+                    restrict_to_pool(deepcopy(layout), layout["objective"], pool, jokers))
             if plan["tickets"]:
                 plan["forecast_pool"] = pool
                 expanded = expand_plan(plan)
@@ -288,8 +295,36 @@ class _PortfolioWindow:
         }
 
 
+def paid_snapshot_identities(recipe, scheme, matrix, dates, bonus, origins, *, inverse, dynamic,
+                             lookback, joker_size, number_range, semantics=None):
+    """Bind each decision to its policy and its strictly prior observations in one pass."""
+    requested = sorted(set(origins))
+    if not requested:
+        return {}
+    horizon = DYNAMIC_PORTFOLIO_DAYS if dynamic else PORTFOLIO_DAYS
+    policy = ("paid-replay-prefix-v1", LIVE_BUDGET_REFERENCE, semantics or dynamic_formulas(),
+              CANDIDATES, horizon, MIN_PORTFOLIO_DAYS, _MIN_TRAINING_ROWS, scheme.code,
+              recipe.source_layout, recipe.identity, inverse, dynamic, float(lookback), joker_size, number_range)
+    digest = sha256(json.dumps(policy, separators=(",", ":")).encode("ascii"))
+    end = requested[-1]
+    # A fixed-width little-endian row binds official ball order, day and optional
+    # Joker. Zero represents the unavailable bonus as in paid portfolio grading.
+    rows = np.zeros((end, matrix.shape[1] + 2), dtype="<i4")
+    rows[:, 0] = dates.iloc[:end].to_numpy(dtype="datetime64[D]").astype(np.int32)
+    rows[:, 1:-1] = matrix[:end]
+    if bonus is not None:
+        rows[:, -1] = bonus[:end]
+    previous = 0
+    fingerprints = {}
+    for origin in requested:
+        digest.update(rows[previous:origin])
+        fingerprints[origin] = digest.hexdigest()
+        previous = origin
+    return fingerprints
+
+
 def replay_budget_portfolios(layout, lot, scheme, matrix, frame, origins, *, inverse, dynamic,
-                             lookback, joker_size, number_range, check=None):
+                             lookback, joker_size, number_range, check=None, recipe=None):
     """Rank each requested origin on paid historical variants, before observing its date.
 
     The no-profile selector recalibrates across a bounded sample. Every inverse
@@ -334,6 +369,17 @@ def replay_budget_portfolios(layout, lot, scheme, matrix, frame, origins, *, inv
         bonus_bounds = training_cutoffs(frame.loc[valid])
         bonus_values = dict(zip(bonus_positions, map(int, bonus_matrix[:, 0]), strict=True))
 
+    slots = joker_size if lot.geo.second else 0
+    if recipe is None or not recipe.matches(layout, scheme.n, slots):
+        recipe = positional_recipe(layout, scheme.n, slots, solver=restrict_to_pool)
+    aligned = None
+    if lot.geo.second:
+        aligned = np.zeros(len(matrix), dtype=np.int32)
+        aligned[bonus_positions] = bonus_matrix[:, 0]
+    identities = paid_snapshot_identities(
+        recipe, scheme, matrix, dates, aligned, wanted, inverse=inverse, dynamic=dynamic,
+        lookback=lookback, joker_size=joker_size, number_range=number_range, semantics=semantics,
+    )
     results = {}
     for position in range(start_position, end_position + 1):
         if check is not None:
@@ -389,14 +435,17 @@ def replay_budget_portfolios(layout, lot, scheme, matrix, frame, origins, *, inv
                     results[origin]["direct_joker_selection"] = (
                         {**direct_evidence, "method": direct_pair[1]} if lot.geo.second else None
                     )
+            results[origin]["portfolio_refinement"] = recipe.portfolio_refinement
+            results[origin]["paid_snapshot_sha256"] = identities[origin]
         if position == end_position or origin < _MIN_TRAINING_ROWS:
             continue
         current_day = dates.iloc[origin].date().isoformat()
         outcomes = [(matrix[i], bonus_values.get(i)) for i in range(origin, steps[position + 1])]
-        direct.update(measure_paid_portfolios(layout, day_main, day_bonus, outcomes, current_day, objective, pairs=pairs))
+        direct.update(measure_paid_portfolios(layout, day_main, day_bonus, outcomes, current_day,
+                                                 objective, pairs=pairs, recipe=recipe))
         if inverse:
             comparison = measure_paid_portfolios(
-                layout, test_main, test_bonus, outcomes, current_day, objective, pairs=pairs,
+                layout, test_main, test_bonus, outcomes, current_day, objective, pairs=pairs, recipe=recipe,
             ) if normal and normal_bonus is not None else {}
             alternative.update(comparison)
     return results

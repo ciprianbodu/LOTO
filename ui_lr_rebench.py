@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from nicegui import run, ui
 
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
+from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_budget import recommend_games
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
@@ -99,6 +100,8 @@ def _compact_profile(entry, finished_at):
     settings = entry.get("settings")
     if entry.get("error") or not isinstance(result, dict) or result.get("error"):
         return None
+    if not refinement_complete(result):
+        return None
     if result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
         return None
     if not isinstance(result.get("semantics"), dict) or result["semantics"].get("version") != 1:
@@ -148,6 +151,7 @@ def _compact_profile(entry, finished_at):
         "result": {
             "game": game, "scheme_code": scheme, "history_hash": history_hash, "history_rows": history_rows,
             "semantics": result["semantics"],
+            **({"portfolio_refinement": result["portfolio_refinement"]} if "portfolio_refinement" in result else {}),
             "as_of": result.get("as_of"), "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "urns": urns,
         },
     }
@@ -195,6 +199,8 @@ def _decision_summary(entry, finished_at):
             or not isinstance(entry.get("game"), str) or not isinstance(entry.get("result"), dict)):
         return None
     result = entry.get("result") or {}
+    if not refinement_complete(result):
+        return None
     urns = []
     for urn in result.get("urns", ()):
         if not isinstance(urn, dict):
@@ -339,13 +345,15 @@ async def _run_games(jobs, report):
                             compare_budget_ranges, budget, objective, game, {game: history},
                             inverse=options["inverse"], dynamic=options["dynamic"],
                             lookback=options["lookback"], hit_target=options["hit_target"],
-                            joker_size=options["joker_size"], pool_codes={game: options["scheme"]},
+                            joker_size=options["joker_size"], pool_codes={game: options["scheme"]}, return_recipe=True,
                         )
                         if report["cancelled"]:
                             break
                         if comparison is None:
                             raise ValueError("Analiza bazelor nu a returnat un rezultat.")
                         options["restricted"] = comparison.get("recommended_range") is not None
+                        if "paid_recipe" in comparison:
+                            options = {**options, "recipe": comparison["paid_recipe"]}
                         report["comparing"] = False
                         _changed()
                     result = await run.io_bound(
@@ -353,6 +361,8 @@ async def _run_games(jobs, report):
                     )
                     if result is None:
                         raise ValueError("Calculul nu a returnat un rezultat.")
+                    if auto_budget is not None:
+                        result["portfolio_refinement"] = merge_refinements(comparison, result)
                     outcome["result"] = result
                 except (asyncio.CancelledError, CancelledError):
                     if report["cancelled"]:
@@ -517,6 +527,8 @@ def _game_report(entry, source_for=None):
                 ui.timer(.05, verify, once=True)
             else:
                 notice.set_text("Raport istoric. Regulile nu au fost înregistrate. Rulează din nou Re-Bench pentru a folosi decizia.")
+        if not refinement_complete(result):
+            ui.label("Re-Bench provizoriu. Rafinarea biletelor a fost incompletă. Reia calculul pentru a folosi decizia.").classes("text-warning")
         if result and result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
             ui.label("Raport anterior regulii de maximum două numere consecutive. "
                      "Rulează din nou Re-Bench pentru selecția actuală.").classes("text-warning")

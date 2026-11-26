@@ -268,8 +268,7 @@ def _fixed_share_history(lot, frame):
     return dates, matrix.astype(np.int32), bonus
 
 
-def _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size, reference=None):
-    from covering.lr_pool_budget import restrict_to_pool
+def _candidate_plans(lot, recipe, scheme, scores, bonus_score, eligible, joker_size, reference=None):
     from covering.lr_pool_ranking import lr_pool_capacity, rank_lr_pool
     from loto_enterprise.core.ranking import rank_by_score
 
@@ -288,7 +287,7 @@ def _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible
     candidates = {}
     for method, values in scores.items():
         pool = sorted(rank_lr_pool({n: values.get(n, 0.0) for n in left}, scheme.n))
-        played = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
+        played = recipe.place(pool, jokers)
         if not played["tickets"]:
             raise ValueError("Bugetul nu produce bilete în pool-ul selectat de Fixed Share.")
         played["forecast"] = {
@@ -302,7 +301,7 @@ def _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible
 
 def online_ticket_forecast(
     lot, plan, scheme, frame_before_day, *, inverse, number_range, lookback,
-    joker_size, objective, cancelled=None,
+    joker_size, objective, cancelled=None, recipe=None,
 ):
     """Replay portfolio losses on prior days, then build the actually selected plan.
 
@@ -312,6 +311,7 @@ def online_ticket_forecast(
     from the same prefix, including its actual Urn 2 ranking.
     """
     from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
+    from covering.lr_refinement_status import merge_refinements, refinement_complete
     from loto_enterprise.benchmark.methods import call_method
 
     if cancelled is not None:
@@ -335,17 +335,21 @@ def online_ticket_forecast(
     from loto_enterprise.core.cache_io import pickle_load_path, pickle_store_path_atomic
     from runtime_paths import WF_CACHE_DIR
 
+    from covering.lr_pool_budget import positional_recipe
+    if recipe is None or not recipe.matches(plan, scheme.n, joker_size):
+        recipe = positional_recipe(plan, scheme.n, joker_size)
     semantics = lr_semantics(lot, scheme, 4, layout=plan)
     context = fixed_share_context({
         "plan": plan, "scheme": scheme.code, "range": number_range, "lookback": lookback,
         "objective": objective, "joker_size": joker_size, "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "training_days": TRAINING_DAYS, "experts": DEFAULT_EXPERTS, "semantics": semantics,
+        "paid_recipe": recipe.identity,
         "tuning": TUNING_GRID, "warmup": TUNING_WARMUP_DAYS,
     })
     key = (history_hash, context, bool(inverse))
     with _CACHE_LOCK:
         cached = _FORECAST_CACHE.get(key)
-        if cached is not None:
+        if recipe.complete and cached is not None:
             _FORECAST_CACHE.move_to_end(key)
             return deepcopy(cached)
 
@@ -382,6 +386,7 @@ def online_ticket_forecast(
     recent = starts[max(1, len(starts) - TRAINING_DAYS - 1):]
     spans = list(zip(recent[:-1], recent[1:], strict=True))
     completed = 0
+    evidence = {"portfolio_refinement": recipe.portfolio_refinement}
     mode = "inverse" if inverse else "direct"
     cache_path = WF_CACHE_DIR / "lr_ticket_experts" / f"{lot.bench_key}-{mode}.pkl"
     # One bounded slot per game/mode. A concurrent different forecast may replace
@@ -393,10 +398,14 @@ def online_ticket_forecast(
             offset = progress["completed"]
             if type(offset) is not int or not 0 <= offset <= len(spans):
                 raise ValueError("Invalid Fixed Share checkpoint origin.")
+            restored = progress["portfolio_refinement"]
+            if not refinement_complete({"portfolio_refinement": restored}):
+                raise ValueError("Checkpoint Fixed Share provizoriu.")
             direct.resume(progress["direct"])
             if inverse:
                 selected.resume(progress["inverse"])
             completed, observed, skipped = offset, progress["observed"], progress["skipped"]
+            evidence["portfolio_refinement"] = merge_refinements(evidence, {"portfolio_refinement": restored})
     except FileNotFoundError:
         pass
     except (OSError, EOFError, ZstdError, pickle.UnpicklingError, TypeError, KeyError, IndexError, ValueError) as exc:
@@ -412,20 +421,22 @@ def online_ticket_forecast(
         scores, bonus_score = candidates(origin)
         counted = 0
         if bonus_score is not None:
-            active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size)
+            active = _candidate_plans(lot, recipe, scheme, scores, bonus_score, eligible, joker_size)
+            evidence["portfolio_refinement"] = merge_refinements(evidence, *active.values())
             if inverse:
                 reference = active[direct.selected.choose()]["forecast"]
                 if lr_pool_capacity(eligible.difference(reference["pool"])) >= scheme.n:
-                    inverses = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score,
+                    inverses = _candidate_plans(lot, recipe, scheme, scores, bonus_score,
                                                 eligible, joker_size, reference)
+                    evidence["portfolio_refinement"] = merge_refinements(evidence, *inverses.values())
                     counted = selected.observe(dates[origin], inverses, outcomes)
                 direct.observe(dates[origin], active, outcomes)
             else:
                 counted = selected.observe(dates[origin], active, outcomes)
         observed += counted
         skipped += not counted
-        if step % TUNING_WARMUP_DAYS == 0 or step == len(spans):
-            progress = {"completed": step, "observed": observed, "skipped": skipped,
+        if refinement_complete(evidence) and (step % TUNING_WARMUP_DAYS == 0 or step == len(spans)):
+            progress = {**evidence, "completed": step, "observed": observed, "skipped": skipped,
                         "direct": direct.checkpoint(), "inverse": selected.checkpoint() if inverse else None}
             try:
                 pickle_store_path_atomic(cache_path, {"identity": key, "checksum": fixed_share_context(progress),
@@ -438,12 +449,15 @@ def online_ticket_forecast(
     scores, bonus_score = candidates(len(matrix))
     if bonus_score is None:
         raise ValueError("Fixed Share: fereastra de istoric nu conține bile Joker valide.")
-    active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size)
+    active = _candidate_plans(lot, recipe, scheme, scores, bonus_score, eligible, joker_size)
     if inverse:
-        reference = active[direct.selected.choose()]["forecast"]
-        active = _candidate_plans(lot, plan, scheme, objective, scores, bonus_score, eligible, joker_size, reference)
+        direct_choice = active[direct.selected.choose()]
+        evidence["portfolio_refinement"] = merge_refinements(evidence, direct_choice)
+        reference = direct_choice["forecast"]
+        active = _candidate_plans(lot, recipe, scheme, scores, bonus_score, eligible, joker_size, reference)
     expert = selected.selected.choose()
     played = active[expert]
+    played["portfolio_refinement"] = merge_refinements(evidence, played)
     played["forecast"].update(
         selection_policy=ONLINE_TICKET_EXPERTS,
         selection={
@@ -460,6 +474,8 @@ def online_ticket_forecast(
         generated=False, dynamic=True, code=scheme.code, inverse=inverse, number_range=number_range,
         inverse_range=number_range if inverse else None, max_consecutive_run=LR_MAX_CONSECUTIVE_RUN,
     )
+    if not refinement_complete(played):
+        return played
     with _CACHE_LOCK:
         _FORECAST_CACHE[key] = deepcopy(played)
         _FORECAST_CACHE.move_to_end(key)

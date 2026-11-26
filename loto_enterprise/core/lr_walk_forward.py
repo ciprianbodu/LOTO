@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from math import isfinite
 from pathlib import Path
 
@@ -10,8 +9,9 @@ import numpy as np
 import pandas as pd
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
-from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_pool_budget import positional_recipe, restrict_to_pool
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity, rank_lr_pool
+from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.decision import MIN_CONSISTENCY_WINDOWS, game_hit_target
@@ -72,6 +72,8 @@ def _fit(game, training, lot, *, inverse, cancel_path, **options):
         else:
             target = game_hit_target(key, options["hit_target"]) if key == lot.bench_key else 1
             fitted[key] = _frequency_profile(target, urn.get("error", "Date insuficiente pentru alegerea metodei."))
+        if "portfolio_refinement" in report:
+            fitted[key]["portfolio_refinement"] = report["portfolio_refinement"]
     return fitted
 
 
@@ -139,6 +141,7 @@ def _summary(draws, days, start):
         "distinct_variants": sum(d["distinct_variants"] for d in scored),
         "duplicate_variants": sum(d["duplicates"] for d in scored),
         "draws_with_duplicates": sum(bool(d.get("duplicates")) for d in scored),
+        "provisional_draws": sum(not refinement_complete(draw) for draw in scored),
         "fallback_draws": sum(bool(roles) for roles in fallbacks),
         "fallback_by_role": {role: sum(role in roles for roles in fallbacks) for role in _SELECTION_ROLES},
         "objective_hits": sum(draw["objective_hit"] is True for draw in scored),
@@ -186,11 +189,15 @@ def validate_lr_walk_forward(
         progress_cb(0, total)
     training = (source[0] if source is not None else Path(lot.csv).name, frame.iloc[:start])
     requested_restricted = restricted
+    if lot.geo.second and (type(joker_size) is not int or not 1 <= joker_size <= lot.geo.second.max_n):
+        raise ValueError("Dimensiunea pool-ului Joker pentru Urna 2 este nevalidă.")
+    recipe = positional_recipe(plan, scheme.n, joker_size if lot.geo.second else 0, solver=restrict_to_pool)
     auto_reason = None
+    comparison = {}
     if restricted is None:
         comparison = compare_budget_ranges(
             budget_lei, objective, game_id, {game_id: training}, dynamic=dynamic, inverse=inverse,
-            lookback=lookback, hit_target=hit_target, joker_size=joker_size,
+            lookback=lookback, hit_target=hit_target, joker_size=joker_size, recipe=recipe,
             **({"selection_policy": selection_policy} if selection_policy else {}),
         )
         restricted = comparison["recommended_range"] == _RANGE
@@ -218,8 +225,6 @@ def validate_lr_walk_forward(
     bonus_count = 0
     if lot.bench_key_urna2:
         maximum = lot.geo.second.max_n
-        if type(joker_size) is not int or not 1 <= joker_size <= maximum:
-            raise ValueError("Dimensiunea pool-ului Joker pentru Urna 2 este nevalidă.")
         bonus_count = joker_size
         bonus_available = maximum - (joker_size if inverse else 0)
         if bonus_available < joker_size:
@@ -233,18 +238,20 @@ def validate_lr_walk_forward(
         if not len(valid_bonus_rows) or valid_bonus_rows[0] >= bounds[-1]:
             raise ValueError("Urna 2 Joker nu are extrageri valide înaintea niciunei zile de test.")
 
-    layout = restrict_to_pool(deepcopy(plan), objective, list(range(1, scheme.n + 1)), list(range(1, bonus_count + 1)))
+    layout = recipe.place(range(1, scheme.n + 1), range(1, bonus_count + 1))
     options = {
         "scheme": scheme.code, "restricted": bool(restricted), "dynamic": dynamic,
         "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
-        "budget_lei": budget_lei, "objective": objective,
+        "budget_lei": budget_lei, "objective": objective, "recipe": recipe,
     }
+    fit_evidence = {"portfolio_refinement": merge_refinements(comparison, layout)}
     methods = {}
     mismatched_references = []
     if not daily:
         direct = _fit(game_id, training, lot, inverse=False, cancel_path=cancel_path, **options)
         check(force=True)
         tested = _fit(game_id, training, lot, inverse=True, cancel_path=cancel_path, **options) if inverse else direct
+        fit_evidence["portfolio_refinement"] = merge_refinements(fit_evidence, *direct.values(), *tested.values())
         if inverse:
             mismatched_references = [
                 key for key, profile in tested.items() if profile["source"] == "training_rebench"
@@ -267,12 +274,13 @@ def validate_lr_walk_forward(
         paid_by_scope = {
             base: replay_budget_portfolios(
                 plan, lot, scheme, matrix, frame, origins, inverse=inverse, dynamic=dynamic, lookback=lookback,
-                joker_size=joker_size, number_range=_RANGE if base else None, check=check,
+                joker_size=joker_size, number_range=_RANGE if base else None, check=check, recipe=recipe,
             ) for base in scopes
         }
     draws = []
     for origin, end in zip(days, (*days[1:], len(matrix)), strict=True):
         check()
+        range_report = {}
         bonus_origin = int(np.searchsorted(valid_bonus_rows, origin))
         try:
             if daily:
@@ -280,24 +288,25 @@ def validate_lr_walk_forward(
                 prefix = {game_id: (training[0], frame.iloc[:origin])}
                 daily_restricted = restricted
                 if requested_restricted is None:
-                    ranges = compare_budget_ranges(budget_lei, objective, game_id, prefix, dynamic=dynamic,
+                    range_report = compare_budget_ranges(budget_lei, objective, game_id, prefix, dynamic=dynamic,
                                                    inverse=inverse, lookback=lookback, hit_target=hit_target,
-                                                   joker_size=joker_size,
+                                                   joker_size=joker_size, recipe=recipe,
                                                    **({"selection_policy": selection_policy} if selection_policy else {}))
-                    daily_restricted = ranges["recommended_range"] == _RANGE
+                    daily_restricted = range_report["recommended_range"] == _RANGE
                 if selection_policy == "online_ticket_experts":
                     from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
                     daily_plan = online_ticket_forecast(
                         lot, plan, scheme, frame.iloc[:origin], inverse=inverse,
                         number_range=_RANGE if daily_restricted else None, lookback=lookback,
-                        joker_size=joker_size, objective=objective, cancelled=check)
+                        joker_size=joker_size, objective=objective, cancelled=check, recipe=recipe)
                 else:
                     snapshot = paid_by_scope.get(daily_restricted, {}).get(origin)
                     options = {"paid_snapshot": {game_id: snapshot}} if snapshot is not None else {}
                     daily_plan, = recommend_playable_games(
                         budget_lei, objective, game_id, prefix, pool_codes={game_id: scheme.code},
                         lookback=lookback, dynamic=dynamic, joker_size=joker_size, inverse=inverse,
-                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None, **options)
+                        hit_target=hit_target, number_range=_RANGE if daily_restricted else None,
+                        paid_recipes={game_id: recipe}, **options)
                 forecast = daily_plan.get("forecast")
                 if not forecast or not daily_plan["tickets"]:
                     raise ValueError(daily_plan.get("forecast_error", "Bugetul nu produce bilete LR."))
@@ -313,9 +322,10 @@ def validate_lr_walk_forward(
                     bonus_matrix, bonus_bounds, bonus_origin, joker_size,
                 )
                 pool, jokers = played["pool"], played["jokers"]
-                daily_plan = restrict_to_pool(deepcopy(plan), objective, pool, jokers)
+                daily_plan = recipe.place(pool, jokers)
                 daily_plan["forecast_pool"] = pool
             expanded = expand_plan(daily_plan)
+            played["portfolio_refinement"] = merge_refinements(fit_evidence, range_report, daily_plan)
             played["layout_id"] = layout_identity(daily_plan)
             played["tickets"] = daily_plan["tickets"]
         except (ValueError, ArithmeticError) as exc:
@@ -381,6 +391,7 @@ def validate_lr_walk_forward(
         "dynamic": bool(dynamic), "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
         "selection_policy": selection_policy, "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
         "auto_reason": auto_reason, "summary": _summary(draws, len(days), start), "draws": draws,
+        "portfolio_refinement": merge_refinements(fit_evidence, *draws),
         "methods": methods, "protocol": protocol, "replay_policy": "daily" if daily else "fixed",
         "inverse_references_checked": bool(inverse and not daily),
         "profile_reference_mismatch": mismatched_references,

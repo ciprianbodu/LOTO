@@ -80,6 +80,8 @@ class PrizeDraw:
     supplementary: bool | None = field(default=None, compare=False)
     official_id: str | None = field(default=None, compare=False)
     draw_order: int | None = field(default=None, compare=False)
+    # Only a result edition explicitly numbered by the source has this field.
+    result_version: int | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -319,10 +321,14 @@ def parse_month_html(
         ordinal = _draw_attribute(block, headings[0], ("data-draw-order", "data-ordine-extragere"))
         if ordinal is not None and not re.fullmatch(r"[1-9][0-9]{0,2}", ordinal):
             raise ArchiveError("Invalid official draw order")
+        version = _draw_attribute(block, headings[0], ("data-result-version", "data-versiune-rezultat"))
+        if version is not None and not re.fullmatch(r"[1-9][0-9]{0,17}", version):
+            raise ArchiveError("Invalid official result version")
         draw = PrizeDraw(
             game, draw_date.isoformat(), tuple(numbers), joker,
             tuple(categories), ARCHIVE_URLS[game], supplementary=supplementary,
             official_id=official_id, draw_order=int(ordinal) if ordinal is not None else None,
+            result_version=int(version) if version is not None else None,
         )
         if preserve_event_identity:
             observed.setdefault(draw.draw_date, []).append(draw)

@@ -106,7 +106,7 @@ def method_formulas(names):
 
 
 def lr_semantics(lot, scheme, hit_target, *, layout=None):
-    from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_milp, lr_pool_ranking
+    from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_milp, lr_pool_ranking, lr_refinement_status
     from covering import lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates, lr_portfolio, lr_schemes, lr_selection, probability
     from loto_enterprise.benchmark import decision, lr_budget_scoring, lr_hypotheses, restricted_decision, runner
     from loto_enterprise.core import dynamic_pools, dynamic_winner, lr_budget_forecast, lr_range_analysis, ranking
@@ -114,7 +114,7 @@ def lr_semantics(lot, scheme, hit_target, *, layout=None):
 
     catalog = {key: tuple(lr_hypotheses._methods(key)) for key in lot.bench_keys}
     selection_modules = (lr_hypotheses, decision, runner, restricted_decision, lr_pool_ranking,
-                         dynamic_winner, dynamic_pools, ranking, lr_range_analysis, lr_schemes, lr_selection,
+                         dynamic_winner, dynamic_pools, ranking, lr_range_analysis, lr_schemes, lr_selection, lr_refinement_status,
                          lr_played_portfolio, lr_ticket_experts, lr_budget_scoring, lr_budget_forecast,
                          lr_budget, lr_pool_budget, lr_pool_milp, lr_portfolio, lr_any_prize_649, lr_any_prize_joker,
                          prize_categories, probability, lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates)

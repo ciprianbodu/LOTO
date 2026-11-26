@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,8 +12,9 @@ import pandas as pd
 
 from covering.lr_budget import ANY_PRIZE, recommend_games
 from covering.lr_catalog_cache import catalog_cache
-from covering.lr_pool_budget import restrict_to_pool
+from covering.lr_pool_budget import positional_recipe, restrict_to_pool
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, lr_pool_capacity
+from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark.lr_provenance import lr_semantics
 from loto_enterprise.benchmark.methods import call_method
@@ -101,9 +101,9 @@ def _frozen_scores(method, past, maximum, cutoffs):
     return call_method("frequency", past, maximum, history_cutoffs=cutoffs)[0]
 
 
-@catalog_cache(maxsize=8)
+@catalog_cache(maxsize=8, cache_if=lambda result: refinement_complete(result[-1]))
 def _replay(data, date_labels, game, code, template, lookback, dynamic, inverse, joker_size,
-            bonus_data, policy, semantic_signature):
+            bonus_data, policy, semantic_signature, recipe):
     from loto_enterprise.benchmark.lr_budget_scoring import replay_budget_portfolios
     from loto_enterprise.core.lr_ticket_experts import online_ticket_forecast
 
@@ -123,8 +123,9 @@ def _replay(data, date_labels, game, code, template, lookback, dynamic, inverse,
     origins = [day for day in days if day >= bounds[start]] if days else []
     results = np.full((len(RANGES), len(matrix) - start, 3), -1, dtype=np.int8)
     current = [False] * len(RANGES)
+    evidence = {"portfolio_refinement": recipe.portfolio_refinement}
     if not len(matrix) or date_labels is None:
-        return start, len(origins), results, current
+        return start, len(origins), results, current, evidence
 
     objective = layout["objective"]
     outcome = "any_prize" if objective == ANY_PRIZE else "hit4"
@@ -136,23 +137,25 @@ def _replay(data, date_labels, game, code, template, lookback, dynamic, inverse,
         if policy != ONLINE_TICKET_EXPERTS:
             forecasts = replay_budget_portfolios(
                 layout, lot, scheme, matrix, frame, wanted, inverse=inverse, dynamic=dynamic,
-                lookback=lookback, joker_size=joker_size, number_range=limits,
+                lookback=lookback, joker_size=joker_size, number_range=limits, recipe=recipe,
             )
         for origin, end in zip(wanted, [*wanted[1:], len(matrix)], strict=True):
             if policy == ONLINE_TICKET_EXPERTS:
                 try:
                     played = online_ticket_forecast(
                         lot, layout, scheme, frame.iloc[:origin], inverse=inverse, number_range=limits,
-                        lookback=lookback, joker_size=joker_size, objective=objective,
+                        lookback=lookback, joker_size=joker_size, objective=objective, recipe=recipe,
                     )
                 except ValueError:
                     continue
             else:
                 forecast = forecasts[origin]
+                evidence["portfolio_refinement"] = merge_refinements(evidence, forecast)
                 if forecast.get("error"):
                     continue
-                played = restrict_to_pool(deepcopy(layout), objective, forecast["pool"], forecast["jokers"])
+                played = recipe.place(forecast["pool"], forecast["jokers"])
                 played["forecast_pool"] = forecast["pool"]
+            evidence["portfolio_refinement"] = merge_refinements(evidence, played)
             if not played["tickets"]:
                 continue
             if origin == len(matrix):
@@ -164,7 +167,7 @@ def _replay(data, date_labels, game, code, template, lookback, dynamic, inverse,
                 grade = grade_draw(portfolio, matrix[i], joker, draw_date=date_labels[i])
                 attained = grade[outcome]
                 results[index, i - start] = grade["pool_hits"], grade["max_hits"], -1 if attained is None else int(attained)
-    return start, len(origins), results, current
+    return start, len(origins), results, current, evidence
 
 
 def _summarize(data, reference, timing, start, limits, eligible_count, size):
@@ -240,7 +243,8 @@ def _decision(rows):
 
 def compare_budget_ranges(
     budget_lei, objective, game_id, histories=None, *, lookback=100, dynamic=True, inverse=False,
-    hit_target=4, joker_size=5, pool_codes=None, generated=None, selection_policy=None,
+    hit_target=4, joker_size=5, pool_codes=None, generated=None, selection_policy=None, recipe=None,
+    return_recipe=False,
 ):
     """Compare official main-number tickets before using a range for the next draw."""
     lot = require_lottery(game_id, "RO")
@@ -272,10 +276,14 @@ def compare_budget_ranges(
         values, valid = valid_draw_matrix(engine.data, ["joker"], draw_n=1, max_num=lot.geo.second.max_n)
         bonus[valid] = values[:, 0]
     labels = tuple(dates.dt.strftime("%Y-%m-%d")) if dates is not None else None
-    start, days, results, current = _replay(
+    slots = joker_size if lot.geo.second else 0
+    if recipe is None or not recipe.matches(plan, scheme.n, slots):
+        recipe = positional_recipe(plan, scheme.n, slots, solver=restrict_to_pool)
+    start, days, results, current, evidence = _replay(
         np.ascontiguousarray(matrix, dtype=np.int32).tobytes(), labels, game_id, scheme.code,
         json.dumps(plan, sort_keys=True), lookback, dynamic, inverse, joker_size, bonus.tobytes(), selection_policy,
         tuple(sorted(lr_semantics(lot, scheme, hit_target, layout=plan).items())),
+        recipe,
     )
     rows = []
     for index, limits in enumerate(RANGES):
@@ -329,7 +337,8 @@ def compare_budget_ranges(
         "rows": len(matrix) - start, "days": days, "first_date": (
             dates.iloc[start].date().isoformat() if dates is not None and len(matrix) > start else None
         ), "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(matrix) else None,
-        "metric": metric, "ranges": rows,
+        "metric": metric, "ranges": rows, **evidence,
+        **({"paid_recipe": recipe} if return_recipe else {}),
         "recommended_range": recommendation, "reason": reason,
         "protocol": protocol,
     }

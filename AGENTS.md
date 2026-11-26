@@ -21,6 +21,10 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 Din 26.11.2026, generatorul pe buget și validarea folosesc rafinarea pozițiilor în scheme LR întregi. La cost egal, verificarea din bilete a confirmat un câștig combinatoric în 8/42 de cazuri din grilă și 7/24 din generator. La Joker, numărul bilelor eligibile și atribuirea lor fiecărei zone fac parte din geometria certificatului. [Rezultate și comenzi de reproducere](scripts/analysis/lr_acoperire_certificata_2026_11_26.md)
 
+Registrul prospectiv păstrează observațiile sursei, inclusiv reconfirmările. O observație întârziată nu poate înlocui ultima confirmare acceptată. Când sursa revine la o combinație mai veche, registrul verifică ediția oficială sau consemnează conflictul pentru audit. Fiecare predicție are cel mult o evaluare activă pentru aceeași tragere.
+
+Dacă rafinarea LR se întrerupe, biletele de rezervă pot fi afișate cu mențiunea „provizoriu”. La cererea următoare, selecția se reface pe rețetele validate. O căutare ajunsă la termen cu o soluție verificată rămâne utilizabilă. Regula privește și comparația bazelor, profilurile Re-Bench și pregătirea experților Fixed Share.
+
 Catalogul de bază este comun tuturor jocurilor și include trei metode:
 frecvențe pe ferestre (`compact_multiscale_shrink`), tranziții între zile
 (`compact_transition_prior`) și intervale de reapariție (`compact_renewal_hazard`).

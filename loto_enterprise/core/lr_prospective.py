@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from hashlib import sha256
 from itertools import combinations
@@ -29,7 +29,7 @@ _ONLINE_CLOSE = time(15, 30)
 # https://www.loto.ro/?page_id=1066
 _WEEKDAYS = {3, 6}
 _SCHEMA = 1
-_DB_SCHEMA = 2
+_DB_SCHEMA = 3
 _RECENT_DRAW_DAYS = 31
 _HASH = re.compile(r"[0-9a-f]{64}")
 _ENGINE_HASH = re.compile(r"[0-9a-f]{16}")
@@ -171,6 +171,15 @@ _BASE_SCHEMA = """
         BEGIN SELECT RAISE(ABORT, 'evaluations are immutable'); END;
 """
 
+_REVISION_TABLE = """
+    CREATE TABLE IF NOT EXISTS official_revisions (
+        id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES official_events(id),
+        sequence INTEGER NOT NULL, content_sha256 TEXT NOT NULL,
+        supersedes TEXT REFERENCES official_revisions(id), observed_at TEXT NOT NULL, payload TEXT NOT NULL,
+        UNIQUE (event_id, sequence)
+    );
+"""
+
 _EVENT_SCHEMA = """
     CREATE TABLE IF NOT EXISTS official_events (
         id TEXT PRIMARY KEY, game TEXT NOT NULL, draw_date TEXT NOT NULL
@@ -181,13 +190,20 @@ _EVENT_SCHEMA = """
         PRIMARY KEY (key, event_id)
     );
     CREATE INDEX IF NOT EXISTS official_keys_by_event ON official_event_keys(event_id);
-    CREATE TABLE IF NOT EXISTS official_revisions (
-        id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES official_events(id),
-        sequence INTEGER NOT NULL, content_sha256 TEXT NOT NULL,
-        supersedes TEXT REFERENCES official_revisions(id), observed_at TEXT NOT NULL, payload TEXT NOT NULL,
-        UNIQUE (event_id, sequence), UNIQUE (event_id, content_sha256)
-    );
+""" + _REVISION_TABLE + """
     CREATE UNIQUE INDEX IF NOT EXISTS official_revision_successor ON official_revisions(supersedes);
+    CREATE TABLE IF NOT EXISTS official_observations (
+        id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES official_events(id),
+        revision_id TEXT NOT NULL REFERENCES official_revisions(id), disposition TEXT NOT NULL,
+        observed_utc TEXT NOT NULL, archive_sha256 TEXT NOT NULL, content_sha256 TEXT NOT NULL,
+        source_version INTEGER, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS official_observation_watermark
+        ON official_observations(event_id, observed_utc DESC) WHERE disposition IN ('revision', 'confirmation');
+    CREATE INDEX IF NOT EXISTS official_observation_page
+        ON official_observations(event_id, archive_sha256, content_sha256, source_version);
+    CREATE INDEX IF NOT EXISTS official_observation_version
+        ON official_observations(event_id, source_version DESC) WHERE source_version IS NOT NULL;
     CREATE TABLE IF NOT EXISTS official_conflicts (
         id TEXT PRIMARY KEY, payload TEXT NOT NULL
     );
@@ -203,34 +219,87 @@ _EVENT_SCHEMA = """
         WHERE NOT EXISTS (SELECT 1 FROM official_revisions AS n WHERE n.supersedes = r.id);
 """
 
+def _execute_schema(db, sql):
+    # executescript commits an already open transaction on older sqlite3 APIs.
+    pending = ""
+    for line in sql.splitlines(keepends=True):
+        pending += line
+        if sqlite3.complete_statement(pending):
+            db.execute(pending)
+            pending = ""
+
+
+def _observation_time(moment):
+    return moment.astimezone(UTC).isoformat(timespec="microseconds")
+
+
+def _store_observation(db, event_id, revision_id, evidence, observed_at, disposition):
+    timestamp = _observation_time(observed_at)
+    page = evidence["official_archive_sha256"]
+    content = evidence["content_sha256"]
+    version = evidence.get("source_version")
+    record = {**evidence, "event_id": event_id, "revision_id": revision_id, "disposition": disposition,
+              "observed_at": observed_at.isoformat()}
+    observation_id = _hash([event_id, timestamp, page, content, version, evidence["identity"],
+                            revision_id, disposition == "conflict"])
+    if not db.execute("SELECT 1 FROM official_observations WHERE id=?", (observation_id,)).fetchone():
+        db.execute("INSERT INTO official_observations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   (observation_id, event_id, revision_id, disposition, timestamp, page,
+                    content, version, _canonical(record)))
+
+
 def _migrate(db):
     if db.execute("PRAGMA user_version").fetchone()[0] >= _DB_SCHEMA:
         return
-    statements = []
-    for table, identity in (
-        ("official_events", "id=NEW.id"),
-        ("official_event_keys", "key=NEW.key AND event_id=NEW.event_id"),
-        ("official_revisions", """id=NEW.id OR (event_id=NEW.event_id AND (
-            sequence=NEW.sequence OR content_sha256=NEW.content_sha256)) OR supersedes=NEW.supersedes"""),
-        ("official_conflicts", "id=NEW.id"),
-        ("legacy_evaluation_links", "prediction_id=NEW.prediction_id AND legacy_draw_id=NEW.legacy_draw_id"),
-    ):
-        statements.append(f"""
-            CREATE TRIGGER IF NOT EXISTS lr_{table}_insert BEFORE INSERT ON {table}
-            WHEN EXISTS (SELECT 1 FROM {table} WHERE {identity})
-            BEGIN SELECT RAISE(ABORT, 'official evidence already exists'); END;
-        """)
-        for action in ("UPDATE", "DELETE"):
-            statements.append(f"""
-                CREATE TRIGGER IF NOT EXISTS lr_{table}_{action.lower()} BEFORE {action} ON {table}
-                BEGIN SELECT RAISE(ABORT, 'official evidence is immutable'); END;
+    # Replace the v2 table in place: evaluations and legacy links continue to
+    # refer to precisely the same immutable IDs and payload bytes.
+    db.execute("PRAGMA foreign_keys=OFF")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("PRAGMA user_version").fetchone()[0] >= _DB_SCHEMA:
+            db.commit()
+            return
+        has_revisions = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='official_revisions'"
+        ).fetchone()
+        if has_revisions:
+            db.execute("DROP VIEW IF EXISTS active_official_evaluations")
+            db.execute(_REVISION_TABLE.replace("official_revisions", "replacement_revisions"))
+            db.execute("INSERT INTO replacement_revisions SELECT * FROM official_revisions")
+            db.execute("DROP TABLE official_revisions")
+            db.execute("ALTER TABLE replacement_revisions RENAME TO official_revisions")
+        _execute_schema(db, _BASE_SCHEMA + _EVENT_SCHEMA)
+        for table, identity in (
+            ("official_events", "id=NEW.id"),
+            ("official_event_keys", "key=NEW.key AND event_id=NEW.event_id"),
+            ("official_revisions", """id=NEW.id OR (event_id=NEW.event_id AND sequence=NEW.sequence)
+                                       OR supersedes=NEW.supersedes"""),
+            ("official_observations", "id=NEW.id"),
+            ("official_conflicts", "id=NEW.id"),
+            ("legacy_evaluation_links", "prediction_id=NEW.prediction_id AND legacy_draw_id=NEW.legacy_draw_id"),
+        ):
+            db.execute(f"""
+                CREATE TRIGGER IF NOT EXISTS lr_{table}_insert BEFORE INSERT ON {table}
+                WHEN EXISTS (SELECT 1 FROM {table} WHERE {identity})
+                BEGIN SELECT RAISE(ABORT, 'official evidence already exists'); END
             """)
-    # The old tables and bytes remain intact. Multiple readers may see an
-    # older version concurrently; the migration is idempotent under the lock.
-    db.executescript(
-        "BEGIN IMMEDIATE;\n" + _BASE_SCHEMA + _EVENT_SCHEMA + "\n".join(statements)
-        + f"PRAGMA user_version={_DB_SCHEMA}; COMMIT;"
-    )
+            for action in ("UPDATE", "DELETE"):
+                db.execute(f"""
+                    CREATE TRIGGER IF NOT EXISTS lr_{table}_{action.lower()} BEFORE {action} ON {table}
+                    BEGIN SELECT RAISE(ABORT, 'official evidence is immutable'); END
+                """)
+        if has_revisions:
+            for row in db.execute("SELECT * FROM official_revisions ORDER BY rowid"):
+                _store_observation(db, row["event_id"], row["id"], json.loads(row["payload"]),
+                                   datetime.fromisoformat(row["observed_at"]), "revision")
+        if db.execute("PRAGMA foreign_key_check").fetchone():
+            raise sqlite3.IntegrityError("Migrarea ar lăsa o referință invalidă în registrul oficial.")
+        db.execute(f"PRAGMA user_version={_DB_SCHEMA}")
+        db.commit()
+    finally:
+        if db.in_transaction:
+            db.rollback()
+        db.execute("PRAGMA foreign_keys=ON")
 
 
 @contextmanager
@@ -296,6 +365,8 @@ def _snapshot(plan, settings, captured, known_days, build, target_day=None, sche
         "price_bani": expanded.price_bani,
         "variants": expanded.variants,
     }
+    if plan.get("portfolio_refinement") is not None:
+        support["portfolio_refinement"] = plan["portfolio_refinement"]
     identity = _hash(support)
     return {**support, "id": identity, "captured_at": captured.isoformat()}
 
@@ -397,6 +468,10 @@ def _observe(draw, captured):
     if supplementary is not None and type(supplementary) is not bool:
         raise ValueError("Tipul oficial al tragerii este invalid.")
 
+    version = draw.result_version
+    if version is not None and (type(version) is not int or not 1 <= version < 10**18):
+        raise ValueError("Versiunea oficială a rezultatului este invalidă.")
+
     evidence = {"official_id": identity, "draw_order": order, "supplementary": supplementary}
     keys = {}
     if identity is not None:
@@ -426,7 +501,7 @@ def _snapshot_conflicts(observations):
         group = [observations[index] for index in indexes]
         # The verified principal role is unique. Identical repeats of that
         # result or of a verified ID or ordinal are idempotent.
-        signatures = {(_canonical(row.keys), _canonical(row.evidence), row.content_sha) for row in group}
+        signatures = {(_canonical(row.keys), _canonical(row.evidence), row.content_sha, row.draw.result_version) for row in group}
         first = group[0]
         principal = first.evidence["supplementary"] is False
         if len(signatures) == 1 and (principal or "id" in first.keys or "order" in first.keys):
@@ -446,18 +521,27 @@ class _IdentityConflict(ValueError):
     pass
 
 
-def _record_conflict(db, observation, reason, archive_sha256, observed_at):
+def _source_evidence(observation, archive_sha256):
     draw = observation.draw
-    payload = {
+    return {
         "game": observation.game, "date": observation.day.isoformat(), "identity": observation.evidence,
         "content_sha256": observation.content_sha, "numbers": draw.numbers, "joker": draw.joker,
-        "official_url": draw.source_url, "official_archive_sha256": archive_sha256, "reason": reason,
+        "official_url": draw.source_url, "official_archive_sha256": archive_sha256,
+        "source_version": draw.result_version,
     }
+
+
+def _record_conflict(db, observation, event_id, reason, archive_sha256, observed_at):
+    payload = {**_source_evidence(observation, archive_sha256), "reason": reason,
+               "observed_at": _observation_time(observed_at), "event_id": event_id}
+    if event_id is not None:
+        latest = db.execute("SELECT id FROM official_revisions WHERE event_id=? ORDER BY sequence DESC LIMIT 1",
+                            (event_id,)).fetchone()
+        if latest:
+            _store_observation(db, event_id, latest["id"], payload, observed_at, "conflict")
     conflict_id = _hash(payload)
     if not db.execute("SELECT 1 FROM official_conflicts WHERE id=?", (conflict_id,)).fetchone():
-        db.execute("INSERT INTO official_conflicts VALUES (?, ?)", (
-            conflict_id, _canonical({**payload, "observed_at": observed_at.isoformat()}),
-        ))
+        db.execute("INSERT INTO official_conflicts VALUES (?, ?)", (conflict_id, _canonical(payload)))
 
 
 def _resolve_event(db, observation):
@@ -512,8 +596,81 @@ def _resolve_event(db, observation):
     return None
 
 
+def _classify_observation(db, latest, evidence, observed_at, previous_archive):
+    """Return a historical revision ID for a replay. Raise on conflicting evidence."""
+    event_id = latest["event_id"]
+    archive_sha256 = evidence["official_archive_sha256"]
+    content = evidence["content_sha256"]
+    version = evidence["source_version"]
+    timestamp = _observation_time(observed_at)
+    # A previous edition stays historical even if a replay is given today's
+    # retrieval time, or its numbers happen to match a later active revision.
+    known_page = db.execute("""
+        SELECT revision_id, source_version FROM official_observations
+        WHERE event_id=? AND archive_sha256=? AND content_sha256=?
+          AND disposition IN ('revision', 'confirmation') ORDER BY source_version DESC, rowid DESC LIMIT 1
+    """, (event_id, archive_sha256, content)).fetchone()
+    if known_page:
+        if version is not None and known_page["source_version"] not in (None, version):
+            raise _IdentityConflict("Aceeași pagină atribuie rezultatului versiuni oficiale incompatibile.")
+        if known_page["revision_id"] != latest["id"]:
+            return known_page["revision_id"]
+    if not known_page and db.execute("""
+        SELECT 1 FROM official_observations WHERE event_id=? AND archive_sha256=? AND content_sha256<>?
+          AND disposition IN ('revision', 'confirmation') LIMIT 1
+    """, (event_id, archive_sha256, content)).fetchone():
+        raise _IdentityConflict("Aceeași pagină oficială indică rezultate incompatibile pentru această tragere.")
+    rejected = db.execute("""
+        SELECT payload FROM official_observations WHERE event_id=? AND archive_sha256=? AND content_sha256=?
+        AND source_version IS ? AND disposition='conflict'
+    """, (event_id, archive_sha256, content, version)).fetchone()
+    watermark = db.execute("""
+        SELECT MAX(observed_utc) FROM official_observations
+        WHERE event_id=? AND disposition IN ('revision', 'confirmation')
+    """, (event_id,)).fetchone()[0]
+    last_numbered = None
+    if version is not None or (known_page and known_page["source_version"] is not None):
+        last_numbered = db.execute("""
+            SELECT revision_id, source_version, content_sha256 FROM official_observations
+            WHERE event_id=? AND source_version IS NOT NULL AND disposition IN ('revision', 'confirmation')
+            ORDER BY source_version DESC LIMIT 1
+        """, (event_id,)).fetchone()
+    changed = latest["content_sha256"] != content
+    if rejected and not changed:
+        raise _IdentityConflict(json.loads(rejected["payload"])["reason"])
+    if (known_page and known_page["source_version"] is not None and last_numbered
+            and known_page["source_version"] < last_numbered["source_version"]):
+        return known_page["revision_id"]
+    if last_numbered is not None and version is not None:
+        if version < last_numbered["source_version"] or (
+            version == last_numbered["source_version"] and content != last_numbered["content_sha256"]
+        ):
+            raise _IdentityConflict("Versiunea oficială este mai veche sau are rezultate contradictorii.")
+    if changed:
+        if previous_archive:
+            raise _IdentityConflict("Pagina figurează în registrul vechi cu un rezultat anterior reviziei active.")
+        prior = db.execute("""
+            SELECT id, observed_at FROM official_revisions WHERE event_id=? AND content_sha256=?
+            ORDER BY sequence DESC LIMIT 1
+        """, (event_id, content)).fetchone()
+        newer_edition = (version is not None and last_numbered is not None
+                         and last_numbered["revision_id"] == latest["id"]
+                         and version > last_numbered["source_version"])
+        if rejected and not newer_edition:
+            raise _IdentityConflict(json.loads(rejected["payload"])["reason"])
+        if (prior is not None and version is None
+                and timestamp == _observation_time(datetime.fromisoformat(prior["observed_at"]))):
+            # Another archived copy of an already observed historical result at the same instant.
+            return prior["id"]
+        if timestamp < watermark or (timestamp == watermark and not newer_edition):
+            raise _IdentityConflict("Observația diferită este anterioară sau simultană ultimei confirmări acceptate.")
+        if prior is not None and not newer_edition:
+            raise _IdentityConflict("Revenire la numere anterioare fără o versiune oficială ulterioară confirmată.")
+
+    return None
+
+
 def _accept_revision(db, observation, event_id, archive_sha256, observed_at, previous_archive):
-    draw = observation.draw
     if event_id is None:
         # Derive the opaque local key from the first confirmed official
         # discriminator. Better evidence can later become an alias.
@@ -523,39 +680,33 @@ def _accept_revision(db, observation, event_id, archive_sha256, observed_at, pre
     latest = db.execute(
         "SELECT * FROM official_revisions WHERE event_id=? ORDER BY sequence DESC LIMIT 1", (event_id,),
     ).fetchone()
-    existing = db.execute(
-        "SELECT id FROM official_revisions WHERE event_id=? AND content_sha256=?",
-        (event_id, observation.content_sha),
-    ).fetchone()
-    if existing is not None and existing["id"] != latest["id"]:
-        return None
-    if existing is None and latest is not None:
-        if previous_archive:
-            raise _IdentityConflict("Pagina figurează în registrul vechi cu un rezultat anterior reviziei active.")
-        if observed_at < datetime.fromisoformat(latest["observed_at"]):
-            raise _IdentityConflict("Rezultatul diferit provine dintr-o pagină observată înainte de revizia activă.")
+    content = observation.content_sha
+    evidence = _source_evidence(observation, archive_sha256)
+    if latest is not None:
+        historical = _classify_observation(db, latest, evidence, observed_at, previous_archive)
+        if historical is not None:
+            _store_observation(db, event_id, historical, evidence, observed_at, "historical")
+            return None
 
     for kind, key in observation.keys.items():
         if not db.execute("SELECT 1 FROM official_event_keys WHERE key=? AND event_id=?", (key, event_id)).fetchone():
             db.execute("INSERT INTO official_event_keys VALUES (?, ?, ?)", (key, event_id, kind))
-    if existing is not None:
+    if latest is not None and latest["content_sha256"] == content:
+        _store_observation(db, event_id, latest["id"], evidence, observed_at, "confirmation")
         return latest
 
-    revision_id = _hash(["lr-official-revision", event_id, observation.content_sha])
     supersedes = None if latest is None else latest["id"]
     sequence = 1 if latest is None else latest["sequence"] + 1
+    revision_id = _hash(["lr-official-revision-v3", event_id, sequence, supersedes, content])
     body = {
-        "event_id": event_id, "revision_id": revision_id, "revision": sequence,
-        "supersedes_revision_id": supersedes, "content_sha256": observation.content_sha,
-        "game": observation.game, "date": observation.day.isoformat(),
-        "numbers": draw.numbers, "joker": draw.joker, "identity": observation.evidence,
-        "official_url": draw.source_url, "official_archive_sha256": archive_sha256,
-        "observed_at": observed_at.isoformat(),
+        **evidence, "event_id": event_id, "revision_id": revision_id, "revision": sequence,
+        "supersedes_revision_id": supersedes, "observed_at": observed_at.isoformat(),
     }
     payload = _canonical(body)
     db.execute("INSERT INTO official_revisions VALUES (?, ?, ?, ?, ?, ?, ?)", (
         revision_id, event_id, sequence, observation.content_sha, supersedes, body["observed_at"], payload,
     ))
+    _store_observation(db, event_id, revision_id, evidence, observed_at, "revision")
     return {"id": revision_id, "payload": payload}
 
 
@@ -624,7 +775,8 @@ def append_official_draws(draws, *, archive_sha256, registry_path=None, observed
     captured = _clock().astimezone(_TIME_ZONE)
     if observed_at is None:
         observed_at = captured
-    if observed_at.tzinfo is None or observed_at.utcoffset() is None or observed_at > captured:
+    if (observed_at.tzinfo is None or observed_at.utcoffset() is None
+            or observed_at.astimezone(UTC) > captured.astimezone(UTC)):
         raise ValueError("Momentul consultării paginii oficiale este invalid.")
     observations = [_observe(draw, captured) for draw in draws]
     conflicts = _snapshot_conflicts(observations)
@@ -658,7 +810,8 @@ def append_official_draws(draws, *, archive_sha256, registry_path=None, observed
             distinct_results = {row.content_sha for row in group}
             distinct_ids = {row.keys["id"] for row in group if "id" in row.keys}
             distinct_orders = {row.keys["order"] for row in group if "order" in row.keys}
-            if any(len(values) > 1 for values in (distinct_results, distinct_ids, distinct_orders)):
+            versions = {row.draw.result_version for row in group if row.draw.result_version is not None}
+            if any(len(values) > 1 for values in (distinct_results, distinct_ids, distinct_orders, versions)):
                 for index in indexes:
                     conflicts[index] = "Aceeași tragere are date incompatibile în aceeași pagină oficială."
         old_sources = {}
@@ -670,6 +823,7 @@ def append_official_draws(draws, *, archive_sha256, registry_path=None, observed
                                  (observation.game, day)).fetchall()
             if not entries:
                 continue
+            event_id = None
             try:
                 if index in conflicts:
                     raise _IdentityConflict(conflicts[index])
@@ -685,7 +839,7 @@ def append_official_draws(draws, *, archive_sha256, registry_path=None, observed
                     accepted[scope, observation.content_sha].add(revision["id"])
             except _IdentityConflict as exc:
                 conflicts[index] = reason = str(exc)
-                _record_conflict(db, observation, reason, archive_sha256, observed_at)
+                _record_conflict(db, observation, event_id, reason, archive_sha256, observed_at)
                 if problems is not None:
                     message = f"{observation.game} {day}: {reason}"
                     if message not in problems:
@@ -708,7 +862,7 @@ def read_prospective_report(*, registry_path=None, include_audit=False):
     """Report active official evaluations. Historical and legacy rows are opt-in."""
     report = {"predictions_count": 0, "active_evaluations": [], "conflicts": [], "legacy_pending_count": 0}
     if include_audit:
-        report.update(superseded_evaluations=[], legacy_evaluations=[], event_revisions=[])
+        report.update(superseded_evaluations=[], legacy_evaluations=[], event_revisions=[], event_observations=[])
     path = _location(registry_path)
     if not path.is_file():
         return report
@@ -742,6 +896,9 @@ def read_prospective_report(*, registry_path=None, include_audit=False):
                     "SELECT e.*, link.revision_id " + _LEGACY_FROM + "WHERE r.id IS NULL ORDER BY e.rowid"
                 )
             ]
+            report["event_observations"] = [json.loads(row[0]) for row in db.execute(
+                "SELECT payload FROM official_observations ORDER BY rowid"
+            )]
             report["event_revisions"] = [json.loads(row[0]) for row in db.execute(
                 "SELECT payload FROM official_revisions ORDER BY rowid"
             )]

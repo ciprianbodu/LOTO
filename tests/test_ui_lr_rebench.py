@@ -362,6 +362,7 @@ def test_new_formula_same_history_and_settings_preserves_previous_weights():
 def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_choice(monkeypatch, chosen):
     frame = pd.DataFrame({"n1": [6]})
     settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+")}
+    recipe = object()
     calls = []
 
     async def execute(function, *args, **kwargs):
@@ -372,9 +373,10 @@ def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_ch
             pd.testing.assert_frame_equal(args[3]["joker"][1], frame)
             assert args[3]["joker"][1] is not frame
             assert kwargs == dict(inverse=True, dynamic=True, lookback=80, hit_target=4,
-                                  joker_size=2, pool_codes={"joker": 24})
-            return {"recommended_range": chosen}
+                                  joker_size=2, pool_codes={"joker": 24}, return_recipe=True)
+            return {"recommended_range": chosen, "paid_recipe": recipe}
         assert function is panel.benchmark_lr_hypotheses
+        assert kwargs["recipe"] is recipe
         assert kwargs["restricted"] is (chosen is not None)
         assert "auto_budget" not in kwargs
         return _profile_result("joker", 24, "a" * 16)
@@ -412,3 +414,16 @@ def test_cancelling_during_automatic_scope_does_not_start_benchmark(monkeypatch)
         assert not panel._RESULT_PATH.exists()
 
     asyncio.run(scenario())
+
+
+def test_provisional_report_is_visible_and_cannot_replace_a_complete_profile():
+    prior = _profile_result("joker", 24, "a" * 16)
+    settings = _settings(24)
+    entry = {"game": "joker", "source": "test.csv", "settings": settings, "result": prior}
+    first = {"finished_at": "2026-11-23T14:00:00+02:00", "entries": [entry]}
+    profiles = panel._remember_profiles(first, {})
+    assert len(profiles["joker"]) == 1
+    failed = {**prior, "portfolio_refinement": {"complete": False, "issues": ["refinement_error"], "recipe_sha256": []}}
+    second = {"finished_at": "2026-11-23T15:00:00+02:00", "entries": [{**entry, "result": failed}]}
+    assert panel._remember_profiles(second, {"decision_profiles": profiles}) == profiles
+    assert panel._compact_profile(second["entries"][0], second["finished_at"]) is None

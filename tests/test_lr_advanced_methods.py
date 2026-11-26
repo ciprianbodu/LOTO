@@ -269,3 +269,50 @@ def test_missing_joker_preserves_definite_wins_and_reports_unknown_counts():
         assert (partial["winning_variants_min"], partial["winning_variants_max"]) == (min(counts), max(counts))
     assert grade_draw(paid, (1, 2, 13, 14, 15))["any_prize"] is None
     assert grade_draw(paid, (11, 12, 13, 14, 15, 3)) == grade_draw(paid, (11, 12, 13, 14, 15), 3)
+
+
+def test_fixed_share_retries_after_provisional_training(monkeypatch, tmp_path):
+    import pandas as pd
+    import runtime_paths
+    from covering.lr_refinement_status import refinement_complete
+    from loto_enterprise.core import lr_ticket_experts as experts
+    from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
+    from loto_enterprise.core.lotteries import require_lottery
+
+    lot = require_lottery("6/49", "RO")
+    layout, = recommend_games(100, FOUR_PLUS, lot.game_id)
+    rng = np.random.default_rng(712)
+    frame = pd.DataFrame([rng.choice(np.arange(1, 50), 6, replace=False) for _ in range(9)],
+                         columns=[f"n{i}" for i in range(1, 7)])
+    frame["date"] = pd.date_range("2024-01-01", periods=len(frame))
+    original = experts._candidate_plans
+    calls = 0
+
+    def inject_once(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        plans = original(*args, **kwargs)
+        if calls == 1:
+            next(iter(plans.values()))["portfolio_refinement"] = {
+                "complete": False, "issues": ["refinement_error"], "recipe_sha256": [],
+            }
+        return plans
+
+    monkeypatch.setattr(experts, "_candidate_plans", inject_once)
+    monkeypatch.setattr(runtime_paths, "WF_CACHE_DIR", tmp_path)
+
+    def forecast():
+        return experts.online_ticket_forecast(
+            lot, layout, budget_plan_scheme(layout), frame, inverse=False, number_range=None,
+            lookback=100, joker_size=0, objective=FOUR_PLUS,
+        )
+
+    assert not refinement_complete(forecast())
+    assert not list(tmp_path.rglob("*.pkl"))
+    first_calls = calls
+    recovered = forecast()
+    assert refinement_complete(recovered)
+    assert calls == 2 * first_calls
+    assert list(tmp_path.rglob("*.pkl"))
+    assert forecast() == recovered
+    assert calls == 2 * first_calls

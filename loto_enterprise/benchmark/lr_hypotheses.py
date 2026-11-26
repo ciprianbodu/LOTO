@@ -317,7 +317,7 @@ def _bench_urn(
 
 def benchmark_lr_hypotheses(
     game_id, history, *, scheme, inverse, restricted, dynamic, lookback, hit_target, joker_size,
-    budget_lei=None, objective=None, cancel_path=None,
+    budget_lei=None, objective=None, cancel_path=None, recipe=None,
 ):
     """Evaluate curated Re-Bench methods for these choices without writing a production decision."""
     check = _cancellation(cancel_path)
@@ -374,7 +374,7 @@ def benchmark_lr_hypotheses(
         portfolio = evaluate_budget_recipes(
             layout, scheme, lot, engine.data, matrix, dates, main, urns,
             restricted=restricted, inverse=inverse, dynamic=dynamic, lookback=lookback,
-            joker_size=joker_size, check=check,
+            joker_size=joker_size, check=check, recipe=recipe,
         )
         if error := portfolio.get("error"):
             # Preserve the pool diagnostics, but never publish them as a paid-ticket winner.
@@ -388,6 +388,7 @@ def benchmark_lr_hypotheses(
     return {
         "game": game_id, "scheme_code": scheme.code,
         "semantics": semantics, "portfolio": portfolio,
+        **({"portfolio_refinement": portfolio["portfolio_refinement"]} if portfolio and "portfolio_refinement" in portfolio else {}),
         "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN,
         "history_hash": engine.audit["hash"], "history_rows": len(matrix),
         "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(dates) else None,

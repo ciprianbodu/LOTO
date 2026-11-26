@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from covering.lr_catalog_cache import catalog_cache
+from covering.lr_refinement_status import recipe_status, search_issues
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import lru_cache
 from heapq import nlargest
 from itertools import combinations
+import logging
 from math import comb, isfinite
 from operator import index
 from random import Random
@@ -422,25 +424,36 @@ class _PortfolioSearch:
             raise ValueError("Probabilitatea exactă a portofoliului LR diferă de valoarea memorată.")
         self.floor = tuple(exact_main[t - 1] for t in self.protected)
         self.best, self.best_key = baseline, (exact_score, -baseline.price, -duplicates)
+        evidence = {}
         if baseline.score != self.upper and baseline.choices:
             try:
                 self.stop()
                 self.search(baseline)
             except _BudgetStopped:
-                pass
+                evidence["stopped"] = "cancelled" if self.cancelled is not None and self.cancelled() else "timeout"
+            except Exception:
+                logging.getLogger(__name__).exception("Căutarea de bază LR s-a întrerupt.")
+                evidence["fallback"] = "search_error"
 
-        score, main, duplicates = self.exact(self.best)
-        if score != self.best.score or (self.upper is not None and score > self.upper):
-            raise ValueError("Verificarea independentă a portofoliului LR nu coincide cu optimizarea.")
-        if any(main[t - 1] < floor for t, floor in zip(self.protected, self.floor, strict=True)):
-            raise ValueError("Portofoliul LR reduce probabilitatea unui prag protejat.")
+        try:
+            score, main, final_duplicates = self.exact(self.best)
+            if score != self.best.score or (self.upper is not None and score > self.upper):
+                raise ValueError("Verificarea independentă a portofoliului LR nu coincide cu optimizarea.")
+            if any(main[t - 1] < floor for t, floor in zip(self.protected, self.floor, strict=True)):
+                raise ValueError("Portofoliul LR reduce probabilitatea unui prag protejat.")
+        except Exception:
+            logging.getLogger(__name__).exception("Se păstrează portofoliul LR verificat la intrarea în căutare.")
+            self.best = baseline
+            score, main, final_duplicates = exact_score, exact_main, duplicates
+            evidence["fallback"] = "verification_error"
         zones = tuple((c.zone.code, c.zone.positions, c.zone.variants, self.slot(i, c))
                       for i, c in enumerate(self.best.choices))
         return zones, score, self.best.price, {
             "certificate": "proven_bound" if score == self.upper else "feasible",
             "candidate_milp": self.catalogue_optimization,
             "protected_numerators": {str(t): main[t - 1] for t in self.protected},
-            "duplicate_paid_variants": duplicates,
+            "duplicate_paid_variants": final_duplicates,
+            **({"search": evidence} if evidence else {}),
         }
 
     def search(self, incumbent):
@@ -542,7 +555,7 @@ def _layout_rules_signature():
     return layout_formulas()
 
 
-@catalog_cache(maxsize=128, semantic_key=_layout_rules_signature)
+@catalog_cache(maxsize=128, semantic_key=_layout_rules_signature, cache_if=lambda value: not search_issues(value[3]))
 def _refine_cached(game, width, objective, price, joker_count, threshold, upper, zones, attained, tariff):
     return _refine_layout(
         game, width, objective, price, joker_count, threshold, upper, zones, attained,
@@ -577,14 +590,7 @@ def required_pool_size(plan):
     return max((n for ticket in plan["tickets"] for zone in ticket for n in zone["numbers"]), default=0)
 
 
-def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, cancelled=None):
-    """Choose whole official LR zones inside the pool within the incumbent cost.
-
-    The original layout remains eligible throughout. The optional time limit
-    bounds improvement work after the incumbent exists. A callable can stop
-    subsequent improvement work without discarding a feasible result.
-    """
-    lot = require_lottery(plan["game"], "RO")
+def _pool_labels(lot, pool, jokers):
     if lot.geo.second is not None:
         try:
             jokers = tuple(jokers)
@@ -606,6 +612,67 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
         raise ValueError("Poolul principal cere numere întregi distincte.") from exc
     if len(set(pool)) != len(pool) or any(not 1 <= number <= lot.max_n for number in pool):
         raise ValueError("Poolul principal cere numere întregi distincte din geometria jocului.")
+    return pool, jokers
+
+
+@dataclass(frozen=True, slots=True)
+class PaidRecipe:
+    """A verified positional plan. Only the identity and outcome enter selection cache keys."""
+
+    identity: str
+    source_layout: str
+    issues: tuple
+    width: int
+    slots: int
+    _plan: dict = field(compare=False, repr=False)
+
+    def matches(self, layout, width, slots):
+        from loto_enterprise.core.lr_played_portfolio import layout_identity
+
+        return self.width == width and self.slots == slots and self.source_layout == layout_identity(layout)
+
+    @property
+    def complete(self):
+        return not self.issues
+
+    @property
+    def portfolio_refinement(self):
+        return {"complete": self.complete, "issues": list(self.issues), "recipe_sha256": [self.identity]}
+
+    def place(self, pool, jokers=()):
+        lot = require_lottery(self._plan["game"], "RO")
+        pool, jokers = _pool_labels(lot, pool, jokers)
+        if len(pool) != self.width or len(jokers) != self.slots:
+            raise ValueError("Numărul pozițiilor diferă de geometria rețetei LR evaluate.")
+        played = deepcopy(self._plan)
+        for ticket in played["tickets"]:
+            for zone in ticket:
+                zone["numbers"] = [pool[position - 1] for position in zone["numbers"]]
+                if zone.get("joker") is not None:
+                    zone["joker"] = jokers[zone["joker"] - 1]
+        return played
+
+
+def positional_recipe(layout, pool_size, joker_slots, *, solver=None):
+    """Freeze entire paid zones once, before mapping day-specific numbers to their positions."""
+    from loto_enterprise.core.lr_played_portfolio import layout_identity
+
+    solve = restrict_to_pool if solver is None else solver
+    plan = solve(deepcopy(layout), layout["objective"], range(1, pool_size + 1), tuple(range(1, joker_slots + 1)))
+    status = plan["portfolio_refinement"]
+    identity, = status["recipe_sha256"]
+    return PaidRecipe(identity, layout_identity(layout), tuple(status["issues"]), pool_size, joker_slots, plan)
+
+
+def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, cancelled=None):
+    """Choose whole official LR zones inside the pool within the incumbent cost.
+
+    The original layout remains eligible throughout. The optional time limit
+    bounds improvement work after the incumbent exists. A callable can stop
+    subsequent improvement work without discarding a feasible result.
+    """
+    lot = require_lottery(plan["game"], "RO")
+    pool, jokers = _pool_labels(lot, pool, jokers)
     template = [zone for ticket in plan["tickets"] for zone in ticket]
     use_bonus = plan["game"] == "joker" and objective == ANY_PRIZE
     threshold = 3 if objective == ANY_PRIZE and plan["game"] != "5/40" else 4
@@ -647,7 +714,8 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
                 deadline = monotonic() + seconds
             selected, attained, price, report = _refine_layout(*args, seconds, cancelled)
 
-        if attained != upper and width == len(pool) and selected and "protected_numerators" in report:
+        if (attained != upper and width == len(pool) and selected and not search_issues(report)
+                and "protected_numerators" in report):
             floor = tuple(sorted(report["protected_numerators"].items()))
             inputs = (lot.game_id, width, objective, plan["budget_bani"], price, len(jokers),
                       threshold, upper, selected, attained, floor, report["duplicate_paid_variants"], tariff)
@@ -655,11 +723,14 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
                 result = enhance_cached(*inputs)
             else:
                 remaining = 2.0 if deadline is None else min(2.0, deadline - monotonic())
-                result = enhance(*inputs, remaining, cancelled)
+                result = enhance(*inputs, remaining, cancelled, report_outcome=True)
             if result is not None:
                 selected, attained, price, extra = result
                 report = report | extra
 
+    if cancelled is not None and cancelled() and attained != upper:
+        report = report | {"search": {**report.get("search", {}), "stopped": "cancelled"}}
+    plan["portfolio_refinement"] = recipe_status(plan, len(pool), price, len(jokers), lot.per_ticket, selected, report)
     plan["optimization"] = deepcopy(report) | {
         "global_upper": upper,
         "global_gap": upper - attained,

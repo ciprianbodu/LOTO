@@ -5,6 +5,7 @@ from datetime import date, datetime
 from nicegui import ui
 
 from covering.lr_budget import ANY_PRIZE
+from covering.lr_refinement_status import refinement_complete
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
@@ -111,6 +112,9 @@ def _game_result(entry):
         if error := entry.get("error") or result.get("error"):
             ui.label(error).classes("text-warning").props('role="status"')
             return
+        if not refinement_complete(result):
+            count = result.get("summary", {}).get("provisional_draws", 0)
+            ui.label(f"Validare provizorie. Extrageri evaluate folosind o rafinare incompletă: {count}.").classes("text-warning")
         if result.get("max_consecutive_run") != LR_MAX_CONSECUTIVE_RUN:
             ui.label("Raport anterior regulii de maximum două numere consecutive. "
                      "Pornește o nouă validare pentru selecția actuală.").classes("text-warning")

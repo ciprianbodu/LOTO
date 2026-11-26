@@ -10,7 +10,9 @@ from math import comb
 from nicegui import run, ui
 
 from covering.lr_budget import ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, recommend_games
-from loto_enterprise.core.lr_budget_forecast import playable_plan_order, recommend_playable_games
+from covering.lr_pool_budget import positional_recipe
+from covering.lr_refinement_status import merge_refinements, refinement_complete
+from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, playable_plan_order, recommend_playable_games
 from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
@@ -67,6 +69,8 @@ def _ticket_details(plan, *, expanded=False):
         for zone, area in enumerate(ticket)
     ]
     with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full min-w-0"):
+        if not refinement_complete(plan):
+            ui.label("Selecție provizorie. Calculul a folosit bilete de rezervă. La următoarea generare se reia rafinarea.").classes("text-warning")
         if error := plan.get("forecast_error"):
             ui.label(error).props('role="alert"').classes("text-warning")
         if rows:
@@ -296,6 +300,8 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
         if report.get("code") is not None:
             ui.label(f"Cod de evaluare {report['code']} · {count(report['pool_size'], 'numere în pool')}").classes("text-weight-bold")
         ui.label(report["reason"]).classes("text-body2")
+        if not refinement_complete(report):
+            ui.label("Comparație provizorie. Rafinarea biletelor a fost incompletă.").classes("text-warning")
         historical, timing = [], []
         for row in report["ranges"]:
             base = _range_label(row["range"])
@@ -370,15 +376,20 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
 
 def _compare_games(amount, goal, games, inputs, inverse):
     reports = []
+    inputs = dict(inputs)
+    recipes = inputs.pop("paid_recipes", {})
     for game in games:
         try:
-            reports.append(compare_budget_ranges(amount, goal, game, inverse=inverse, **inputs))
+            reports.append(compare_budget_ranges(amount, goal, game, inverse=inverse, recipe=recipes.get(game), **inputs))
         except (OSError, ValueError) as exc:
-            reports.append({"game": game, "ranges": [], "reason": f"Comparație indisponibilă. {exc}"})
+            report = {"game": game, "ranges": [], "reason": f"Comparație indisponibilă. {exc}"}
+            if isinstance(exc, OSError):
+                report["retryable"] = True
+            reports.append(report)
     return reports
 
 
-def _budget_input_snapshot(forecast_inputs, game):
+def _budget_input_snapshot(forecast_inputs, game, budget_settings=None):
     import pandas as pd
     from covering import lr_schemes
     from covering.lr_catalog_cache import refresh_catalog
@@ -396,6 +407,17 @@ def _budget_input_snapshot(forecast_inputs, game):
         digest.update(pd.util.hash_pandas_object(frame, index=True).to_numpy().tobytes())
     settings = {key: value for key, value in inputs.items() if key != "histories"}
     digest.update(json.dumps(settings, sort_keys=True, default=str).encode())
+    if budget_settings is not None:
+        recipes = {}
+        for plan in recommend_games(*budget_settings):
+            gid = plan["game"]
+            slots = inputs.get("joker_size", 5) if gid == "joker" else 0
+            if not plan["tickets"] or (gid == "joker" and (type(slots) is not int or not 1 <= slots <= 20)):
+                continue
+            recipe = positional_recipe(plan, budget_plan_scheme(plan).n, slots)
+            recipes[gid] = recipe
+            digest.update(json.dumps([gid, recipe.portfolio_refinement], sort_keys=True).encode())
+        inputs = {**inputs, "paid_recipes": recipes}
     return digest.hexdigest(), inputs
 
 
@@ -629,7 +651,7 @@ def lr_budget_panel(
                                 raise RuntimeError("Planificarea bugetului a fost întreruptă.")
                             on_budget_plan(templates)
                             applied_budget = budget_settings
-                        fingerprint, inputs = await run.io_bound(_budget_input_snapshot, forecast_inputs, game_id)
+                        fingerprint, inputs = await run.io_bound(_budget_input_snapshot, forecast_inputs, game_id, budget_settings)
                         if obsolete():
                             continue
                         analysis_key = (budget_settings, inverse_mode, fixed_share, fingerprint)
@@ -643,8 +665,10 @@ def lr_budget_panel(
                                 continue
                             if reports is None:
                                 raise RuntimeError("Analiza intervalelor a fost întreruptă.")
-                            cached_analysis = (analysis_key, inputs, reports)
-                        _, inputs, reports = cached_analysis
+                            if all(refinement_complete(report) and not report.get("retryable") for report in reports):
+                                cached_analysis = (analysis_key, inputs, reports)
+                        else:
+                            _, inputs, reports = cached_analysis
                         if displayed != (id(reports), forced):
                             comparison.clear()
                             with comparison:
@@ -655,14 +679,16 @@ def lr_budget_panel(
                                         report, game_options[gid], lr_base_choice(manual_choices, gid, inverse_mode, forced),
                                         change_base, forced, expanded=len(reports) == 1,
                                     )
-                            displayed = (id(reports), forced)
+                            displayed = (id(reports), forced) if cached_analysis and cached_analysis[2] is reports else None
                         selections = {}
+                        auto_reports = {}
                         for report in reports:
                             gid = report["game"]
                             choice = lr_base_choice(manual_choices, gid, inverse_mode, forced)
                             if choice == _range_label(_INVERSE_RANGE):
                                 limits = _INVERSE_RANGE
                             elif choice == "auto":
+                                auto_reports[gid] = report
                                 limits = report.get("recommended_range")
                             else:
                                 limits = None
@@ -672,6 +698,10 @@ def lr_budget_panel(
                         plans = await run.io_bound(_generate_selection, amount, goal, selections, inputs, inverse_mode, **options)
                         if plans is None:
                             raise RuntimeError("Generarea biletelor a fost întreruptă.")
+                        if auto_reports:
+                            for plan in plans:
+                                if report := auto_reports.get(plan["game"]):
+                                    plan["portfolio_refinement"] = merge_refinements(plan, report)
                     except Exception:
                         logging.getLogger(__name__).exception(
                             "Calcul LR la %d lei pentru %s (%s)", amount, goal, game_id or "all"

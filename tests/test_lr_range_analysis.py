@@ -284,7 +284,13 @@ def test_no_paid_tickets_cannot_contribute_an_objective_win(monkeypatch):
     from loto_enterprise.benchmark import lr_budget_scoring
     monkeypatch.setattr(lr_budget_scoring, "replay_budget_portfolios",
                         lambda *args, **kw: {origin: {"pool": [1, 4], "jokers": ()} for origin in args[5]})
-    monkeypatch.setattr(analysis, "restrict_to_pool", lambda *args: {"tickets": []})
+    class EmptyRecipe:
+        portfolio_refinement = {"complete": True, "issues": [], "recipe_sha256": []}
+
+        def place(self, pool, jokers):
+            return {"tickets": []}
+
+    monkeypatch.setattr(analysis, "positional_recipe", lambda *args, **kwargs: EmptyRecipe())
     analysis._replay.cache_clear()
     result = analysis.compare_budget_ranges(171, FOUR_PLUS, "6/49", {"6/49": ("test.csv", frame)})
     assert result["recommended_range"] is None and "bilete jucabile" in result["reason"]
@@ -366,3 +372,33 @@ def test_any_prize_uses_categories_in_force_on_each_draw_date(monkeypatch):
     report = analysis.compare_budget_ranges(171, ANY_PRIZE, "6/49", {"6/49": ("history.csv", frame)})
     assert all(row["ticket_3plus"] == 2 and row["successes"] == 1 and row["objective_evaluated"] == 2
                for row in report["ranges"])
+
+
+def test_provisional_range_selection_is_recomputed_then_cached(monkeypatch):
+    from loto_enterprise.core import lr_ticket_experts
+    from covering.lr_refinement_status import refinement_complete
+
+    frame, _ = _frame(252)
+    calls = 0
+
+    def injected_forecast(lot, plan, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return {**plan, "portfolio_refinement": {
+            "complete": calls != 1, "issues": ["refinement_error"] if calls == 1 else [], "recipe_sha256": [],
+        }}
+
+    monkeypatch.setattr(lr_ticket_experts, "online_ticket_forecast", injected_forecast)
+    def compare():
+        return analysis.compare_budget_ranges(
+            171, FOUR_PLUS, "6/49", {"6/49": ("range-recovery.csv", frame)},
+            selection_policy="online_ticket_experts", lookback=87,
+        )
+
+    assert not refinement_complete(compare())
+    first_calls = calls
+    recovered = compare()
+    assert refinement_complete(recovered)
+    assert calls == 2 * first_calls
+    assert compare() == recovered
+    assert calls == 2 * first_calls

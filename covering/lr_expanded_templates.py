@@ -189,11 +189,18 @@ def _cacheable(result):
 
 
 def enhance(game, width, objective, budget, price, slots, threshold, upper, zones,
-            score, floor, duplicates, tariff, seconds, cancelled, *, persist=False):
+            score, floor, duplicates, tariff, seconds, cancelled, *, persist=False, report_outcome=False):
     from covering.lr_expanded_search import refine_expanded
 
-    if score == upper or seconds <= 0 or (cancelled is not None and cancelled()):
-        return None
+    def incumbent(**reason):
+        return (zones, score, price, {"search": reason}) if report_outcome else None
+
+    if score == upper:
+        return incumbent()
+    if cancelled is not None and cancelled():
+        return incumbent(stopped="cancelled")
+    if seconds <= 0:
+        return incumbent(stopped="timeout")
     deadline = monotonic() + min(2.0, seconds)
     try:
         certified = _from_certificate(game, width, objective, budget, price, slots, zones,
@@ -207,8 +214,10 @@ def enhance(game, width, objective, budget, price, slots, threshold, upper, zone
             if previous is not None:
                 return previous
         remaining = deadline - monotonic()
-        if remaining <= 0 or (cancelled is not None and cancelled()):
-            return None
+        if cancelled is not None and cancelled():
+            return incumbent(stopped="cancelled")
+        if remaining <= 0:
+            return incumbent(stopped="timeout")
         refined = refine_expanded(game, width, objective, price, slots, threshold, upper,
                                zones, score, time_limit=remaining, cancelled=cancelled)
         _, result, paid, evidence = refined
@@ -220,11 +229,11 @@ def enhance(game, width, objective, budget, price, slots, threshold, upper, zone
         return refined
     except Exception:
         _logger.exception("Rafinarea portofoliului LR s-a întrerupt. Se păstrează biletele verificate.")
-        return None
+        return incumbent(fallback="refinement_error")
 
 
 @catalog_cache(maxsize=192, semantic_key=_rules, cache_if=_cacheable)
 def enhance_cached(game, width, objective, budget, price, slots, threshold, upper,
                    zones, score, floor, duplicates, tariff):
     return enhance(game, width, objective, budget, price, slots, threshold, upper,
-                   zones, score, floor, duplicates, tariff, 2.0, None, persist=True)
+                   zones, score, floor, duplicates, tariff, 2.0, None, persist=True, report_outcome=True)

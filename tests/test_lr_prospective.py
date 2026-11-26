@@ -196,8 +196,9 @@ def test_540_official_sixth_ball_remains_part_of_result_identity(monkeypatch, lo
     assert ledger.append_official_draws(
         [replace(draw, numbers=(*reversed(numbers), extra))], archive_sha256=ARCHIVE_HASH,
     ) == 0
+    clock[0] = _moment(hour=20, minute=1)
     assert ledger.append_official_draws(
-        [replace(draw, numbers=(*numbers[:4], extra, numbers[-1]))], archive_sha256=ARCHIVE_HASH,
+        [replace(draw, numbers=(*numbers[:4], extra, numbers[-1]))], archive_sha256=HASH,
     ) == 1
     first, second = _read(local, "evaluations")
     assert first["evaluation_contract_version"] == second["evaluation_contract_version"] == (1 if legacy else 2)
@@ -236,6 +237,7 @@ def test_normal_import_evaluates_only_pending_official_targets_without_new_csv_r
     assert grade["max_hits"] == 5 and grade["prize_counts"]["I"] >= 1
     assert _read(local, "predictions")[0]["game"] == "joker"
     assert "1 active" in capsys.readouterr().out
+    clock[0] = _moment(hour=20, minute=1)
     corrected = replace(draw, joker=1 + joker % 20)
     official = Mock(return_value="corrected official page")
     monkeypatch.setattr(official_prizes, "_fetch_month_html", official)
@@ -327,7 +329,7 @@ def _register_observable_649(monkeypatch, local):
 def test_rectification_supersedes_and_old_page_does_not_reactivate(monkeypatch, local):
     draw = _register_observable_649(monkeypatch, local)
     corrected = replace(draw, numbers=tuple(n for n in range(1, 50) if n not in draw.numbers)[:6])
-    assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH) == 1
+    assert ledger.append_official_draws([draw], archive_sha256=ARCHIVE_HASH, observed_at=_moment(hour=19)) == 1
     immutable_prediction, = _read(local, "predictions")
     original, = _read(local, "evaluations")
     assert ledger.append_official_draws([corrected], archive_sha256=HASH) == 1
@@ -401,10 +403,10 @@ def test_same_result_roles_distinguish_events_without_source_ids(monkeypatch, lo
 
 def test_new_verified_order_and_id_are_aliases_and_conflicting_page_is_audited(monkeypatch, local):
     observation = _register_observable_649(monkeypatch, local)
-    assert ledger.append_official_draws([observation], archive_sha256=ARCHIVE_HASH) == 1
+    assert ledger.append_official_draws([observation], archive_sha256=ARCHIVE_HASH, observed_at=_moment(hour=18)) == 1
     original, = ledger.read_prospective_report()["active_evaluations"]
     identified = replace(observation, official_id="verified", draw_order=1)
-    assert ledger.append_official_draws([identified], archive_sha256=ARCHIVE_HASH) == 0
+    assert ledger.append_official_draws([identified], archive_sha256=ARCHIVE_HASH, observed_at=_moment(hour=19)) == 0
 
     corrected = replace(identified, numbers=tuple(n for n in range(1, 50) if n not in identified.numbers)[:6])
     by_id = replace(corrected, draw_order=None, supplementary=None)
@@ -454,7 +456,7 @@ def test_migration_keeps_legacy_rows_byte_exact_and_concurrent_writers_settle_on
         outcomes = list(workers.map(lambda _: ledger.refresh_official_evaluations(), range(2)))
     assert sorted(outcomes) == [(0, []), (1, [])]
     with sqlite3.connect(local) as db:
-        assert db.execute("PRAGMA user_version").fetchone() == (2,)
+        assert db.execute("PRAGMA user_version").fetchone() == (3,)
         assert db.execute("SELECT payload FROM predictions").fetchone() == (prior_prediction,)
         assert db.execute("SELECT payload FROM evaluations WHERE draw_id='legacy-content-key'").fetchone() == (prior_evaluation,)
     fetch.reset_mock()
@@ -485,6 +487,7 @@ def test_error_between_two_official_events_rolls_back_all_writes(monkeypatch, lo
         )
     report = ledger.read_prospective_report(include_audit=True)
     assert report["predictions_count"] == 1 and not report["active_evaluations"] and not report["event_revisions"]
+    assert not report["event_observations"]
 
 
 def test_concurrent_observed_old_page_cannot_supersede_current_revision(monkeypatch, local):
@@ -572,7 +575,7 @@ def test_id_only_and_role_only_need_common_evidence_before_being_counted_as_sepa
     first = _register_observable_649(monkeypatch, local)
     id_only = replace(first, supplementary=None, official_id="new-id", numbers=(3, 4, 6, 8, 19, 43))
     assert ledger.append_official_draws([first, id_only], archive_sha256=ARCHIVE_HASH) == 0
-    assert ledger.append_official_draws([first], archive_sha256=HASH) == 1
+    assert ledger.append_official_draws([first], archive_sha256=HASH, observed_at=_moment(hour=18)) == 1
     assert ledger.append_official_draws([id_only], archive_sha256="e" * 64) == 0
     assert len(ledger.read_prospective_report()["active_evaluations"]) == 1
     enriched = replace(id_only, supplementary=False)
@@ -591,3 +594,230 @@ def test_repeated_principal_is_idempotent_but_conflicting_results_are_rejected(m
     report = ledger.read_prospective_report(include_audit=True)
     assert len(report["active_evaluations"]) == 1 and len(report["conflicts"]) == 2
     assert not report["superseded_evaluations"]
+
+
+def _ingest(draw, page, hour, minute=0):
+    problems = []
+    added = ledger.append_official_draws(
+        [draw], archive_sha256=sha256(page.encode()).hexdigest(),
+        observed_at=_moment(hour=hour, minute=minute), problems=problems,
+    )
+    return added, problems
+
+
+def _other_result(draw):
+    return replace(draw, numbers=tuple(n for n in range(1, 50) if n not in draw.numbers)[:6])
+
+
+def test_delayed_result_cannot_displace_latest_reconfirmation(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    assert _ingest(draw, "A", 17) == (1, [])
+    assert _ingest(draw, "A again", 20) == (0, [])
+    assert _ingest(draw, "A again", 20) == (0, [])
+    changed = _other_result(draw)
+    for hour in (19, 20):
+        count, problems = _ingest(changed, "old B", hour)
+        assert count == 0 and problems
+    report = ledger.read_prospective_report(include_audit=True)
+    assert [r["numbers"] for r in report["active_evaluations"]] == [list(draw.numbers)]
+    assert len(report["event_revisions"]) == 1
+    assert [r["disposition"] for r in report["event_observations"]] == [
+        "revision", "confirmation", "conflict", "conflict",
+    ]
+    confirm = report["event_observations"][1]
+    assert confirm["observed_at"] == _moment(hour=20).isoformat()
+    assert all(r["event_id"] == confirm["event_id"] for r in report["conflicts"])
+    with sqlite3.connect(local) as db:
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("INSERT OR REPLACE INTO official_observations SELECT * FROM official_observations")
+
+
+def test_return_needs_ordered_official_edition_and_retains_original_score(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    one = replace(draw, result_version=10)
+    two = replace(_other_result(draw), result_version=11)
+    assert _ingest(one, "v10", 17) == (1, [])
+    assert _ingest(two, "v11", 18) == (1, [])
+    assert _ingest(one, "v10", 19) == (0, [])
+    for dubious in (draw, replace(draw, result_version=11), replace(draw, result_version=9)):
+        added, errors = _ingest(dubious, "unverified" + str(dubious.result_version), 19)
+        assert added == 0 and errors
+    assert _ingest(replace(draw, result_version=12), "v12", 19) == (1, [])
+    assert _ingest(replace(draw, result_version=12), "v12", 19) == (0, [])
+    # Old page with the same balls as the active revision must not raise its watermark.
+    assert _ingest(one, "v10", 20) == (0, [])
+    audit = ledger.read_prospective_report(include_audit=True)
+    first, second, third = audit["event_revisions"]
+    assert [r["revision"] for r in (first, second, third)] == [1, 2, 3]
+    assert first["content_sha256"] == third["content_sha256"] != second["content_sha256"]
+    assert third["revision_id"] != first["revision_id"]
+    assert third["supersedes_revision_id"] == second["revision_id"]
+    assert second["supersedes_revision_id"] == first["revision_id"]
+    active, = audit["active_evaluations"]
+    assert active["revision_id"] == third["revision_id"] and active["grade"]["hit6"]
+    assert [e["grade"]["hit6"] for e in audit["superseded_evaluations"]] == [True, False]
+    assert len(audit["conflicts"]) == 3 and audit["event_observations"][-1]["disposition"] == "historical"
+    assert _ingest(replace(two, result_version=13), "v13", 19, 30) == (1, [])
+
+
+def test_source_without_version_on_return_records_ambiguity_and_equal_time_conflict(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    second = _other_result(draw)
+    assert _ingest(draw, "initial", 17) == (1, [])
+    assert _ingest(second, "corrected", 19) == (1, [])
+    assert _ingest(draw, "another monthly page", 20)[1]
+    fourth = replace(draw, numbers=(9, 10, 11, 12, 13, 14))
+    assert _ingest(fourth, "simultaneous", 19)[1]
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert [r["numbers"] for r in audit["active_evaluations"]] == [list(second.numbers)]
+    assert len(audit["event_revisions"]) == len(audit["conflicts"]) == 2
+
+
+def test_parser_uses_only_explicit_result_version(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    def parse(attrs):
+        return official_prizes.parse_month_html("6/49", _official_649_html([(draw.numbers, "", attrs)]),
+                                                2026, 11, preserve_event_identity=True)[0]
+    assert parse('data-draw-order="2"').result_version is None
+    assert parse('data-draw-order="2" data-result-version="4"').result_version == 4
+    with pytest.raises(official_prizes.ArchiveError, match="version"):
+        parse('data-result-version="next"')
+
+
+def test_concurrent_old_page_and_reconfirmations_do_not_regress_or_double_score(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    assert _ingest(draw, "first", 17) == (1, [])
+    assert _ingest(draw, "confirmation", 19) == (0, [])
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        calls = [(draw, "new confirmation", 20), (_other_result(draw), "older", 18)] * 3
+        results = list(executor.map(lambda args: _ingest(*args), calls))
+    assert [n for n, _ in results] == [0] * 6
+    assert [bool(errors) for _, errors in results] == [False, True] * 3
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert len(audit["active_evaluations"]) == len(audit["event_revisions"]) == len(audit["conflicts"]) == 1
+    assert len(audit["event_observations"]) == 4
+
+
+def test_observation_migration_rolls_back_and_concurrent_reopen_keeps_bytes(monkeypatch, local):
+    # Minimal v2 database: the original revision ID and its legacy FK are live.
+    draw = _register_observable_649(monkeypatch, local)
+    v2 = local.with_name("schema2.sqlite3")
+    stamped = _read(local, "predictions")[0]
+    page = sha256(b"old official page").hexdigest()
+    content = ledger._result_fingerprint("6/49", draw.numbers, None)
+    source = {"game": "6/49", "date": "2026-11-26", "numbers": draw.numbers, "joker": None,
+              "identity": {"official_id": None, "draw_order": None, "supplementary": False},
+              "official_url": draw.source_url, "official_archive_sha256": page, "content_sha256": content,
+              "revision_id": "v2-r1", "event_id": "old-event", "revision": 1,
+              "supersedes_revision_id": None, "observed_at": _moment(hour=17).isoformat()}
+    raw = json.dumps(source, indent=2)
+    with sqlite3.connect(v2) as db:
+        db.executescript(ledger._BASE_SCHEMA)
+        db.executescript("""
+            CREATE TABLE official_events (id TEXT PRIMARY KEY, game TEXT NOT NULL, draw_date TEXT NOT NULL);
+            INSERT INTO official_events VALUES ('old-event', '6/49', '2026-11-26');
+            CREATE TABLE official_event_keys (key TEXT NOT NULL, event_id TEXT NOT NULL REFERENCES official_events(id),
+                kind TEXT NOT NULL, PRIMARY KEY(key, event_id));
+            CREATE TABLE official_revisions (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES official_events(id),
+                sequence INTEGER NOT NULL, content_sha256 TEXT NOT NULL, supersedes TEXT REFERENCES official_revisions(id),
+                observed_at TEXT NOT NULL, payload TEXT NOT NULL, UNIQUE(event_id, sequence), UNIQUE(event_id, content_sha256));
+            CREATE TABLE legacy_evaluation_links (prediction_id TEXT NOT NULL, legacy_draw_id TEXT NOT NULL,
+                revision_id TEXT NOT NULL REFERENCES official_revisions(id), PRIMARY KEY(prediction_id, legacy_draw_id),
+                FOREIGN KEY(prediction_id, legacy_draw_id) REFERENCES evaluations(prediction_id, draw_id));
+            PRAGMA user_version=2;
+        """)
+        db.execute("INSERT INTO official_event_keys VALUES (?, 'old-event', 'role')",
+                   (ledger._hash(["role", "6/49", draw.draw_date, False]),))
+        db.execute("INSERT INTO official_revisions VALUES ('v2-r1','old-event',1,?,NULL,?,?)",
+                   (content, source["observed_at"], raw))
+        db.execute("INSERT INTO predictions VALUES (?,?,?,?)",
+                   (stamped["id"], "6/49", draw.draw_date, json.dumps(stamped)))
+        for revision in ("legacy", "v2-r1"):
+            db.execute("INSERT INTO evaluations VALUES (?,?,?)", (stamped["id"], revision, raw))
+        db.execute("INSERT INTO legacy_evaluation_links VALUES (?,'legacy','v2-r1')", (stamped["id"],))
+    with monkeypatch.context() as context:
+        context.setattr(ledger, "_store_observation", Mock(side_effect=RuntimeError("power loss")))
+        with pytest.raises(RuntimeError, match="power loss"):
+            ledger.read_prospective_report(registry_path=v2)
+    with sqlite3.connect(v2) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("SELECT payload FROM official_revisions").fetchone()[0] == raw
+        assert db.execute("SELECT 1 FROM sqlite_master WHERE name='official_observations'").fetchone() is None
+    def reopen(_):
+        return ledger.read_prospective_report(registry_path=v2, include_audit=True)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(reopen, range(6)))
+    assert all(r == results[0] for r in results)
+    assert len(results[0]["event_observations"]) == len(results[0]["active_evaluations"]) == 1
+    assert results[0]["legacy_evaluations"][0]["verified_revision_id"] == "v2-r1"
+    with sqlite3.connect(v2) as db:
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("SELECT payload FROM official_revisions").fetchone()[0] == raw
+        assert db.execute("SELECT payload FROM evaluations").fetchall() == [(raw,), (raw,)]
+
+def test_registry_records_portfolio_refinement_when_available(monkeypatch, local):
+    monkeypatch.setattr(ledger, "_clock", _moment)
+    plan = _plan()
+    audit = {"complete": False, "reason": "temporary", "recipes": ["r-1"]}
+    assert ledger.register_lr_recommendations([plan])[0]
+    plan["portfolio_refinement"] = audit
+    assert ledger.register_lr_recommendations([plan])[0]
+    before, after = _read(local, "predictions")
+    assert "portfolio_refinement" not in before
+    assert after["portfolio_refinement"] == audit and after["id"] != before["id"]
+
+
+def test_inconsistent_numbers_from_identical_archive_conflict(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    assert _ingest(draw, "same archive", 17) == (1, [])
+    count, errors = _ingest(_other_result(draw), "same archive", 18)
+    assert count == 0 and errors
+    report = ledger.read_prospective_report(include_audit=True)
+    assert len(report["conflicts"]) == len(report["event_revisions"]) == 1
+    assert report["active_evaluations"][0]["numbers"] == list(draw.numbers)
+
+def test_simultaneous_observations_ordered_by_explicit_source_revision(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    for n, result in enumerate([draw, _other_result(draw), draw], start=1):
+        assert _ingest(replace(result, result_version=n), str(n), 17) == (1, [])
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert len(audit["active_evaluations"]) == 1
+    assert [r["source_version"] for r in audit["event_revisions"]] == [1, 2, 3]
+
+
+def test_known_superseded_bytes_remain_historical_after_source_metadata_enrichment(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    assert _ingest(draw, "old bytes", 17) == (1, [])
+    assert _ingest(_other_result(draw), "corrected", 18) == (1, [])
+    assert _ingest(replace(draw, result_version=21), "old bytes", 20) == (0, [])
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert not audit["conflicts"] and len(audit["event_revisions"]) == 2
+    assert audit["event_observations"][-1]["disposition"] == "historical"
+
+def test_newly_confirmed_edition_can_resolve_prior_conflict_and_advance_watermark(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    second = _other_result(draw)
+    first_return = replace(draw, result_version=12)
+    assert _ingest(draw, "first", 17) == (1, [])
+    assert _ingest(second, "second", 18) == (1, [])
+    assert _ingest(first_return, "return", 20)[1]
+    assert _ingest(replace(second, result_version=11), "second", 19) == (0, [])
+    assert _ingest(first_return, "return", 20) == (1, [])
+    changed = replace(draw, numbers=(8, 9, 10, 11, 12, 13))
+    assert _ingest(changed, "delayed", 19, 30)[1]
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert len(audit["event_revisions"]) == 3
+    observations = [r for r in audit["event_observations"] if r.get("source_version") == 12]
+    assert [r["disposition"] for r in observations] == ["conflict", "revision"]
+    assert audit["active_evaluations"][0]["source_version"] == 12
+
+def test_replaying_known_edition_after_numbered_reconfirmation_keeps_watermark(monkeypatch, local):
+    draw = _register_observable_649(monkeypatch, local)
+    assert _ingest(replace(draw, result_version=1), "page A1", 17) == (1, [])
+    assert _ingest(replace(draw, result_version=2), "page A2", 18) == (0, [])
+    assert _ingest(replace(draw, result_version=1), "page A1", 19) == (0, [])
+    audit = ledger.read_prospective_report(include_audit=True)
+    assert [r["disposition"] for r in audit["event_observations"]] == ["revision", "confirmation", "historical"]
+    assert not audit["conflicts"]
+    assert _ingest(_other_result(draw), "new result", 18, 30) == (1, [])

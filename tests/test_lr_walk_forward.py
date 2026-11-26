@@ -335,3 +335,27 @@ def test_fixed_inverse_counts_bonus_reference_fallback_once_on_each_played_draw(
     assert summary["fallback_by_role"] == {"selected_method": 0, "joker_selection": 0,
                                          "direct_selection": 0, "direct_joker_selection": summary["evaluated"]}
     assert all(row["direct_joker_selection"]["method"] == "frequency" for row in report["draws"] if row.get("tickets"))
+
+
+def test_walk_forward_preserves_provisional_status_for_both_draws_of_same_day(monkeypatch):
+    frame = _frame()
+    frame.loc[18, "date"] = frame.loc[17, "date"]
+    from loto_enterprise.core import lr_budget_forecast
+    original = lr_budget_forecast.recommend_playable_games
+    calls = 0
+
+    def inject_on_first_test_day(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        plan, = original(*args, **kwargs)
+        if calls == 1:
+            plan["portfolio_refinement"] = {"complete": False, "issues": ["refinement_error"], "recipe_sha256": []}
+        return [plan]
+
+    monkeypatch.setattr(lr_budget_forecast, "recommend_playable_games", inject_on_first_test_day)
+    report = _run(frame, replay_policy="daily")
+    assert calls == 2
+    assert report["portfolio_refinement"]["complete"] is False
+    assert [d["portfolio_refinement"]["complete"] for d in report["draws"]] == [False, False, True]
+    assert report["summary"]["provisional_draws"] == 2
+    assert report["summary"]["evaluated"] == 3

@@ -518,3 +518,39 @@ def test_540_inverse_200_lei_shows_exact_capacity_in_generation_comparison_and_v
                                      inverse=True, restricted=True, dynamic=True, lookback=100, hit_target=4,
                                      joker_size=5, depth=10, replay_policy=replay)
         assert str(error.value) == reason
+
+
+def test_panel_retries_a_provisional_range_without_restarting(monkeypatch):
+    view = _widgets(monkeypatch)
+    analyses = 0
+    monkeypatch.setattr(budget, "_range_comparison", lambda *a, **kw: None)
+    monkeypatch.setattr(budget, "_render_recommendations", lambda *a: None)
+
+    async def io_bound(fn, *args, **kwargs):
+        nonlocal analyses
+        if fn is budget._budget_input_snapshot:
+            return "same-inputs", {}
+        if fn is budget._compare_games:
+            analyses += 1
+            return [{"game": game, "recommended_range": None,
+                     "portfolio_refinement": {"complete": analyses > 1,
+                                              "issues": [] if analyses > 1 else ["refinement_error"],
+                                              "recipe_sha256": []}}
+                    for game in args[2]]
+        assert fn is budget._generate_selection
+        return []
+
+    monkeypatch.setattr(budget.run, "io_bound", io_bound)
+
+    async def scenario():
+        refresh = budget.lr_budget_panel(MagicMock(value=200), lambda game: {})
+        view.expansion.return_value.value = True
+        await refresh()
+        toggle = view.switch_by_label["Pool restrâns între 10 și 40"]
+        recalculate = toggle.on_value_change.call_args.args[0]
+        for value in (True, False):
+            toggle.value = value
+            await recalculate()
+        assert analyses == 2
+
+    asyncio.run(scenario())
