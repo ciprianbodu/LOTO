@@ -1,0 +1,4337 @@
+{
+  "schema_version": 1,
+  "method": "expanded-placement-beam12-two-zone-v1",
+  "evaluator": "independent-intersections-v1",
+  "archive_sha256": "54ec1fcc177cf34c0feecc1537e96e8ca9861a9480dbaf018f03e3f5b7acc51f",
+  "source_commit": "e6cad789115d22ac839fc5e9390d3838bc4c9bfb",
+  "candidate_sha256": "00cf74a4e774b1f725afcbf5ac0eb8b8c50f4a8be4132239de11cde68704470e",
+  "geometries": {
+    "6/49": {
+      "unit_bani": 800,
+      "ticket_fee_bani": 50,
+      "per_ticket": 3,
+      "draw_n": 6,
+      "pick_n": 6,
+      "max_n": 49,
+      "bonus_total": 0,
+      "catalog_sha256": "1d6328de4a6ae4674db0698b197cbd253a85936d53bf686e6a2895f86dc39ffc"
+    },
+    "5/40": {
+      "unit_bani": 500,
+      "ticket_fee_bani": 50,
+      "per_ticket": 4,
+      "draw_n": 6,
+      "pick_n": 5,
+      "max_n": 40,
+      "bonus_total": 0,
+      "catalog_sha256": "349549328ceb15a67633b797af7edeb2e0bd677c52bad20977d9c486812c962c"
+    },
+    "joker": {
+      "unit_bani": 700,
+      "ticket_fee_bani": 50,
+      "per_ticket": 2,
+      "draw_n": 5,
+      "pick_n": 5,
+      "max_n": 45,
+      "bonus_total": 20,
+      "catalog_sha256": "b69ff85aaee1967e0181180259651fee74d827c92a7b761db1b2be1b6e923883"
+    }
+  },
+  "certificates": [
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|100 lei",
+      "incumbent_cost_bani": 9650,
+      "incumbent_sha256": "732811100cbf9f8a6012802eb92da660c689af99b8aa2a2727fa957fd515f346",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 103404,
+        "5+": 2964,
+        "6+": 12,
+        "denominator": 13983816,
+        "any_prize": 933324,
+        "prize_denominator": 13983816,
+        "attained": 103404,
+        "cost_bani": 9650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|200 lei",
+      "incumbent_cost_bani": 17650,
+      "incumbent_sha256": "933a038dcd742e059b7a2a9a04a6ae177dde009c2b030a622a26e863315e4560",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 250008,
+        "5+": 5698,
+        "6+": 22,
+        "denominator": 13983816,
+        "any_prize": 2069298,
+        "prize_denominator": 13983816,
+        "attained": 250008,
+        "cost_bani": 17650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|300 lei",
+      "incumbent_cost_bani": 29650,
+      "incumbent_sha256": "0c10981cd41c84159eb75606a9a31390ae75dfbbf64d4da5ebe07ee716320faa",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              9,
+              11,
+              13,
+              14,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              8,
+              10,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 383414,
+        "5+": 9379,
+        "6+": 37,
+        "denominator": 13983816,
+        "any_prize": 2811512,
+        "prize_denominator": 13983816,
+        "attained": 383414,
+        "cost_bani": 29650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|400 lei",
+      "incumbent_cost_bani": 39250,
+      "incumbent_sha256": "f479327e4c2099e00594712bc5c50b3dd1b5334ac623d606bfbd97f104557d12",
+      "tickets": [
+        [
+          {
+            "code": 49,
+            "positions": [
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              7,
+              8,
+              9,
+              10,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 468744,
+        "5+": 12274,
+        "6+": 49,
+        "denominator": 13983816,
+        "any_prize": 3240952,
+        "prize_denominator": 13983816,
+        "attained": 468744,
+        "cost_bani": 39250,
+        "zones": 3,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 38499,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|taxa -1",
+      "incumbent_cost_bani": 24050,
+      "incumbent_sha256": "fb4dfb211ae277494b54ece01587b30c19efdbc629e4c9f54dc163696483197b",
+      "tickets": [
+        [
+          {
+            "code": 50,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 165648,
+        "5+": 7230,
+        "6+": 30,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 165648,
+        "cost_bani": 24050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 38500,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|taxa +0",
+      "incumbent_cost_bani": 24050,
+      "incumbent_sha256": "fb4dfb211ae277494b54ece01587b30c19efdbc629e4c9f54dc163696483197b",
+      "tickets": [
+        [
+          {
+            "code": 50,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 165648,
+        "5+": 7230,
+        "6+": 30,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 165648,
+        "cost_bani": 24050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 38501,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|four_plus|taxa +1",
+      "incumbent_cost_bani": 24050,
+      "incumbent_sha256": "fb4dfb211ae277494b54ece01587b30c19efdbc629e4c9f54dc163696483197b",
+      "tickets": [
+        [
+          {
+            "code": 50,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 165648,
+        "5+": 7230,
+        "6+": 30,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 165648,
+        "cost_bani": 24050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|100 lei",
+      "incumbent_cost_bani": 9650,
+      "incumbent_sha256": "732811100cbf9f8a6012802eb92da660c689af99b8aa2a2727fa957fd515f346",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 103404,
+        "5+": 2964,
+        "6+": 12,
+        "denominator": 13983816,
+        "any_prize": 933324,
+        "prize_denominator": 13983816,
+        "attained": 933324,
+        "cost_bani": 9650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|200 lei",
+      "incumbent_cost_bani": 17650,
+      "incumbent_sha256": "933a038dcd742e059b7a2a9a04a6ae177dde009c2b030a622a26e863315e4560",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 250008,
+        "5+": 5698,
+        "6+": 22,
+        "denominator": 13983816,
+        "any_prize": 2069298,
+        "prize_denominator": 13983816,
+        "attained": 2069298,
+        "cost_bani": 17650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|300 lei",
+      "incumbent_cost_bani": 29650,
+      "incumbent_sha256": "6bdad94846bda4d16a1308135ebe520e0427149b286e1fe653bcde035f4f5bd0",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 382544,
+        "5+": 9379,
+        "6+": 37,
+        "denominator": 13983816,
+        "any_prize": 2811512,
+        "prize_denominator": 13983816,
+        "attained": 2811512,
+        "cost_bani": 29650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|400 lei",
+      "incumbent_cost_bani": 39250,
+      "incumbent_sha256": "f479327e4c2099e00594712bc5c50b3dd1b5334ac623d606bfbd97f104557d12",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 468412,
+        "5+": 12231,
+        "6+": 49,
+        "denominator": 13983816,
+        "any_prize": 3240952,
+        "prize_denominator": 13983816,
+        "attained": 3240952,
+        "cost_bani": 39250,
+        "zones": 3,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 38499,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|taxa -1",
+      "incumbent_cost_bani": 12050,
+      "incumbent_sha256": "599cc8805fb726a31881f6073bf2566113d389f83b2190783afb4e9813c1d29a",
+      "tickets": [
+        [
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 154533,
+        "5+": 3705,
+        "6+": 15,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 1262328,
+        "cost_bani": 12050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 38500,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|taxa +0",
+      "incumbent_cost_bani": 12050,
+      "incumbent_sha256": "599cc8805fb726a31881f6073bf2566113d389f83b2190783afb4e9813c1d29a",
+      "tickets": [
+        [
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 154533,
+        "5+": 3705,
+        "6+": 15,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 1262328,
+        "cost_bani": 12050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 38501,
+      "pool_size": 10,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "6/49|any_prize|taxa +1",
+      "incumbent_cost_bani": 12050,
+      "incumbent_sha256": "599cc8805fb726a31881f6073bf2566113d389f83b2190783afb4e9813c1d29a",
+      "tickets": [
+        [
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 154533,
+        "5+": 3705,
+        "6+": 15,
+        "denominator": 13983816,
+        "any_prize": 1262328,
+        "prize_denominator": 13983816,
+        "attained": 1262328,
+        "cost_bani": 12050,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|100 lei",
+      "incumbent_cost_bani": 9050,
+      "incumbent_sha256": "e20d938ee6ccaa0696f27b319408947bd8f22ae26682561f59ba484e825f08fd",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 38360,
+        "5+": 608,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 38360,
+        "prize_denominator": 3838380,
+        "attained": 38360,
+        "cost_bani": 9050,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|200 lei",
+      "incumbent_cost_bani": 19550,
+      "incumbent_sha256": "551b4412df6b1412a209aa611f9aed3b143f4376dde4b1d05b6581cb4a09232a",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 17,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 81760,
+        "5+": 1318,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 81760,
+        "prize_denominator": 3838380,
+        "attained": 81760,
+        "cost_bani": 19550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|300 lei",
+      "incumbent_cost_bani": 28550,
+      "incumbent_sha256": "b0f3c50288dcd25e2cbce37fdd93354418642c3bd498237465e6b6507da0e850",
+      "tickets": [
+        [
+          {
+            "code": 17,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              18,
+              19
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              1,
+              7,
+              8,
+              9,
+              11,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              2,
+              3,
+              8,
+              10,
+              11,
+              13,
+              17
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 119402,
+        "5+": 1926,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 119402,
+        "prize_denominator": 3838380,
+        "attained": 119402,
+        "cost_bani": 28550,
+        "zones": 4,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|400 lei",
+      "incumbent_cost_bani": 37550,
+      "incumbent_sha256": "4a11190a9c42678aae67e6a2ec50010711a011280808afc480b41aa9d4bb4cad",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 25,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 167020,
+        "5+": 2614,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 167020,
+        "prize_denominator": 3838380,
+        "attained": 167020,
+        "cost_bani": 37550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 22599,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|taxa -1",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 22600,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|taxa +0",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 22601,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|four_plus|taxa +1",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|100 lei",
+      "incumbent_cost_bani": 9050,
+      "incumbent_sha256": "e20d938ee6ccaa0696f27b319408947bd8f22ae26682561f59ba484e825f08fd",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 38360,
+        "5+": 608,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 38360,
+        "prize_denominator": 3838380,
+        "attained": 38360,
+        "cost_bani": 9050,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|200 lei",
+      "incumbent_cost_bani": 19550,
+      "incumbent_sha256": "551b4412df6b1412a209aa611f9aed3b143f4376dde4b1d05b6581cb4a09232a",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 17,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 81760,
+        "5+": 1318,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 81760,
+        "prize_denominator": 3838380,
+        "attained": 81760,
+        "cost_bani": 19550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|300 lei",
+      "incumbent_cost_bani": 28550,
+      "incumbent_sha256": "b0f3c50288dcd25e2cbce37fdd93354418642c3bd498237465e6b6507da0e850",
+      "tickets": [
+        [
+          {
+            "code": 17,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              18,
+              19
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              1,
+              7,
+              8,
+              9,
+              11,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              2,
+              3,
+              8,
+              10,
+              11,
+              13,
+              17
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 119402,
+        "5+": 1926,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 119402,
+        "prize_denominator": 3838380,
+        "attained": 119402,
+        "cost_bani": 28550,
+        "zones": 4,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|400 lei",
+      "incumbent_cost_bani": 37550,
+      "incumbent_sha256": "4a11190a9c42678aae67e6a2ec50010711a011280808afc480b41aa9d4bb4cad",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 25,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 167020,
+        "5+": 2614,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 167020,
+        "prize_denominator": 3838380,
+        "attained": 167020,
+        "cost_bani": 37550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 22599,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|taxa -1",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 22600,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|taxa +0",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 22601,
+      "pool_size": 8,
+      "joker_slots": 0,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "5/40|any_prize|taxa +1",
+      "incumbent_cost_bani": 10550,
+      "incumbent_sha256": "7f1da847cb7820e5aed0f6ada3ce22f7d59a430f98b33182b5293e330d2c0a84",
+      "tickets": [
+        [
+          {
+            "code": 16,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 36540,
+        "5+": 700,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 36540,
+        "prize_denominator": 3838380,
+        "attained": 36540,
+        "cost_bani": 10550,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|100 lei",
+      "incumbent_cost_bani": 9850,
+      "incumbent_sha256": "dcbda4a3bb981d26106a7ede4ccc89d521b0eb7ee07f31dbf923d8a71f701b76",
+      "tickets": [
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 2702,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2228590,
+        "prize_denominator": 24435180,
+        "attained": 2702,
+        "cost_bani": 9850,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|200 lei",
+      "incumbent_cost_bani": 19650,
+      "incumbent_sha256": "0fc8afdce4ffb8b411e0de5e2aaacd565603bc05a80bb74214febd08da2d8d17",
+      "tickets": [
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              8,
+              9,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              3,
+              4,
+              6,
+              7,
+              8,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 5384,
+        "5+": 28,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 4147720,
+        "prize_denominator": 24435180,
+        "attained": 5384,
+        "cost_bani": 19650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|300 lei",
+      "incumbent_cost_bani": 29500,
+      "incumbent_sha256": "497ec57e82db0d8d564a29c2670779db564bb08aae5b7943f2f56ef8c4c1e1ce",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              7,
+              8,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              9,
+              10,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              4,
+              6,
+              7,
+              8,
+              9,
+              10,
+              15
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 7920,
+        "5+": 42,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5040305,
+        "prize_denominator": 24435180,
+        "attained": 7920,
+        "cost_bani": 29500,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|400 lei",
+      "incumbent_cost_bani": 38650,
+      "incumbent_sha256": "2de1b19e63e5d6bacfdacf5c4818b3ef434ec29e9806b9e613d2075184d158a4",
+      "tickets": [
+        [
+          {
+            "code": 34,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              3,
+              5,
+              6,
+              7,
+              9,
+              10,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              3,
+              4,
+              6,
+              7,
+              8,
+              11,
+              12,
+              14
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              4,
+              5,
+              9,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              15
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              6,
+              8,
+              11,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 9944,
+        "5+": 55,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5564475,
+        "prize_denominator": 24435180,
+        "attained": 9944,
+        "cost_bani": 38650,
+        "zones": 6,
+        "physical_tickets": 3,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 10599,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|taxa -1",
+      "incumbent_cost_bani": 7750,
+      "incumbent_sha256": "8be1afc4d2d6c08fb042e25256d90f906f8094ad2150016a332e29e0a506d94a",
+      "tickets": [
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1721,
+        "5+": 11,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2200659,
+        "prize_denominator": 24435180,
+        "attained": 1721,
+        "cost_bani": 7750,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 10600,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|taxa +0",
+      "incumbent_cost_bani": 10600,
+      "incumbent_sha256": "0789038cc765f13ca624213c0869de4f45aeb23ae457e50506a1889bc9dfd86e",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1943,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2212647,
+        "prize_denominator": 24435180,
+        "attained": 1943,
+        "cost_bani": 10600,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 10601,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|four_plus|taxa +1",
+      "incumbent_cost_bani": 10600,
+      "incumbent_sha256": "0789038cc765f13ca624213c0869de4f45aeb23ae457e50506a1889bc9dfd86e",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1943,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2212647,
+        "prize_denominator": 24435180,
+        "attained": 1943,
+        "cost_bani": 10600,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|100 lei",
+      "incumbent_cost_bani": 9850,
+      "incumbent_sha256": "fd3c14dab30afbbe26d8a7e3835d8d2a486a3272f4cf2acc87125a7730eed696",
+      "tickets": [
+        [
+          {
+            "code": 34,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 2533,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2923280,
+        "prize_denominator": 24435180,
+        "attained": 2923280,
+        "cost_bani": 9850,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|200 lei",
+      "incumbent_cost_bani": 19050,
+      "incumbent_sha256": "064c7c535db744f681b6608ea532c1937d57318d18bac09244fc01ca06bf1bc3",
+      "tickets": [
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              3,
+              5,
+              8,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              5,
+              6,
+              7,
+              9,
+              10,
+              13
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              3,
+              4,
+              7,
+              10,
+              11,
+              13,
+              14
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 4799,
+        "5+": 27,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 4129887,
+        "prize_denominator": 24435180,
+        "attained": 4129887,
+        "cost_bani": 19050,
+        "zones": 5,
+        "physical_tickets": 3,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|300 lei",
+      "incumbent_cost_bani": 29550,
+      "incumbent_sha256": "399bfc2bd384d1d5d098d1677abb22894a286d4e17c03704f8d37ed4ecf20c77",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              4,
+              5,
+              6,
+              8,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              3,
+              5,
+              7,
+              8,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              7,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 7536,
+        "5+": 42,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5111685,
+        "prize_denominator": 24435180,
+        "attained": 5111685,
+        "cost_bani": 29550,
+        "zones": 5,
+        "physical_tickets": 3,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 15,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|400 lei",
+      "incumbent_cost_bani": 39450,
+      "incumbent_sha256": "5a0431fd537f4d3926a498296fd40fdd011a79e039d8b7dfd31b4c130841f344",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              3,
+              5,
+              8,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              4,
+              5,
+              6,
+              10,
+              11,
+              13,
+              14
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              7,
+              9,
+              10,
+              11,
+              12,
+              13,
+              15
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              4,
+              6,
+              8,
+              9,
+              12,
+              13,
+              15
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              3,
+              5,
+              7,
+              8,
+              12,
+              13,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              5,
+              6,
+              7,
+              8,
+              11,
+              14
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              4,
+              7,
+              9,
+              11,
+              14
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 9496,
+        "5+": 56,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5510070,
+        "prize_denominator": 24435180,
+        "attained": 5510070,
+        "cost_bani": 39450,
+        "zones": 9,
+        "physical_tickets": 5,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 10599,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|taxa -1",
+      "incumbent_cost_bani": 7750,
+      "incumbent_sha256": "8be1afc4d2d6c08fb042e25256d90f906f8094ad2150016a332e29e0a506d94a",
+      "tickets": [
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1721,
+        "5+": 11,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2200659,
+        "prize_denominator": 24435180,
+        "attained": 2200659,
+        "cost_bani": 7750,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 10600,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|taxa +0",
+      "incumbent_cost_bani": 10600,
+      "incumbent_sha256": "b06b2d68347e5bc7e2862222be18228ddc983fb2308cddede554084349c4f18b",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1906,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2212647,
+        "prize_denominator": 24435180,
+        "attained": 2212647,
+        "cost_bani": 10600,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 10601,
+      "pool_size": 8,
+      "joker_slots": 2,
+      "source_member": "cover/cover_results.json",
+      "source_case_id": "joker|any_prize|taxa +1",
+      "incumbent_cost_bani": 10600,
+      "incumbent_sha256": "b06b2d68347e5bc7e2862222be18228ddc983fb2308cddede554084349c4f18b",
+      "tickets": [
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 1906,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2212647,
+        "prize_denominator": 24435180,
+        "attained": 2212647,
+        "cost_bani": 10600,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 9,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|four_plus|100",
+      "incumbent_cost_bani": 9650,
+      "incumbent_sha256": "732811100cbf9f8a6012802eb92da660c689af99b8aa2a2727fa957fd515f346",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 103404,
+        "5+": 2964,
+        "6+": 12,
+        "denominator": 13983816,
+        "any_prize": 933324,
+        "prize_denominator": 13983816,
+        "attained": 103404,
+        "cost_bani": 9650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 12,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|four_plus|200",
+      "incumbent_cost_bani": 17650,
+      "incumbent_sha256": "933a038dcd742e059b7a2a9a04a6ae177dde009c2b030a622a26e863315e4560",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 250008,
+        "5+": 5698,
+        "6+": 22,
+        "denominator": 13983816,
+        "any_prize": 2069298,
+        "prize_denominator": 13983816,
+        "attained": 250008,
+        "cost_bani": 17650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|four_plus|300",
+      "incumbent_cost_bani": 29650,
+      "incumbent_sha256": "0c10981cd41c84159eb75606a9a31390ae75dfbbf64d4da5ebe07ee716320faa",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              9,
+              11,
+              13,
+              14,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              8,
+              10,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 383414,
+        "5+": 9379,
+        "6+": 37,
+        "denominator": 13983816,
+        "any_prize": 2811512,
+        "prize_denominator": 13983816,
+        "attained": 383414,
+        "cost_bani": 29650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|four_plus|400",
+      "incumbent_cost_bani": 39250,
+      "incumbent_sha256": "f479327e4c2099e00594712bc5c50b3dd1b5334ac623d606bfbd97f104557d12",
+      "tickets": [
+        [
+          {
+            "code": 49,
+            "positions": [
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              7,
+              8,
+              9,
+              10,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 468744,
+        "5+": 12274,
+        "6+": 49,
+        "denominator": 13983816,
+        "any_prize": 3240952,
+        "prize_denominator": 13983816,
+        "attained": 468744,
+        "cost_bani": 39250,
+        "zones": 3,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 9,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|any_prize|100",
+      "incumbent_cost_bani": 9650,
+      "incumbent_sha256": "732811100cbf9f8a6012802eb92da660c689af99b8aa2a2727fa957fd515f346",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 103404,
+        "5+": 2964,
+        "6+": 12,
+        "denominator": 13983816,
+        "any_prize": 933324,
+        "prize_denominator": 13983816,
+        "attained": 933324,
+        "cost_bani": 9650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 12,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|any_prize|200",
+      "incumbent_cost_bani": 17650,
+      "incumbent_sha256": "933a038dcd742e059b7a2a9a04a6ae177dde009c2b030a622a26e863315e4560",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 250008,
+        "5+": 5698,
+        "6+": 22,
+        "denominator": 13983816,
+        "any_prize": 2069298,
+        "prize_denominator": 13983816,
+        "attained": 2069298,
+        "cost_bani": 17650,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|any_prize|300",
+      "incumbent_cost_bani": 29650,
+      "incumbent_sha256": "6bdad94846bda4d16a1308135ebe520e0427149b286e1fe653bcde035f4f5bd0",
+      "tickets": [
+        [
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 382544,
+        "5+": 9379,
+        "6+": 37,
+        "denominator": 13983816,
+        "any_prize": 2811512,
+        "prize_denominator": 13983816,
+        "attained": 2811512,
+        "cost_bani": 29650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "6/49",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "6/49|any_prize|400",
+      "incumbent_cost_bani": 39250,
+      "incumbent_sha256": "f479327e4c2099e00594712bc5c50b3dd1b5334ac623d606bfbd97f104557d12",
+      "tickets": [
+        [
+          {
+            "code": 48,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 57,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 49,
+            "positions": [
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 468412,
+        "5+": 12231,
+        "6+": 49,
+        "denominator": 13983816,
+        "any_prize": 3240952,
+        "prize_denominator": 13983816,
+        "attained": 3240952,
+        "cost_bani": 39250,
+        "zones": 3,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 14,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|four_plus|100",
+      "incumbent_cost_bani": 9050,
+      "incumbent_sha256": "e20d938ee6ccaa0696f27b319408947bd8f22ae26682561f59ba484e825f08fd",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 38360,
+        "5+": 608,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 38360,
+        "prize_denominator": 3838380,
+        "attained": 38360,
+        "cost_bani": 9050,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|four_plus|200",
+      "incumbent_cost_bani": 19550,
+      "incumbent_sha256": "551b4412df6b1412a209aa611f9aed3b143f4376dde4b1d05b6581cb4a09232a",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 17,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 81760,
+        "5+": 1318,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 81760,
+        "prize_denominator": 3838380,
+        "attained": 81760,
+        "cost_bani": 19550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|four_plus|300",
+      "incumbent_cost_bani": 28550,
+      "incumbent_sha256": "b0f3c50288dcd25e2cbce37fdd93354418642c3bd498237465e6b6507da0e850",
+      "tickets": [
+        [
+          {
+            "code": 17,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              18,
+              19
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              1,
+              7,
+              8,
+              9,
+              11,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              2,
+              3,
+              8,
+              10,
+              11,
+              13,
+              17
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 119402,
+        "5+": 1926,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 119402,
+        "prize_denominator": 3838380,
+        "attained": 119402,
+        "cost_bani": 28550,
+        "zones": 4,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 18,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|four_plus|400",
+      "incumbent_cost_bani": 37550,
+      "incumbent_sha256": "4a11190a9c42678aae67e6a2ec50010711a011280808afc480b41aa9d4bb4cad",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 25,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 167020,
+        "5+": 2614,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 167020,
+        "prize_denominator": 3838380,
+        "attained": 167020,
+        "cost_bani": 37550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 14,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|any_prize|100",
+      "incumbent_cost_bani": 9050,
+      "incumbent_sha256": "e20d938ee6ccaa0696f27b319408947bd8f22ae26682561f59ba484e825f08fd",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 38360,
+        "5+": 608,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 38360,
+        "prize_denominator": 3838380,
+        "attained": 38360,
+        "cost_bani": 9050,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 16,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|any_prize|200",
+      "incumbent_cost_bani": 19550,
+      "incumbent_sha256": "551b4412df6b1412a209aa611f9aed3b143f4376dde4b1d05b6581cb4a09232a",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 17,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 81760,
+        "5+": 1318,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 81760,
+        "prize_denominator": 3838380,
+        "attained": 81760,
+        "cost_bani": 19550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 19,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|any_prize|300",
+      "incumbent_cost_bani": 28550,
+      "incumbent_sha256": "b0f3c50288dcd25e2cbce37fdd93354418642c3bd498237465e6b6507da0e850",
+      "tickets": [
+        [
+          {
+            "code": 17,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              18,
+              19
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              1,
+              7,
+              8,
+              9,
+              11,
+              14,
+              15
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 15,
+            "positions": [
+              2,
+              3,
+              8,
+              10,
+              11,
+              13,
+              17
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 119402,
+        "5+": 1926,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 119402,
+        "prize_denominator": 3838380,
+        "attained": 119402,
+        "cost_bani": 28550,
+        "zones": 4,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "5/40",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 18,
+      "joker_slots": 0,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "5/40|any_prize|400",
+      "incumbent_cost_bani": 37550,
+      "incumbent_sha256": "4a11190a9c42678aae67e6a2ec50010711a011280808afc480b41aa9d4bb4cad",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "joker_slot": null
+          },
+          {
+            "code": 25,
+            "positions": [
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18
+            ],
+            "joker_slot": null
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 167020,
+        "5+": 2614,
+        "6+": 0,
+        "denominator": 3838380,
+        "any_prize": 167020,
+        "prize_denominator": 3838380,
+        "attained": 167020,
+        "cost_bani": 37550,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 10000,
+      "pool_size": 10,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|four_plus|100",
+      "incumbent_cost_bani": 9850,
+      "incumbent_sha256": "dcbda4a3bb981d26106a7ede4ccc89d521b0eb7ee07f31dbf923d8a71f701b76",
+      "tickets": [
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 2702,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2228590,
+        "prize_denominator": 24435180,
+        "attained": 2702,
+        "cost_bani": 9850,
+        "zones": 1,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 20000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|four_plus|200",
+      "incumbent_cost_bani": 19650,
+      "incumbent_sha256": "0fc8afdce4ffb8b411e0de5e2aaacd565603bc05a80bb74214febd08da2d8d17",
+      "tickets": [
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              8,
+              9,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              3,
+              4,
+              6,
+              7,
+              8,
+              10,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 5384,
+        "5+": 28,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 4147720,
+        "prize_denominator": 24435180,
+        "attained": 5384,
+        "cost_bani": 19650,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 30000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|four_plus|300",
+      "incumbent_cost_bani": 29500,
+      "incumbent_sha256": "e9023fcd1b3faac0643e5d91c2f9014581c4a08010918ce7c7116aecf80e5772",
+      "tickets": [
+        [
+          {
+            "code": 15,
+            "positions": [
+              1,
+              2,
+              3,
+              5,
+              6,
+              7,
+              8,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              2,
+              3,
+              4,
+              5,
+              9,
+              10,
+              11,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              4,
+              6,
+              7,
+              8,
+              9,
+              10,
+              15
+            ],
+            "joker_slot": 2
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 7920,
+        "5+": 42,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5538515,
+        "prize_denominator": 24435180,
+        "attained": 7920,
+        "cost_bani": 29500,
+        "zones": 3,
+        "physical_tickets": 2,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "four_plus",
+      "budget_bani": 40000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|four_plus|400",
+      "incumbent_cost_bani": 38650,
+      "incumbent_sha256": "0e5d2d975e3d7cd101d3110d95ca73dff19577a5f6ac2786e5f30ee9796ce06f",
+      "tickets": [
+        [
+          {
+            "code": 34,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 24,
+            "positions": [
+              3,
+              5,
+              6,
+              7,
+              9,
+              10,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              3,
+              4,
+              6,
+              7,
+              8,
+              11,
+              12,
+              14
+            ],
+            "joker_slot": 2
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              4,
+              5,
+              9,
+              11,
+              12,
+              13,
+              14
+            ],
+            "joker_slot": 3
+          }
+        ],
+        [
+          {
+            "code": 24,
+            "positions": [
+              1,
+              2,
+              3,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              15
+            ],
+            "joker_slot": 4
+          },
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              6,
+              8,
+              11,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 0
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 9944,
+        "5+": 55,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 7279965,
+        "prize_denominator": 24435180,
+        "attained": 9944,
+        "cost_bani": 38650,
+        "zones": 6,
+        "physical_tickets": 3,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 10000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|any_prize|100",
+      "incumbent_cost_bani": 9850,
+      "incumbent_sha256": "fd3c14dab30afbbe26d8a7e3835d8d2a486a3272f4cf2acc87125a7730eed696",
+      "tickets": [
+        [
+          {
+            "code": 34,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 2533,
+        "5+": 14,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 2923280,
+        "prize_denominator": 24435180,
+        "attained": 2923280,
+        "cost_bani": 9850,
+        "zones": 2,
+        "physical_tickets": 1,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 20000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|any_prize|200",
+      "incumbent_cost_bani": 18350,
+      "incumbent_sha256": "53fc73e31a20e958ce5557fb816bc4d67c8083563b8c0c735ab3d962281037ea",
+      "tickets": [
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              3,
+              5,
+              7,
+              8,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 2
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              4,
+              7,
+              9,
+              11,
+              14
+            ],
+            "joker_slot": 3
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              4,
+              6,
+              8,
+              10,
+              12,
+              15
+            ],
+            "joker_slot": 4
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 4565,
+        "5+": 26,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 5437220,
+        "prize_denominator": 24435180,
+        "attained": 5437220,
+        "cost_bani": 18350,
+        "zones": 5,
+        "physical_tickets": 3,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 30000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|any_prize|300",
+      "incumbent_cost_bani": 29600,
+      "incumbent_sha256": "d676437e49bbf52789b6d4f2c20b3e10e0b36bba460d5c3584d19e969cebff11",
+      "tickets": [
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              3,
+              5,
+              7,
+              8,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 2
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              4,
+              7,
+              9,
+              11,
+              14
+            ],
+            "joker_slot": 3
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              4,
+              6,
+              8,
+              10,
+              12,
+              15
+            ],
+            "joker_slot": 4
+          },
+          {
+            "code": 35,
+            "positions": [
+              2,
+              3,
+              6,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              9,
+              12,
+              13
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              4,
+              5,
+              6,
+              10,
+              11,
+              13,
+              14
+            ],
+            "joker_slot": 2
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 7330,
+        "5+": 42,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 6720220,
+        "prize_denominator": 24435180,
+        "attained": 6720220,
+        "cost_bani": 29600,
+        "zones": 8,
+        "physical_tickets": 4,
+        "duplicate_paid_variants": 0
+      }
+    },
+    {
+      "game": "joker",
+      "objective": "any_prize",
+      "budget_bani": 40000,
+      "pool_size": 15,
+      "joker_slots": 5,
+      "source_member": "cover/integration_results.json",
+      "source_case_id": "joker|any_prize|400",
+      "incumbent_cost_bani": 38750,
+      "incumbent_sha256": "23da9decf3c319df404748fcbd542cfb1dc9dbb48d6122e9ed27cb653b78c690",
+      "tickets": [
+        [
+          {
+            "code": 34,
+            "positions": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "joker_slot": 0
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "joker_slot": 1
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              4,
+              5,
+              6,
+              8,
+              12,
+              14,
+              15
+            ],
+            "joker_slot": 2
+          },
+          {
+            "code": 45,
+            "positions": [
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "joker_slot": 3
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              3,
+              5,
+              9,
+              11,
+              14,
+              15
+            ],
+            "joker_slot": 4
+          },
+          {
+            "code": 45,
+            "positions": [
+              3,
+              4,
+              7,
+              10,
+              11,
+              13,
+              14
+            ],
+            "joker_slot": 0
+          }
+        ],
+        [
+          {
+            "code": 45,
+            "positions": [
+              2,
+              4,
+              5,
+              6,
+              9,
+              12,
+              13
+            ],
+            "joker_slot": 1
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              2,
+              3,
+              8,
+              9,
+              13,
+              15
+            ],
+            "joker_slot": 2
+          }
+        ],
+        [
+          {
+            "code": 35,
+            "positions": [
+              1,
+              3,
+              4,
+              5,
+              6,
+              10,
+              14,
+              15
+            ],
+            "joker_slot": 3
+          },
+          {
+            "code": 45,
+            "positions": [
+              1,
+              4,
+              6,
+              8,
+              10,
+              11,
+              13
+            ],
+            "joker_slot": 4
+          }
+        ]
+      ],
+      "metrics": {
+        "4+": 9208,
+        "5+": 55,
+        "6+": 0,
+        "denominator": 1221759,
+        "any_prize": 7698025,
+        "prize_denominator": 24435180,
+        "attained": 7698025,
+        "cost_bani": 38750,
+        "zones": 10,
+        "physical_tickets": 5,
+        "duplicate_paid_variants": 0
+      }
+    }
+  ]
+}

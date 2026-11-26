@@ -543,7 +543,7 @@ def _layout_rules_signature():
 
 
 @catalog_cache(maxsize=128, semantic_key=_layout_rules_signature)
-def _refine_cached(game, width, objective, price, joker_count, threshold, upper, zones, attained):
+def _refine_cached(game, width, objective, price, joker_count, threshold, upper, zones, attained, tariff):
     return _refine_layout(
         game, width, objective, price, joker_count, threshold, upper, zones, attained,
         _default_search_seconds(width), None,
@@ -633,13 +633,32 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
         report = {"certificate": "proven_bound" if attained == upper else "feasible"}
     else:
         args = (plan["game"], width, objective, price, len(jokers), threshold, upper, zones, attained)
+        from covering.lr_expanded_templates import enhance, enhance_cached, geometry
+
+        tariff = geometry(lot)
+        deadline = None
         if time_limit_s is None and cancelled is None:
-            selected, attained, price, report = _refine_cached(*args)
+            selected, attained, price, report = _refine_cached(*args, tariff)
         else:
             seconds = _default_search_seconds(width) if time_limit_s is None else float(time_limit_s)
             if not isfinite(seconds) or seconds < 0:
                 raise ValueError("Limita de timp a optimizării LR trebuie să fie finită și nenegativă.")
+            if time_limit_s is not None:
+                deadline = monotonic() + seconds
             selected, attained, price, report = _refine_layout(*args, seconds, cancelled)
+
+        if attained != upper and width == len(pool) and selected and "protected_numerators" in report:
+            floor = tuple(sorted(report["protected_numerators"].items()))
+            inputs = (lot.game_id, width, objective, plan["budget_bani"], price, len(jokers),
+                      threshold, upper, selected, attained, floor, report["duplicate_paid_variants"], tariff)
+            if time_limit_s is None and cancelled is None:
+                result = enhance_cached(*inputs)
+            else:
+                remaining = 2.0 if deadline is None else min(2.0, deadline - monotonic())
+                result = enhance(*inputs, remaining, cancelled)
+            if result is not None:
+                selected, attained, price, extra = result
+                report = report | extra
 
     plan["optimization"] = deepcopy(report) | {
         "global_upper": upper,

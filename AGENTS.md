@@ -19,6 +19,8 @@ ipoteza empirica; wheeling-ul optimizeaza acoperirea numerelor deja selectate.
 
 ## 2. Starea curenta
 
+Din 26.11.2026, generatorul pe buget și validarea folosesc rafinarea pozițiilor în scheme LR întregi. La cost egal, verificarea din bilete a confirmat un câștig combinatoric în 8/42 de cazuri din grilă și 7/24 din generator. La Joker, numărul bilelor eligibile și atribuirea lor fiecărei zone fac parte din geometria certificatului. [Rezultate și comenzi de reproducere](scripts/analysis/lr_acoperire_certificata_2026_11_26.md)
+
 Catalogul de bază este comun tuturor jocurilor și include trei metode:
 frecvențe pe ferestre (`compact_multiscale_shrink`), tranziții între zile
 (`compact_transition_prior`) și intervale de reapariție (`compact_renewal_hazard`).

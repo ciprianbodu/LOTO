@@ -107,7 +107,7 @@ def method_formulas(names):
 
 def lr_semantics(lot, scheme, hit_target, *, layout=None):
     from covering import lr_any_prize_649, lr_any_prize_joker, lr_budget, lr_pool_budget, lr_pool_milp, lr_pool_ranking
-    from covering import lr_catalog_cache, lr_portfolio, lr_schemes, lr_selection, probability
+    from covering import lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates, lr_portfolio, lr_schemes, lr_selection, probability
     from loto_enterprise.benchmark import decision, lr_budget_scoring, lr_hypotheses, restricted_decision, runner
     from loto_enterprise.core import dynamic_pools, dynamic_winner, lr_budget_forecast, lr_range_analysis, ranking
     from loto_enterprise.core import lr_played_portfolio, lr_ticket_experts, prize_categories
@@ -117,7 +117,7 @@ def lr_semantics(lot, scheme, hit_target, *, layout=None):
                          dynamic_winner, dynamic_pools, ranking, lr_range_analysis, lr_schemes, lr_selection,
                          lr_played_portfolio, lr_ticket_experts, lr_budget_scoring, lr_budget_forecast,
                          lr_budget, lr_pool_budget, lr_pool_milp, lr_portfolio, lr_any_prize_649, lr_any_prize_joker,
-                         prize_categories, probability, lr_catalog_cache)
+                         prize_categories, probability, lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates)
     rules = _module_rules(selection_modules)
     executed = [_function_digest(f) for f in (
         lr_hypotheses.rank_lr_pool, lr_hypotheses.rank_by_score, lr_hypotheses._evaluate_fold,
@@ -142,17 +142,66 @@ def lr_semantics(lot, scheme, hit_target, *, layout=None):
     }
 
 
+@lru_cache(maxsize=256)
+def _loaded_function_digest(fn, code, defaults, keywords, cells, constants):
+    # The additional arguments detect edits to an already loaded function.
+    return _function_digest(fn)
+
+
+def _layout_function_digest(fn):
+    import inspect
+
+    fn = inspect.unwrap(fn)
+    if not inspect.isfunction(fn):
+        return _function_digest(fn)
+    code = fn.__code__
+    scalars = (type(None), bool, int, float, str, bytes, tuple, frozenset)
+    cells = tuple(value if isinstance(value, scalars) else type(value).__qualname__
+                  for cell in fn.__closure__ or () if (value := cell.cell_contents) is not None)
+    constants = tuple((k, fn.__globals__[k]) for k in code.co_names if k.isupper() and k in fn.__globals__)
+    keywords = tuple(sorted((fn.__kwdefaults__ or {}).items()))
+    try:
+        return _loaded_function_digest(fn, code, fn.__defaults__, keywords, cells, constants)
+    except TypeError:
+        # A custom solver can expose mutable configuration. Hash its current values.
+        return _function_digest(fn)
+
+
+@lru_cache(maxsize=1)
+def _loaded_layout_modules():
+    from covering import lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates
+    from covering import lr_pool_budget, lr_pool_milp, lr_portfolio, lr_schemes, probability
+    modules = (lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates,
+               lr_pool_budget, lr_pool_milp, lr_portfolio, lr_schemes, probability)
+    return _digest(_module_rules(modules))
+
+
 def layout_formulas():
     """Identity of the loaded optimizer used by the in-process layout cache."""
-    from covering import lr_pool_budget, lr_pool_milp
+    from covering import lr_catalog_cache, lr_expanded_search, lr_expanded_store, lr_expanded_templates, lr_pool_budget, lr_pool_milp
+    from covering import lr_portfolio, lr_schemes
+    from loto_enterprise.core.lotteries import games_for_country
 
     search = lr_pool_budget._PortfolioSearch
     executed = (
         lr_pool_budget._refine_layout, lr_pool_budget._default_search_seconds,
         search.optimize, search.search, search.grow, search.consider, search.solve,
-        lr_pool_milp.solve_zone_coverage, lr_pool_milp._classes,
+        search.exact, search.add, search.events, search.make_zone, search.variants, search.slot,
+        search.actual_bets, search.passes, lr_pool_budget._weighted, lr_pool_budget._placements,
+        lr_pool_milp.solve_zone_coverage, lr_pool_milp._classes, lr_portfolio.cost_bani,
+        lr_expanded_search.refine_expanded, lr_expanded_search._ExpandedSearch.expanded_zones,
+        lr_expanded_search._ExpandedSearch.search, lr_expanded_search._ExpandedSearch.optimize_current,
+        lr_expanded_search._ExpandedSearch.actual_bets, lr_expanded_search._ExpandedSearch.played_slot,
+        lr_expanded_templates.enhance, lr_expanded_templates._unpack, lr_expanded_templates._measured,
+        lr_expanded_templates._from_certificate, lr_expanded_store.incumbent_hash,
+        lr_expanded_store.verified, lr_expanded_store.publish,
+        lr_pool_budget._profile_counts, lr_pool_budget.wheel_hit_profile,
     )
-    return _digest(([_function_digest(f) for f in executed], _numeric_runtime()))
+    certificate_hash, _ = lr_catalog_cache.certificate_snapshot(lr_schemes.LR_DIR)
+    tariffs = tuple(lr_expanded_templates.geometry(lot) for lot in games_for_country("RO"))
+    return _digest(([_layout_function_digest(f) for f in executed], _loaded_layout_modules(), _numeric_runtime(), tariffs,
+                    lr_expanded_search.ALGORITHM_VERSION, lr_expanded_search.EVALUATOR_VERSION,
+                    lr_expanded_templates.WITNESS_EVALUATOR, certificate_hash))
 
 
 def dynamic_formulas():
