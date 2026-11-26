@@ -15,6 +15,9 @@ from covering.lr_refinement_status import merge_refinements, refinement_complete
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark import VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.decision import MIN_CONSISTENCY_WINDOWS, game_hit_target
+from loto_enterprise.benchmark.lr_budget_scoring import (
+    LIVE_BUDGET_REFERENCE, MIN_PORTFOLIO_DAYS, _MIN_TRAINING_ROWS, replay_budget_portfolios,
+)
 from loto_enterprise.benchmark.lr_hypotheses import _cancellation, _training, benchmark_lr_hypotheses
 from loto_enterprise.benchmark.runner import fold_sizes
 from loto_enterprise.core.draw_validation import valid_draw_matrix
@@ -86,16 +89,21 @@ def _rank(profile, matrix, bounds, origin, lookback, maximum, count, excluded, *
 
 def _day_forecast(
     lot, matrix, bounds, origin, lookback, scheme, outside, inverse, methods,
-    bonus_matrix, bonus_bounds, bonus_origin, joker_size,
+    bonus_matrix, bonus_bounds, bonus_origin, joker_size, *, paid_reference=None,
 ):
     direct, tested = methods["direct"], methods["tested"]
     blocked = set(outside)
     excluded_pool = []
     selections = {}
     if inverse:
-        normal, selections["direct_selection"] = _rank(
-            direct[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
-        )
+        if paid_reference is None:
+            normal, selections["direct_selection"] = _rank(
+                direct[lot.bench_key], matrix, bounds, origin, lookback, lot.max_n, scheme.n, blocked, main_urn=True,
+            )
+        else:
+            if error := paid_reference.get("error"):
+                raise ValueError(error)
+            normal, selections["direct_selection"] = paid_reference["pool"], paid_reference["selection"]
         excluded_pool = sorted(normal)
         blocked.update(normal)
     pool, selections["selected_method"] = _rank(
@@ -108,9 +116,13 @@ def _day_forecast(
             raise ValueError("Urna 2 Joker nu are extrageri valide înaintea acestei zile.")
         maximum = lot.geo.second.max_n
         if inverse:
-            direct_bonus, selections["direct_joker_selection"] = _rank(
-                direct[key], bonus_matrix, bonus_bounds, bonus_origin, lookback, maximum, joker_size, (),
-            )
+            if paid_reference is None:
+                direct_bonus, selections["direct_joker_selection"] = _rank(
+                    direct[key], bonus_matrix, bonus_bounds, bonus_origin, lookback, maximum, joker_size, (),
+                )
+            else:
+                direct_bonus = paid_reference["jokers"]
+                selections["direct_joker_selection"] = paid_reference["joker_selection"]
             excluded_jokers = sorted(direct_bonus)
         # Joker ordering is meaningful: the generator assigns each rank to a zone.
         jokers, selections["joker_selection"] = _rank(
@@ -247,12 +259,20 @@ def validate_lr_walk_forward(
     fit_evidence = {"portfolio_refinement": merge_refinements(comparison, layout)}
     methods = {}
     mismatched_references = []
+    use_paid_reference = False
     if not daily:
         direct = _fit(game_id, training, lot, inverse=False, cancel_path=cancel_path, **options)
         check(force=True)
         tested = _fit(game_id, training, lot, inverse=True, cancel_path=cancel_path, **options) if inverse else direct
+        # A paid inverse fit fixes the inverse scorers. Its direct exclusion is a
+        # policy evaluated afresh for each day, not a frozen list of scorers.
+        use_paid_reference = inverse and {
+            profile.get("reference_policy") for profile in tested.values()
+        } == {LIVE_BUDGET_REFERENCE}
+        if use_paid_reference:
+            direct = {}
         fit_evidence["portfolio_refinement"] = merge_refinements(fit_evidence, *direct.values(), *tested.values())
-        if inverse:
+        if inverse and not use_paid_reference:
             mismatched_references = [
                 key for key, profile in tested.items() if profile["source"] == "training_rebench"
                 and not _same_profile_recipe(direct[key]["members"], profile.get("reference_members"))
@@ -266,15 +286,16 @@ def validate_lr_walk_forward(
 
     days = tuple(dict.fromkeys(bounds[start:]))
     paid_by_scope = {}
-    if daily and selection_policy is None:
-        from loto_enterprise.benchmark.lr_budget_scoring import MIN_PORTFOLIO_DAYS, _MIN_TRAINING_ROWS, replay_budget_portfolios
-
-        origins = [origin for origin in days if origin >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS]
-        scopes = (False, True) if requested_restricted is None else (restricted,)
+    if use_paid_reference or (daily and selection_policy is None):
+        origins = days if use_paid_reference else [
+            origin for origin in days if origin >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS
+        ]
+        scopes = (False, True) if daily and requested_restricted is None else (restricted,)
         paid_by_scope = {
             base: replay_budget_portfolios(
-                plan, lot, scheme, matrix, frame, origins, inverse=inverse, dynamic=dynamic, lookback=lookback,
-                joker_size=joker_size, number_range=_RANGE if base else None, check=check, recipe=recipe,
+                plan, lot, scheme, matrix, frame, origins, inverse=inverse and not use_paid_reference,
+                dynamic=dynamic, lookback=lookback, joker_size=joker_size, number_range=_RANGE if base else None,
+                check=check, recipe=recipe,
             ) for base in scopes
         }
     draws = []
@@ -320,6 +341,7 @@ def validate_lr_walk_forward(
                 played = _day_forecast(
                     lot, matrix, bounds, origin, lookback, scheme, outside, inverse, methods,
                     bonus_matrix, bonus_bounds, bonus_origin, joker_size,
+                    paid_reference=paid_by_scope[restricted][origin] if use_paid_reference else None,
                 )
                 pool, jokers = played["pool"], played["jokers"]
                 daily_plan = recipe.place(pool, jokers)
@@ -371,13 +393,15 @@ def validate_lr_walk_forward(
         )
     if inverse:
         protocol += " În fiecare zi, pool-ul invers exclude pool-ul direct din aceeași bază."
+    if use_paid_reference:
+        protocol += " Metodele inverse sunt fixate la antrenare. Pool-ul direct exclus provine zilnic din selecția pe biletele plătite."
     if mismatched_references:
         protocol += (
             " Re-Bench invers a evaluat altă referință directă. "
             "Validarea folosește frecvența pe complementul pool-ului direct fixat."
         )
     if dynamic:
-        protocol += " Selecția dinamică se folosește la antrenament. Modelele alese rămân fixe în perioada de test."
+        protocol += " Selecția dinamică se folosește la antrenament. Metoda testată rămâne fixă în perioada de test."
     if lot.bench_key_urna2:
         protocol += " Intervalul se aplică numai urnei principale. La Joker, potrivirea bonusului pentru premiu se verifică pe aceeași variantă."
     if daily:
@@ -395,4 +419,5 @@ def validate_lr_walk_forward(
         "methods": methods, "protocol": protocol, "replay_policy": "daily" if daily else "fixed",
         "inverse_references_checked": bool(inverse and not daily),
         "profile_reference_mismatch": mismatched_references,
+        "fixed_reference_policy": LIVE_BUDGET_REFERENCE if use_paid_reference else None,
     }

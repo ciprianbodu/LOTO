@@ -34,18 +34,20 @@ def _widgets(monkeypatch):
     return view
 
 
-def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatch):
+def test_game_and_method_can_be_set_before_first_generation_with_fixed_objective(monkeypatch):
     view = _widgets(monkeypatch)
     inputs, io_bound = MagicMock(), MagicMock()
     monkeypatch.setattr(budget.run, "io_bound", io_bound)
     budget.lr_budget_panel(MagicMock(value=200), inputs)
-    game, objective = view.select.return_value, view.toggle.return_value
+    game = view.select.return_value
+    view.toggle.assert_not_called()
+    assert any("4 numere pe aceeași variantă" in call.args[0] for call in view.label.call_args_list if call.args)
     inverse = view.switch_by_label["Metoda inversă"]
     reduced = view.switch_by_label["Pool restrâns între 10 și 40"]
     panel = view.expansion.return_value
 
     async def scenario():
-        for control, value in ((game, "6/49"), (objective, budget.ANY_PRIZE), (inverse, True), (reduced, True)):
+        for control, value in ((game, "6/49"), (inverse, True), (reduced, True)):
             control.value = value
             await control.on_value_change.call_args.args[0]()
         assert panel.value is False
@@ -61,7 +63,7 @@ def test_game_objective_and_method_can_be_set_before_first_generation(monkeypatc
 def test_panel_restores_preferences_and_saves_each_change_before_calculating(monkeypatch):
     view = _widgets(monkeypatch)
     methods, games, objectives, inputs = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    budget.lr_budget_panel(
+    refresh = budget.lr_budget_panel(
         MagicMock(value=200), inputs,
         initial_inverse=True, initial_restricted=True, on_method_change=methods,
         initial_game="joker", on_game_change=games,
@@ -70,9 +72,8 @@ def test_panel_restores_preferences_and_saves_each_change_before_calculating(mon
     inverse = view.switch_by_label["Metoda inversă"]
     restricted = view.switch_by_label["Pool restrâns între 10 și 40"]
     game = view.select.return_value
-    objective = view.toggle.return_value
     assert (inverse.value, restricted.value, game.value) == (True, True, "joker")
-    assert objective.value == budget.ANY_PRIZE
+    view.toggle.assert_not_called()
     objectives.assert_not_called()
     methods.assert_not_called()
     games.assert_not_called()
@@ -87,12 +88,27 @@ def test_panel_restores_preferences_and_saves_each_change_before_calculating(mon
         pending = game.on_value_change.call_args.args[0]()
         games.assert_called_once_with("all")
         await pending
-        objective.value = budget.FOUR_PLUS
-        pending = objective.on_value_change.call_args.args[0]()
-        objectives.assert_called_once_with(budget.FOUR_PLUS)
-        await pending
         assert methods.call_count == 2
         inputs.assert_not_called()
+
+        observed = []
+        async def calculate(fn, *args, **kwargs):
+            if fn is budget._budget_input_snapshot:
+                observed.append(args[2][1])
+                return "source", {}
+            if fn is budget._compare_games:
+                observed.append(args[1])
+                return []
+            if fn is budget._generate_selection:
+                observed.append(args[1])
+                return []
+            pytest.fail(str(fn))
+
+        monkeypatch.setattr(budget.run, "io_bound", calculate)
+        view.expansion.return_value.value = True
+        await refresh()
+        assert observed == [budget.FOUR_PLUS] * 3
+        objectives.assert_not_called()
 
     asyncio.run(scenario())
 

@@ -18,7 +18,11 @@ def test_result_email_uses_the_committed_job_budget_history_and_original_pool(mo
         monkeypatch.setitem(app.SETTINGS, key, value)
     config = app._build_config_json()
     dataset, = json.loads(config)["datasets"]
-    assert dataset["lr_mail_settings"] == {"lr_budget_lei": 200, "lr_budget_objective": ANY_PRIZE}
+    assert dataset["lr_mail_settings"] == {"lr_budget_lei": 200, "lr_budget_objective": FOUR_PLUS}
+    # Preserve the captured terms of a historical job after the UI target changes.
+    old_job = json.loads(config)
+    old_job["datasets"][0]["lr_mail_settings"]["lr_budget_objective"] = ANY_PRIZE
+    config = json.dumps(old_job)
     task, = dataset["tasks"]
     assert "lr_budget_lei" not in task and "lr_budget_objective" not in task
     sources = app._result_sources_from_job({"config_json": config})
@@ -62,9 +66,9 @@ def test_failed_inverse_keeps_original_and_other_games(monkeypatch):
     assert second["pool_alternatives"]["inverse_reduced"]["pool"] == [10, 20, 30]
 
 
-def test_apply_budget_preserves_the_chosen_mail_objective(monkeypatch):
+def test_new_mail_budget_uses_four_plus_after_a_legacy_any_prize_plan(monkeypatch):
     monkeypatch.setattr(app, "_save_settings", lambda: None)
     for key in ("lr_budget_lei", "lr_budget_objective", *app._POOL_KEYS.values(), *app._LR_CODE_KEYS.values()):
         monkeypatch.setitem(app.SETTINGS, key, app.DEFAULTS[key])
     app._apply_budget_plan(recommend_games(100, ANY_PRIZE, "6/49"))
-    assert app._budget_objective() == ANY_PRIZE and app.SETTINGS["lr_budget_lei"] == 100
+    assert app._budget_objective() == FOUR_PLUS and app.SETTINGS["lr_budget_lei"] == 100

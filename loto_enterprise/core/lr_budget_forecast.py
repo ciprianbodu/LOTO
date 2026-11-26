@@ -573,8 +573,8 @@ def _budget_forecast(plan, lot, requested_code, result, source, lookback, dynami
         profile.get("reference_policy") != LIVE_BUDGET_REFERENCE for profile, _ in inverse_profiles.values()
     )
     paid_available = (
-        full_frame is not None and len(full_frame) >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS
-        and not exclude_generated_pool and not direct_profiles and not legacy_refs
+        full_frame is not None and not exclude_generated_pool and not direct_profiles and not legacy_refs
+        and (bool(inverse_profiles) or len(full_frame) >= _MIN_TRAINING_ROWS + MIN_PORTFOLIO_DAYS)
     )
     paid = None
     if paid_available:

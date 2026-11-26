@@ -375,6 +375,7 @@ UI_PERSIST_KEYS = [
     "lr_inverse_val",
     "lr_restricted_val",
     "lr_fixed_share_val",
+    "lr_auto_options_val",
     "bench_target_revision",
     "dynamic_method_enabled_val",
     "joker_pool_size_val",
@@ -401,6 +402,7 @@ DEFAULTS = {
     "lr_inverse_val": False,
     "lr_restricted_val": False,
     "lr_fixed_share_val": False,
+    "lr_auto_options_val": False,
     "pool_size_val": 10,
     "joker_pool_size_val": 5,
     **{_POOL_KEYS[label]: size for label, size in _POOL_DEFAULTS.items()},
@@ -497,6 +499,8 @@ def _load_settings() -> None:
                     SETTINGS[k] = data[k]
         except Exception as exc:  # noqa: BLE001
             logger.warning("load settings: %s", exc)
+    # An older LR setting may still contain the retired any-prize objective.
+    SETTINGS["lr_budget_objective"] = FOUR_PLUS
     depth = SETTINGS.get("wf_depth_pct")
     if type(depth) is not int or depth not in VALIDATION_PERCENTILES:
         SETTINGS["wf_depth_pct"] = DEFAULT_REPLAY_PERCENT

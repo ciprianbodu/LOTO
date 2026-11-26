@@ -51,7 +51,7 @@ def _bench_method(selection):
     return f"{method} (Re-Bench)"
 
 
-def _ticket_validation(plan, result):
+def _ticket_validation(plan, result, *, auto_job=None):
     game = plan["game"]
     if (not result or result.get("game") != game or not result.get("history_hash")
             or result["history_hash"] != plan["forecast"].get("history_hash")):
@@ -59,7 +59,20 @@ def _ticket_validation(plan, result):
     summary = result["summary"]
     if not summary.get("objective_evaluated") or not summary.get("evaluated"):
         raise ValueError(f"Validarea pentru {game} nu conține extrageri evaluabile.")
-    return {key: result[key] for key in ("game", "source", "settings", "scheme_code", "history_hash", "summary")}
+    evidence = {key: result[key] for key in ("game", "source", "settings", "scheme_code", "history_hash", "summary")}
+    if auto_job is not None:
+        compared = auto_job["auto_options_result"]
+        matched = ("scheme", "budget_lei", "objective", "lookback", "dynamic", "hit_target", "joker_size",
+                   "inverse", "restricted", "selection_policy")
+        if (any(result["settings"].get(key) != auto_job.get(key) for key in matched)
+                or result.get("scheme_code") != auto_job["scheme"]
+                or compared["inverse"] != auto_job["inverse"] or compared["restricted"] != auto_job["restricted"]
+                or compared["fixed_share"] != (auto_job.get("selection_policy") == ONLINE_TICKET_EXPERTS)):
+            raise ValueError(f"Validarea pentru {game} nu corespunde opțiunilor Auto ale biletului.")
+        receipt = {key: compared[key] for key in ("inverse", "restricted", "fixed_share", "hits", "evaluated",
+                                                  "days", "first_date", "last_date", "validation_start")}
+        evidence["settings"] = {**evidence["settings"], "auto_options_result": receipt}
+    return evidence
 
 
 def _show_ticket_validation(evidence):
@@ -387,13 +400,14 @@ def _range_comparison(report, game_name, selected, select_base, forced, *, expan
                 "median": _pair_label(chron.get("median_gap_draws"), chron.get("median_gap_days")),
             })
         value = "10–40" if forced else selected
-        with ui.row().classes("lr-choice-actions w-full items-center gap-2") as actions:
-            picker = ui.select(
-                choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
-                on_change=select,
-            ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
-            if forced:
-                picker.disable()
+        if select_base is not None:
+            with ui.row().classes("lr-choice-actions w-full items-center gap-2") as actions:
+                picker = ui.select(
+                    choices, value=value if value in choices else "auto", label=f"Baza de selecție · {game_name}",
+                    on_change=select,
+                ).props(f'aria-label="Baza de selecție · {game_name}"').classes("w-full sm:max-w-md")
+                if forced:
+                    picker.disable()
         if historical:
             period = f"{_date_label(report.get('first_date'))} – {_date_label(report.get('as_of'))}"
             ui.label(f"Comparație pe {count(report['rows'], 'extrageri', 'extragere')} · {period}").classes("text-subtitle2")
@@ -484,40 +498,45 @@ def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_
 
 def _generate_rebench_tickets(jobs, profiles):
     """Play the completed run's exact decision, including the base chosen by Auto."""
-    selections, sources, codes = {}, {}, {}
+    sources, codes = {}, {}
     options = jobs[0][2]
-    shared = ("budget_lei", "objective", "inverse", "lookback", "dynamic", "hit_target", "joker_size")
-    policy = options.get("selection_policy")
+    shared = ("budget_lei", "objective", "lookback", "dynamic", "hit_target", "joker_size")
+    auto = options.get("auto_options_result") is not None
     if set(profiles) != {game for game, _, _ in jobs}:
         raise ValueError("Re-Bench nu a produs decizii pentru toate jocurile selectate.")
     for game, source, config in jobs:
         profile, = profiles[game]
         if (source is None or any(config[key] != options[key] for key in shared)
-                or config.get("selection_policy") != policy):
+                or (config.get("auto_options_result") is not None) != auto
+                or (not auto and (config["inverse"] != options["inverse"]
+                                  or config.get("selection_policy") != options.get("selection_policy")))):
             raise ValueError("Istoricul sau setările jocurilor diferă de cererea de recomandare.")
         settings = profile["settings"]
         if (profile["source"] != source[0] or settings["scheme"] != config["scheme"]
-                or any(settings[key] != config[key] for key in shared)
-                or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])):
+                or any(settings[key] != config[key] for key in (*shared, "inverse"))
+                or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])
+                or (auto and (settings.get("selection_policy") != config.get("selection_policy")
+                              or settings.get("auto_options_result") != config["auto_options_result"]))):
             raise ValueError(f"Decizia pentru {game} nu corespunde setărilor de la Re-Bench.")
-        selections[game] = _INVERSE_RANGE if settings["restricted"] else None
         sources[game] = source
         codes[game] = settings["scheme"]
     inputs = {key: options[key] for key in ("lookback", "dynamic", "hit_target", "joker_size")}
     inputs.update(histories=sources, pool_codes=codes)
-    plans = _generate_selection(options["budget_lei"], options["objective"], selections, inputs,
-                                options["inverse"], selection_policy=policy, decisions=profiles)
-    expected_source = policy or "lr_rebench"
-    for plan in plans:
-        if plan.get("forecast_error") or not plan.get("tickets"):
-            continue
-        game = plan["game"]
-        forecast = plan["forecast"]
-        urns = ("selection", "joker_selection") if game == "joker" else ("selection",)
-        if (forecast.get("history_hash") != profiles[game][0]["result"]["history_hash"]
-                or not all((forecast.get(urn) or {}).get("source") == expected_source for urn in urns)):
-            raise ValueError(f"Biletul pentru {game} nu folosește istoricul și selecția confirmate la Re-Bench.")
-    return plans, inputs
+    plans = []
+    for game, _, config in jobs:
+        profile, = profiles[game]
+        limits = _INVERSE_RANGE if profile["settings"]["restricted"] else None
+        policy = config.get("selection_policy")
+        plan, = _generate_selection(config["budget_lei"], config["objective"], {game: limits}, inputs,
+                                    config["inverse"], selection_policy=policy, decisions=profiles)
+        if plan.get("tickets") and not plan.get("forecast_error"):
+            forecast = plan["forecast"]
+            urns = ("selection", "joker_selection") if game == "joker" else ("selection",)
+            if (plan["game"] != game or forecast.get("history_hash") != profile["result"]["history_hash"]
+                    or not all((forecast.get(urn) or {}).get("source") == (policy or "lr_rebench") for urn in urns)):
+                raise ValueError(f"Biletul pentru {game} nu folosește istoricul și selecția confirmate la Re-Bench.")
+        plans.append(plan)
+    return sorted(plans, key=playable_plan_order), inputs
 
 
 def _same_rebench_histories(forecast_inputs, sources):
@@ -616,6 +635,7 @@ def lr_budget_panel(
     initial_inverse=False, initial_restricted=False, on_method_change=None,
     base_choices=None, on_base_change=None, initial_fixed_share=False, on_fixed_share_change=None,
     on_generation_ready=None, budget_entry=None, on_request_recommendation=None,
+    initial_auto_options=False, on_auto_options_change=None,
 ):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
@@ -651,12 +671,15 @@ def lr_budget_panel(
             game = ui.select(game_options, value=initial_game, label="Joc").props(
                 'outlined dense aria-label="Joc pentru bilete LR"'
             ).classes("w-full sm:w-64")
-            with ui.column().classes("gap-1"):
-                ui.label("Obiectiv").classes("text-caption")
-                objective = ui.toggle(_OBJECTIVES, value=initial_objective).props(
-                    'aria-label="Obiectivul biletelor LR" no-caps toggle-color=primary'
-                )
-        with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
+            ui.label("Obiectiv · cel puțin 4 numere pe aceeași variantă").classes("text-body2")
+        auto_options = None
+        if on_auto_options_change is not None:
+            auto_options = ui.switch("Auto · alege cele trei opțiuni", value=initial_auto_options is True).props(
+                'aria-label="Auto · alege cele trei opțiuni"'
+            )
+            ui.label("La generare, Auto alege separat pentru fiecare joc dacă folosește metoda inversă, "
+                     "pool-ul 10–40 și Fixed Share.").classes("text-caption")
+        with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1") as manual_controls:
             inverse = ui.switch("Metoda inversă", value=initial_inverse is True).props('aria-label="Metoda inversă"').tooltip(
                 "Reevaluează metodele pe numerele rămase după excluderea pool-ului normal."
             )
@@ -668,9 +691,15 @@ def lr_budget_panel(
             selection_policy = ui.switch("Fixed Share pe bilete", value=initial_fixed_share is True).props(
                 'aria-label="Fixed Share pe bilete"'
             ).tooltip(
-                "Alege metoda după rezultatele biletelor complete din ultimele 104 de zile cu extrageri. "
-                "Evaluările de până acum nu au demonstrat un avantaj predictiv."
+                "Alege metoda care propune numerele în limitele stabilite de celelalte două opțiuni, "
+                "pe baza rezultatelor istorice ale biletelor."
             )
+        auto_controls = None
+        if auto_options is not None:
+            manual_controls.bind_visibility_from(auto_options, "value", backward=lambda value: not value)
+            for switch in (inverse, range_filter, selection_policy):
+                switch.bind_enabled_from(auto_options, "value", backward=lambda value: not value)
+            auto_controls = ui.column().classes("w-full gap-1").bind_visibility_from(auto_options, "value")
         ui.label("Pool-ul principal permite perechi consecutive. Dacă un număr ar forma o serie de trei, "
                  "generatorul trece la următorul din clasament.").classes("text-caption")
 
@@ -713,14 +742,39 @@ def lr_budget_panel(
         registration = None
 
         def selected_budget():
-            return slider.value, objective.value, None if game.value == "all" else game.value
+            return slider.value, FOUR_PLUS, None if game.value == "all" else game.value
 
         def selected_method():
             return bool(inverse.value), bool(range_filter.value)
 
         def registration_settings():
             return (selected_budget(), selected_method(), bool(selection_policy.value),
+                    bool(auto_options and auto_options.value),
                     tuple(sorted(manual_choices.items())), tuple(control.value for control in scoring_controls))
+
+        def clear_auto_results():
+            if auto_controls is not None and not auto_controls.is_deleted:
+                auto_controls.clear()
+
+        def display_auto_results(jobs):
+            if auto_options is None or not auto_options.value or auto_controls.is_deleted:
+                return
+            auto_controls.clear()
+            with auto_controls:
+                for game_id, _, config in jobs:
+                    with ui.row().classes("w-full flex-wrap items-center gap-x-4 gap-y-1"):
+                        ui.label(game_options[game_id]).classes("text-body2 text-weight-bold")
+                        for label, selected in (
+                            ("Metoda inversă", config["inverse"]),
+                            ("Pool restrâns între 10 și 40", config["restricted"]),
+                            ("Fixed Share pe bilete", config.get("selection_policy") == ONLINE_TICKET_EXPERTS),
+                        ):
+                            ui.switch(label, value=selected).props(f'aria-label="{game_options[game_id]} · {label}"').disable()
+                    choice = config["auto_options_result"]
+                    ui.label(
+                        f"Alegerea opțiunilor · {_date_label(choice['first_date'])} – {_date_label(choice['last_date'])}"
+                        f" · {_rate_label(choice['hits'], choice['evaluated'])} extrageri cu obiectiv atins."
+                    ).classes("text-caption")
 
         def clear_confirmation():
             nonlocal confirm_button
@@ -808,6 +862,7 @@ def lr_budget_panel(
                 validated_settings = None
                 if not output.is_deleted:
                     output.clear()
+            clear_auto_results()
             waiting_for_choice = False
             clear_confirmation()
             if output.is_deleted:
@@ -831,12 +886,14 @@ def lr_budget_panel(
                     amount, goal, game_id = budget_settings
                     inverse_mode, forced = method_settings
                     fixed_share = bool(selection_policy.value)
+                    auto_enabled = bool(auto_options and auto_options.value)
                     settings_at_start = registration_settings()
 
                     def obsolete():
                         return (current != revision or not panel.value or output.is_deleted
                                 or selected_budget() != budget_settings or selected_method() != method_settings
-                                or bool(selection_policy.value) != fixed_share)
+                                or bool(selection_policy.value) != fixed_share
+                                or bool(auto_options and auto_options.value) != auto_enabled)
 
                     try:
                         if on_budget_plan is not None and applied_budget != budget_settings:
@@ -847,6 +904,10 @@ def lr_budget_panel(
                                 raise RuntimeError("Planificarea bugetului a fost întreruptă.")
                             on_budget_plan(templates)
                             applied_budget = budget_settings
+                        if auto_enabled:
+                            comparison.clear()
+                            show_status("Apasă „Generează recomandarea” pentru a alege și valida opțiunile.")
+                            return
                         fingerprint, inputs = await run.io_bound(_budget_input_snapshot, forecast_inputs, game_id, budget_settings)
                         if obsolete():
                             continue
@@ -873,7 +934,7 @@ def lr_budget_panel(
                                     gid = report["game"]
                                     _range_comparison(
                                         report, game_options[gid], lr_base_choice(manual_choices, gid, inverse_mode, forced),
-                                        change_base, forced, expanded=len(reports) == 1,
+                                        change_base if auto_options is None else None, forced, expanded=len(reports) == 1,
                                     )
                             displayed = (id(reports), forced) if cached_analysis and cached_analysis[2] is reports else None
                         if on_request_recommendation is not None:
@@ -971,6 +1032,7 @@ def lr_budget_panel(
             cached_analysis = displayed = None
             try:
                 if not output.is_deleted:
+                    clear_auto_results()
                     waiting_for_choice = False
                     clear_confirmation()
                     panel.set_value(True)
@@ -989,8 +1051,13 @@ def lr_budget_panel(
                     if validation_results is not None or on_request_recommendation is not None:
                         if not validation_results or set(validation_results) != set(profiles):
                             raise ValueError("Lipsește validarea pentru unul dintre jocurile selectate.")
+                        configs = {game: config for game, _, config in jobs}
                         for plan in plans:
-                            plan["walk_forward"] = _ticket_validation(plan, validation_results[plan["game"]])
+                            game = plan["game"]
+                            config = configs[game]
+                            plan["walk_forward"] = _ticket_validation(
+                                plan, validation_results[game], auto_job=config if config.get("auto_options_result") else None,
+                            )
                     if not await run.io_bound(_same_rebench_histories, forecast_inputs, inputs["histories"]):
                         raise ValueError("Istoricul disponibil s-a schimbat după Re-Bench.")
                     if not still_current():
@@ -1002,6 +1069,8 @@ def lr_budget_panel(
                     settings = jobs[0][2]
                     if ready or on_request_recommendation is None:
                         display(plans, settings["budget_lei"], settings["objective"], registered, errors)
+                        if ready:
+                            display_auto_results(jobs)
                         if ready and on_request_recommendation is not None:
                             validated_settings = registration_settings(), still_current, inputs["histories"]
                     else:
@@ -1031,12 +1100,13 @@ def lr_budget_panel(
             on_generation_ready(generate_after_rebench)
         panel.on_value_change(refresh)
         on_budget_click(generate, on_request_recommendation or generate_and_register, slider, budget_entry)
+        if auto_options is not None:
+            auto_options.on_value_change(lambda: change_selection(on_auto_options_change, auto_options))
         inverse.on_value_change(lambda: change_method(refresh))
         range_filter.on_value_change(lambda: change_method(calculate))
         selection_policy.on_value_change(lambda: change_selection(on_fixed_share_change, selection_policy))
         slider.on_value_change(show_recommendation)
         game.on_value_change(lambda: change_selection(on_game_change, game))
-        objective.on_value_change(lambda: change_selection(on_objective_change, objective))
         for control in scoring_controls:
             control.on_value_change(refresh)
         return refresh

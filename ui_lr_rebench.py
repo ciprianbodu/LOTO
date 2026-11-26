@@ -145,7 +145,9 @@ def _compact_profile(entry, finished_at):
             return None
         urns.append({field: urn[field] for field in fields})
     captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
-    captured_settings.update({key: settings[key] for key in ("budget_lei", "objective", "auto_range_policy") if key in settings})
+    for key in ("budget_lei", "objective", "auto_range_policy", "selection_policy", "auto_options_result"):
+        if key in settings:
+            captured_settings[key] = settings[key]
     captured_settings["scheme"] = scheme
     return {
         "game": game, "source": entry["source"], "settings": captured_settings, "finished_at": finished_at,
@@ -163,7 +165,8 @@ def _profile_key(entry):
     return (
         entry["source"], settings["scheme"], settings["inverse"], settings["restricted"], settings["dynamic"],
         settings["lookback"] or 100, settings["hit_target"], settings["joker_size"] if entry["game"] == "joker" else None,
-        settings.get("budget_lei"), settings.get("objective"),
+        settings.get("budget_lei"), settings.get("objective"), settings.get("selection_policy"),
+        "auto_options_result" in settings,
     )
 
 
@@ -338,23 +341,54 @@ def cancel_lr_rebench() -> bool:
 async def _run_games(jobs, report):
     global _active, _last, _notice
     cancel_path = report["cancel_path"]
+    loop = asyncio.get_running_loop()
     decisions_saved = {}
+
+    def progress(game_index, done, total):
+        if report is _active and report.get("auto_progress") is not None and report["current"][0] == game_index:
+            report["auto_progress"] = (done, total)
+            _changed()
+
     try:
         for index, (entry, history, auto_budget) in enumerate(jobs, start=1):
             if report["cancelled"]:
                 break
             report["current"] = (index, entry["name"])
+            auto_options = entry["settings"].get("auto_options")
+            report["auto_progress"] = (0, 8) if auto_options and history is not None else None
             report["comparing"] = bool(auto_budget and history is not None)
             _changed()
-            outcome = {**entry}
+            outcome = {**entry, "settings": dict(entry["settings"])}
             options = dict(entry["settings"])
+            options.pop("auto_options", None)
             range_policy = options.pop("auto_range_policy", None)
             if history is None:
                 outcome["error"] = "Istoricul jocului este indisponibil."
             else:
                 try:
                     game = entry["game"]
-                    if auto_budget is not None:
+                    if auto_options is not None:
+                        from loto_enterprise.core.lr_auto_choices import select_lr_auto_choices
+                        from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
+
+                        def step(done, total, game_index=index):
+                            loop.call_soon_threadsafe(progress, game_index, done, total)
+
+                        chosen = await run.io_bound(
+                            select_lr_auto_choices, game, history, options, **auto_options,
+                            cancel_path=cancel_path, progress_cb=step,
+                        )
+                        if report["cancelled"]:
+                            break
+                        if not chosen:
+                            raise ValueError("Auto nu a putut compara combinațiile pentru acest joc.")
+                        options.update(inverse=chosen["inverse"], restricted=chosen["restricted"])
+                        outcome["settings"].update(options, auto_options_result=chosen)
+                        if chosen["fixed_share"]:
+                            outcome["settings"]["selection_policy"] = ONLINE_TICKET_EXPERTS
+                        report["auto_progress"] = None
+                        _changed()
+                    elif auto_budget is not None:
                         budget, objective = auto_budget
                         comparison = await run.io_bound(
                             compare_budget_ranges, budget, objective, game, {game: history},
@@ -532,7 +566,15 @@ def _game_report(entry, source_for=None):
     lookback = f"{settings['lookback']}%" if 0 < settings["lookback"] < 100 else "integral"
     with ui.card().props("flat bordered").classes("w-full min-w-0 gap-2"):
         ui.label(entry["name"]).classes("text-h6")
-        ui.label(f"Cod LR {settings['scheme']} · Metodă {mode.lower()} · {scope}").classes("text-body2")
+        if chosen := settings.get("auto_options_result"):
+            policy = "Fixed Share activ" if chosen["fixed_share"] else "Fixed Share oprit"
+            ui.label(f"Auto · {mode} · {scope} · {policy}").classes("text-weight-bold")
+            ui.label(f"Selecție pe istoricul anterior validării: {chosen['hits']}/{chosen['evaluated']} "
+                     f"extrageri cu obiectiv atins ({chosen['first_date']} – {chosen['last_date']}).").classes("text-caption")
+        elif settings.get("auto_options"):
+            ui.label("Auto · selecție indisponibilă pentru acest joc.").classes("text-warning")
+        if not settings.get("auto_options") or chosen:
+            ui.label(f"Cod LR {settings['scheme']} · Metodă {mode.lower()} · {scope}").classes("text-body2")
         result = entry.get("result") or {}
         if result:
             notice = ui.label().classes("text-warning")
@@ -620,6 +662,9 @@ def lr_rebench_panel(source_for=None):
                             "Rularea se va opri după jocul curent."
                             if report.get("cancel_after_game") else "Se oprește rularea."
                         )
+                elif _active and report.get("auto_progress") is not None:
+                    done, total = report["auto_progress"]
+                    status = f"Auto compară cele trei opțiuni pentru {report['current'][1]} · {done}/{total} combinații."
                 elif _active and (current := report["current"]):
                     operation = "Se compară bazele pentru" if report.get("comparing") else "Se evaluează"
                     status = f"{operation} {current[1]} · jocul {current[0]} din {report['total']}."

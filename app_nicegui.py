@@ -100,7 +100,7 @@ from ui_history_upload import (
 from ui_job_status import JobStatusProbe
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
-from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, budget_in_lei
+from covering.lr_budget import FOUR_PLUS, budget_in_lei
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider, on_budget_click
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
@@ -146,7 +146,7 @@ APP_TITLE = (
 
 
 def _budget_objective():
-    return ANY_PRIZE if SETTINGS.get("lr_budget_objective") == ANY_PRIZE else FOUR_PLUS
+    return FOUR_PLUS
 
 
 def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
@@ -4273,7 +4273,7 @@ def _apply_budget_plan(plans):
 
     updated = {
         "lr_budget_lei": budget_in_lei(plans[0]["budget_bani"]),
-        "lr_budget_objective": plans[0].get("objective", FOUR_PLUS),
+        "lr_budget_objective": FOUR_PLUS,
     } if plans else {}
     for plan in plans:
         if plan["tickets"]:
@@ -4291,7 +4291,7 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
 
     selected = choices["lr_budget_game"]
-    plans = recommend_games(amount, choices["lr_budget_objective"], None if selected == "all" else selected)
+    plans = recommend_games(amount, FOUR_PLUS, None if selected == "all" else selected)
     if sync_pool:
         # The budget preview may still be running when the user clicks Re-Bench.
         _apply_budget_plan(plans)
@@ -4304,17 +4304,24 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
             game = plan["game"]
             source = sources.get(game)
             inverse = choices["lr_inverse_val"]
-            base = lr_base_choice(choices.get("base_choices", {}), game, inverse, choices["lr_restricted_val"])
+            # Legacy callers supplied individual base overrides. In the current
+            # panel manual mode takes the checkbox as the explicit choice.
+            individual_bases = {} if "lr_auto_options_val" in choices else choices.get("base_choices", {})
+            base = lr_base_choice(individual_bases, game, inverse, choices["lr_restricted_val"])
             options = {
                 "scheme": budget_plan_scheme(plan).code,
-                "budget_lei": amount, "objective": choices["lr_budget_objective"],
+                "budget_lei": amount, "objective": FOUR_PLUS,
                 "inverse": inverse, "restricted": base == "10–40",
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
-                "lookback": _effective_lookback_pct(), "hit_target": _clamped_bench_target(),
+                "lookback": _effective_lookback_pct(), "hit_target": 4,
                 "joker_size": _int_setting("joker_pool_size_val"),
             }
-            if base == "auto":
-                options["auto_budget"] = (amount, choices["lr_budget_objective"])
+            if choices.get("lr_auto_options_val"):
+                options["auto_options"] = {
+                    "depth": _int_setting("wf_depth_pct"), "replay_policy": choices.get("replay_policy", "fixed"),
+                }
+            elif base == "auto":
+                options["auto_budget"] = (amount, FOUR_PLUS)
                 if choices.get("lr_fixed_share_val"):
                     from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
                     options["auto_range_policy"] = ONLINE_TICKET_EXPERTS
@@ -4364,25 +4371,39 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
 
         STATE["_lr_ticket_flow_status"] = "Se evaluează metodele pentru biletul ales."
         profiles = {}
-        if not await run_lr_rebench(jobs, require_decisions=True, completed_profiles=profiles, allow_partial=True):
-            STATE["_lr_ticket_flow_status"] = "Re-Bench nu a salvat o decizie completă pentru selecție. Verifică raportul."
-            return
+        saved = await run_lr_rebench(jobs, require_decisions=True, completed_profiles=profiles, allow_partial=True)
         if not current():
             stopped()
             return
+        if not saved:
+            STATE["_lr_ticket_flow_status"] = "Re-Bench nu a salvat o decizie completă pentru selecție. Verifică raportul."
+            return
 
-        jobs_with_decision = [job for job in jobs if job[0] in profiles]
+        jobs_with_decision = []
+        for game, history, options in jobs:
+            if game not in profiles:
+                continue
+            if "auto_options" in options:
+                profile, = profiles[game]
+                decision = profile["settings"]["auto_options_result"]
+                options = {k: v for k, v in options.items() if k != "auto_options"}
+                options.update(inverse=decision["inverse"], restricted=decision["restricted"],
+                               auto_options_result=decision)
+                if decision["fixed_share"]:
+                    options["selection_policy"] = ONLINE_TICKET_EXPERTS
+            jobs_with_decision.append((game, history, options))
         validation_results = {}
         STATE["_lr_ticket_flow_status"] = "Re-Bench finalizat. Se testează biletele istorice prin walk-forward."
-        if not await _run_selected_lr_walk_forward(
+        validated = await _run_selected_lr_walk_forward(
             selection, amount, jobs=jobs_with_decision, depth=depth, completed_results=validation_results,
-        ):
+        )
+        if not current():
+            stopped()
+            return
+        if not validated:
             STATE["_lr_ticket_flow_status"] = (
                 "Validarea walk-forward nu a produs un rezultat utilizabil. Vezi raportul înainte de a genera bilete."
             )
-            return
-        if not current():
-            stopped()
             return
 
         ticket_jobs = [job for job in jobs_with_decision if job[0] in validation_results]
@@ -4394,7 +4415,7 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
         detail = (" Jocuri omise: " + ", ".join(omitted) + ". Vezi rapoartele Re-Bench și walk-forward."
                   if omitted else "")
         STATE["_lr_ticket_flow_status"] = "Validare walk-forward finalizată. Se generează recomandarea." + detail
-        if selection.get("lr_fixed_share_val"):
+        if selection.get("lr_fixed_share_val") and not selection.get("lr_auto_options_val"):
             ticket_jobs = [(game, history, {**options, "selection_policy": ONLINE_TICKET_EXPERTS})
                            for game, history, options in ticket_jobs]
         generated = await generate_ticket(ticket_jobs, current, accepted, validation_results)
@@ -4428,7 +4449,8 @@ async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=Non
     for game, history, captured in jobs:
         options = {**captured, "depth": depth}
         options.pop("auto_range_policy", None)
-        if choices.get("lr_fixed_share_val"):
+        options.pop("auto_options_result", None)
+        if choices.get("lr_fixed_share_val") and not choices.get("lr_auto_options_val"):
             options["selection_policy"] = ONLINE_TICKET_EXPERTS
         if choices.get("replay_policy") == "daily":
             options["replay_policy"] = "daily"
@@ -4444,7 +4466,12 @@ async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=Non
 def _lr_scope_text(choices):
     game = choices["lr_budget_game"]
     name = "Toate jocurile" if game == "all" else _LOT.require_lottery(game, _LOT.RO).name
+    if choices.get("lr_auto_options_val"):
+        return f"{name} · Auto · alegere separată pentru fiecare joc"
     method = "Metoda inversă" if choices["lr_inverse_val"] else "Metoda normală"
+    if "lr_auto_options_val" in choices:
+        base = "Pool restrâns între 10 și 40" if choices["lr_restricted_val"] else "Baza completă"
+        return f"{name} · {method} · {base}"
     games = _LOT.games_for_country(_LOT.RO) if game == "all" else [_LOT.require_lottery(game, _LOT.RO)]
     bases = {}
     for lot in games:
@@ -4509,12 +4536,22 @@ def main_page() -> None:
         "lr_inverse_val": SETTINGS.get("lr_inverse_val") is True,
         "lr_restricted_val": SETTINGS.get("lr_restricted_val") is True,
         "lr_fixed_share_val": SETTINGS.get("lr_fixed_share_val") is True,
+        "lr_auto_options_val": SETTINGS.get("lr_auto_options_val") is True,
         "base_choices": {},
     }
     if lr_choices["lr_budget_game"] not in ("all", *(g.game_id for g in _LOT.games_for_country(_LOT.RO))):
         lr_choices["lr_budget_game"] = "all"
 
+    selection_revision = 0
+    active_recommendation = None
+
     def change_lr_choices(**changed):
+        nonlocal selection_revision
+        if any(lr_choices.get(key) != value for key, value in changed.items()):
+            selection_revision += 1
+            if active_recommendation is not None:
+                cancel_lr_rebench()
+                cancel_lr_walk_forward()
         lr_choices.update(changed)
         show_lr_scope()
         if any(SETTINGS.get(key) != value for key, value in changed.items()):
@@ -4560,7 +4597,7 @@ def main_page() -> None:
                 "histories": {game: (name, history.copy(deep=True)) for game, (name, history) in histories.items()},
                 "generated": generated,
                 "pool_codes": {game: _lr_scheme_for(game).code for game in games},
-                "hit_target": _clamped_bench_target(),
+                "hit_target": 4,
                 "lookback": _effective_lookback_pct(),
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "joker_size": _int_setting("joker_pool_size_val"),
@@ -4921,7 +4958,7 @@ def main_page() -> None:
                 return
             _rebuild_decision_for_target(target)
 
-        bench_target_input = ui.select(
+        ui.select(
             {3: "3+ în pool", 4: "4+ în pool (implicit)", 5: "5+ în pool", 6: "6 în pool"},
             value=_clamped_bench_target(),
             label="🎯 Ținta Re-Bench pentru pool",
@@ -4931,9 +4968,9 @@ def main_page() -> None:
             SETTINGS, "bench_hit_target", lambda _: _bench_target_rule_text(_cc)
         ).classes("text-caption text-grey")
         ui.label(
-            "Re-Bench evaluează pragul selectat pentru fiecare dimensiune de pool, "
+            "Re-Bench general evaluează pragul selectat pentru fiecare dimensiune de pool, "
             "cu prioritate de la 7 numere în sus."
-            + (" Selecția dinamică verifică 4+ pe aceeași variantă a codului LR ales. "
+            + (" Recomandarea de bilete LR folosește întotdeauna 4+ pe aceeași variantă. "
                "O extragere cu 5 sau 6 potriviri pe o variantă se numără o singură dată la 4+."
                if _cc == _LOT.RO else "")
         ).classes("text-caption text-grey")
@@ -4955,26 +4992,34 @@ def main_page() -> None:
         ui.label("Re-Bench și întreținere").classes("text-bold")
 
         async def start_selected_rebench(*, general=False):
+            nonlocal active_recommendation
             if budget_slider is None:
                 run_rebench()
                 return
 
             def scope():
-                return (deepcopy(lr_choices), budget_slider.value, _effective_lookback_pct(),
-                        _clamped_bench_target(), _int_setting("joker_pool_size_val"),
+                return (selection_revision, deepcopy(lr_choices), budget_slider.value, _effective_lookback_pct(),
+                        _clamped_bench_target() if general else 4, _int_setting("joker_pool_size_val"),
                         _int_setting("wf_depth_pct"), bool(SETTINGS["dynamic_method_enabled_val"]))
 
             original = scope()
+            request = object()
 
             def show_scoped():
+                nonlocal active_recommendation
+                active_recommendation = request
                 drawer.hide()
                 focus_control(lr_report_anchor)
 
-            await _run_selected_rebench(
-                lr_choices, budget_slider.value, show_scoped, generate_ticket=generate_budget_ticket,
-                selection_current=lambda: budget_slider.is_deleted or (_selected_country() == _LOT.RO and scope() == original),
-                general=general,
-            )
+            try:
+                await _run_selected_rebench(
+                    lr_choices, budget_slider.value, show_scoped, generate_ticket=generate_budget_ticket,
+                    selection_current=lambda: budget_slider.is_deleted or (_selected_country() == _LOT.RO and scope() == original),
+                    general=general,
+                )
+            finally:
+                if active_recommendation is request:
+                    active_recommendation = None
 
         bench_button = ui.button("🔬 RE-BENCH").props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
         on_budget_click(bench_button, start_selected_rebench, budget_slider, budget_entry)
@@ -5087,25 +5132,26 @@ def main_page() -> None:
                 STATE, "_lr_ticket_flow_status",
             ).bind_visibility_from(STATE, "_lr_ticket_flow_status", backward=bool)
             refresh_budget = lr_budget_panel(
-                budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
+                budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
                 on_generation_ready=register_budget_generator, budget_entry=budget_entry,
                 on_request_recommendation=start_selected_rebench,
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
                 initial_fixed_share=lr_choices["lr_fixed_share_val"],
+                initial_auto_options=lr_choices["lr_auto_options_val"],
+                on_auto_options_change=lambda checked: change_lr_choices(lr_auto_options_val=bool(checked)),
                 on_fixed_share_change=lambda checked: change_lr_choices(lr_fixed_share_val=bool(checked)),
                 on_method_change=lambda inverse, restricted: change_lr_choices(
                     lr_inverse_val=inverse, lr_restricted_val=restricted,
                 ),
                 on_game_change=lambda game: change_lr_choices(lr_budget_game=game),
-                on_objective_change=lambda goal: change_lr_choices(lr_budget_objective=goal),
                 base_choices=lr_choices["base_choices"], on_base_change=show_lr_scope,
             )
             lr_report_anchor = lr_rebench_panel(lambda game: budget_forecast_inputs(game)["histories"].get(game))
             lr_walk_forward_panel(
                 lambda: f"{_lr_scope_text(lr_choices)} · {lei_text(budget_slider.value)}"
-                + (" · Fixed Share pe bilete" if lr_choices["lr_fixed_share_val"] else ""),
+                + (" · Fixed Share pe bilete" if lr_choices["lr_fixed_share_val"] and not lr_choices["lr_auto_options_val"] else ""),
                 on_replay_change=lambda value: lr_choices.update(replay_policy=value),
                 depth_control=lambda: _walk_forward_depth_selector("Istoric pentru validarea walk-forward LR"),
             )

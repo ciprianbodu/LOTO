@@ -2094,7 +2094,7 @@ din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
 „Înapoi la recomandare” închide bara. Bugetul inițial este 200 lei. Glisorul și câmpul numeric acceptă sume de la
 100 lei până la costul celei mai scumpe scheme oficiale din catalogul celor trei
 jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
-Jocul, obiectivul și metoda se pot alege înainte de prima generare. Glisorul
+Obiectivul recomandărilor noi este minimum patru numere principale pe aceeași variantă plătită. La 6/49 o variantă poate avea 4, 5 sau 6 potriviri, iar la 5/40 și Joker poate avea 4 sau 5. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
 analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică. Bugetul, jocul și obiectivul aleg codurile oficiale și
 actualizează dimensiunile folosite la generare și la următorul Re-Bench. La o
@@ -2127,9 +2127,14 @@ este semnalată la generare.
 
 Pentru jocurile românești, butonul „RE-BENCH” evaluează metoda normală sau
 inversă cu schema din recomandarea LR, pe istoricul încărcat la lansare.
-Cu ambele bife debifate, baza implicită este urna completă. Poți alege
-separat baza fiecărui joc în „Analiza bazelor de selecție”. Bifa „Pool
-restrâns între 10 și 40” aplică intervalul tuturor jocurilor alese.
+Cu Auto oprit, utilizatorul stabilește separat metoda inversă, intervalul 10–40
+și Fixed Share. Bifele manuale se păstrează când se revine din Auto. Cu Auto pornit,
+aplicația compară cele opt combinații pentru fiecare joc în bugetul cerut, pe cel mult
+12 zile complete anterioare validării finale. Numără extragerile cu cel puțin o
+variantă de 4+, păstrează explicația cazurilor imposibile și, la egalitate, preferă
+în ordine metoda normală, baza completă și selecția standard. Rezultatul arată cele
+trei opțiuni alese pentru fiecare joc. Fixed Share selectează regula de ordonare
+a numerelor după istoricul biletelor, respectând baza și excluderile decise.
 Cu ambele bife active, la fiecare zi de
 test se exclud din 10–40 numerele pool-ului direct calculat pe același
 interval din extragerile anterioare. Toate extragerile din ferestrele de
@@ -2142,7 +2147,7 @@ Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport și d
 pentru fiecare ipoteză în `.nicegui/lr_rebench_latest.json` din directorul de
 rulare. În România, „RE-BENCH” și „Generează recomandarea” pornesc aceeași secvență.
 Re-Bench alege metoda pentru selecția curentă. Validarea walk-forward măsoară pe
-extrageri ulterioare antrenării rezultatul biletelor istorice la obiectivul ales.
+extrageri ulterioare antrenării rezultatul biletelor istorice la pragul 4+.
 Aplicația generează și înregistrează apoi biletul pentru tragerea viitoare,
 împreună cu rezultatul istoric al acelei validări. Sunt necesare extrageri
 evaluabile. Dacă niciuna dintre acestea nu atinge obiectivul, raportul și biletul
