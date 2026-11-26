@@ -195,10 +195,11 @@ def test_inverse_budget_supersedes_running_normal_forecast(monkeypatch):
         def apply_budget(plans):
             settings.extend(plans)
 
-        async def calculate(function, amount, objective, *args):
+        async def calculate(function, amount, objective, *args, single_scheme=False):
             if function is budget._budget_input_snapshot:
                 return "unchanged", amount(objective)
             if function is budget.recommend_games:
+                assert single_scheme is True
                 return [(amount, objective, args[0])]
             if function is budget._compare_games:
                 return [{"game": gid, "ranges": [], "reason": "Test"} for gid in args[0]]
@@ -267,10 +268,11 @@ def test_obsolete_or_closed_plan_does_not_update_benchmark_controls(monkeypatch)
     async def scenario():
         waiting, release = asyncio.Event(), asyncio.Event()
 
-        async def io_bound(function, amount, goal, game=None, *args):
+        async def io_bound(function, amount, goal, game=None, *args, single_scheme=False):
             if function is budget._budget_input_snapshot:
                 return "unchanged", amount(goal)
             if function is budget.recommend_games:
+                assert single_scheme is True
                 if amount == 200:
                     waiting.set()
                     await release.wait()

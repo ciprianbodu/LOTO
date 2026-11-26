@@ -317,7 +317,7 @@ def _bench_urn(
 
 def benchmark_lr_hypotheses(
     game_id, history, *, scheme, inverse, restricted, dynamic, lookback, hit_target, joker_size,
-    budget_lei=None, objective=None, cancel_path=None, recipe=None,
+    budget_lei=None, objective=None, cancel_path=None, recipe=None, budget_mode=None,
 ):
     """Evaluate curated Re-Bench methods for these choices without writing a production decision."""
     check = _cancellation(cancel_path)
@@ -328,9 +328,12 @@ def benchmark_lr_hypotheses(
     refresh_catalog(lr_schemes.LR_DIR)
     scheme = resolve_lr_scheme(lot.geometry, getattr(scheme, "code", scheme))
     layout = None
-    if budget_lei is not None or objective is not None:
-        from covering.lr_budget import recommend_games
-        layout, = recommend_games(budget_lei, objective, game_id)
+    if budget_lei is not None or objective is not None or budget_mode is not None:
+        from covering.lr_budget import recommend_games, single_scheme_mode
+        single = single_scheme_mode(budget_mode)
+        layout, = recommend_games(budget_lei, objective, game_id, single_scheme=single)
+        if single and layout["tickets"][0][0]["code"] != scheme.code:
+            raise ValueError("Codul LR nu corespunde sumei orientative pentru Re-Bench.")
     semantics = lr_semantics(lot, scheme, hit_target, layout=layout)
     source = (Path(lot.csv).name, history) if isinstance(history, pd.DataFrame) else history
     engine = _forecast_engine(lot, source, 0)
@@ -388,6 +391,7 @@ def benchmark_lr_hypotheses(
     return {
         "game": game_id, "scheme_code": scheme.code,
         "semantics": semantics, "portfolio": portfolio,
+        **({"budget_mode": budget_mode} if budget_mode else {}),
         **({"portfolio_refinement": portfolio["portfolio_refinement"]} if portfolio and "portfolio_refinement" in portfolio else {}),
         "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "restricted_range": list(LR_RESTRICTED_RANGE),
         "history_hash": engine.audit["hash"], "history_rows": len(matrix),

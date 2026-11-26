@@ -93,8 +93,8 @@ class FixedShareTicketExperts:
             raise ValueError("A completed day must contain at least one draw.")
         chosen = self.choose()
         incoming = dict(zip(self.experts, self.weights, strict=True))
-        if len({(plan["game"], plan.get("budget_bani")) for plan in plans.values()}) != 1:
-            raise ValueError("Experts must forecast the same game and declared budget.")
+        if len({(p["game"], p.get("budget_bani"), p.get("budget_mode")) for p in plans.values()}) != 1:
+            raise ValueError("Experts must forecast the same game, amount and budget policy.")
         layouts = [expand_plan(plans[name]) for name in self.experts]
         grades = [[grade_draw(layout, numbers, joker, draw_date=day) for layout in layouts]
                   for numbers, joker in outcomes]

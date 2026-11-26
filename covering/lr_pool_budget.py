@@ -18,7 +18,7 @@ from time import monotonic
 
 import numpy as np
 
-from covering.lr_budget import ANY_PRIZE
+from covering.lr_budget import ANY_PRIZE, single_scheme_mode
 from covering.lr_portfolio import FEE_BANI, cost_bani
 from covering.lr_schemes import lr_schemes
 from covering.probability import MAX_EXACT_POOL, wheel_hit_profile
@@ -673,6 +673,17 @@ def restrict_to_pool(plan, objective, pool, jokers=(), *, time_limit_s=None, can
     """
     lot = require_lottery(plan["game"], "RO")
     pool, jokers = _pool_labels(lot, pool, jokers)
+    if single_scheme_mode(plan.get("budget_mode")):
+        from covering.lr_selection import resolve_lr_scheme
+
+        (zone,), = plan["tickets"]
+        scheme = resolve_lr_scheme(lot.game_id, zone["code"], len(pool))
+        if objective != plan["objective"] or zone["numbers"] != list(range(1, scheme.n + 1)):
+            raise ValueError("Rețeta de poziții nu corespunde codului unic selectat.")
+        selected = ((scheme.code, tuple(range(scheme.n)), scheme.size, 0 if lot.geo.second else None),)
+        price = plan["price_bani"]
+        plan["portfolio_refinement"] = recipe_status(plan, scheme.n, price, len(jokers), lot.per_ticket, selected, {})
+        return _attach(plan, lot, selected, pool, jokers, price, plan["attained"], None)
     template = [zone for ticket in plan["tickets"] for zone in ticket]
     use_bonus = plan["game"] == "joker" and objective == ANY_PRIZE
     threshold = 3 if objective == ANY_PRIZE and plan["game"] != "5/40" else 4

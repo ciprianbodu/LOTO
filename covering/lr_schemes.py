@@ -195,6 +195,15 @@ def lr_schemes(game: str | None = None, n: int | None = None) -> list[LRScheme]:
     ]
 
 
+def complete_lr_schemes(game: str) -> list[LRScheme]:
+    """Validate availability before comparing prices across all official codes."""
+    schemes = sorted(lr_schemes(game), key=lambda scheme: scheme.code)
+    official = {(code, n) for g, code, n in _manifest(str(LR_DIR)) if g == game}
+    if not official or official != {(scheme.code, scheme.n) for scheme in schemes}:
+        raise ValueError(f"Catalogul de scheme LR este incomplet pentru {game}.")
+    return schemes
+
+
 def scheme_tickets(scheme: LRScheme, pool) -> list[list[int]]:
     """Variantele schemei pe numerele jucate, cum le desfășoară terminalul."""
     nums = sorted({int(x) for x in pool})

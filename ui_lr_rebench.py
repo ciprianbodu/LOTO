@@ -19,7 +19,7 @@ from nicegui import run, ui
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from loto_enterprise.core.ro_text import lei_text
-from covering.lr_budget import recommend_games
+from covering.lr_budget import SINGLE_SCHEME_MODE, recommend_games
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
 from loto_enterprise.benchmark.lr_provenance import lr_semantics
@@ -109,6 +109,8 @@ def _compact_profile(entry, finished_at):
         return None
     if not isinstance(settings, dict) or not all(key in settings for key in _PROFILE_SETTINGS):
         return None
+    if settings.get("budget_mode") != result.get("budget_mode") or result.get("budget_mode") not in (None, SINGLE_SCHEME_MODE):
+        return None
     if (any(type(settings[key]) is not bool for key in ("inverse", "restricted", "dynamic"))
             or type(settings["lookback"]) not in (int, float)
             or type(settings["hit_target"]) is not int or type(settings["joker_size"]) is not int):
@@ -145,7 +147,7 @@ def _compact_profile(entry, finished_at):
             return None
         urns.append({field: urn[field] for field in fields})
     captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
-    for key in ("budget_lei", "objective", "auto_range_policy", "selection_policy", "auto_options_result", "restricted_range"):
+    for key in ("budget_lei", "budget_mode", "objective", "auto_range_policy", "selection_policy", "auto_options_result", "restricted_range"):
         if key in settings:
             captured_settings[key] = settings[key]
     bounds = report_restricted_range(settings, result)
@@ -159,6 +161,7 @@ def _compact_profile(entry, finished_at):
         "result": {
             "game": game, "scheme_code": scheme, "history_hash": history_hash, "history_rows": history_rows,
             "semantics": result["semantics"],
+            **({"budget_mode": result["budget_mode"]} if "budget_mode" in result else {}),
             **({"restricted_range": result["restricted_range"]} if "restricted_range" in result else {}),
             **({"portfolio_refinement": result["portfolio_refinement"]} if "portfolio_refinement" in result else {}),
             "as_of": result.get("as_of"), "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "urns": urns,
@@ -171,7 +174,7 @@ def _profile_key(entry):
     return (
         entry["source"], settings["scheme"], settings["inverse"], settings["restricted"], settings["dynamic"],
         settings["lookback"] or 100, settings["hit_target"], settings["joker_size"] if entry["game"] == "joker" else None,
-        settings.get("budget_lei"), settings.get("objective"), settings.get("selection_policy"),
+        settings.get("budget_lei"), settings.get("budget_mode"), settings.get("objective"), settings.get("selection_policy"),
         "auto_options_result" in settings,
         report_restricted_range(settings, entry["result"]) if settings["restricted"] or "auto_options_result" in settings else None,
     )
@@ -407,6 +410,7 @@ async def _run_games(jobs, report):
                             inverse=options["inverse"], dynamic=options["dynamic"],
                             lookback=options["lookback"], hit_target=options["hit_target"],
                             joker_size=options["joker_size"], pool_codes={game: options["scheme"]}, return_recipe=True,
+                            budget_mode=options.get("budget_mode"),
                             **({"selection_policy": range_policy} if range_policy else {}),
                         )
                         if report["cancelled"]:
@@ -558,16 +562,18 @@ def _report_compatibility(entry, source_for):
     from loto_enterprise.core.lr_budget_forecast import _forecast_engine
     result, settings = entry["result"], entry["settings"]
     lot = require_lottery(entry["game"], "RO")
-    layout = None
-    if settings.get("budget_lei") is not None:
-        layout, = recommend_games(settings["budget_lei"], settings["objective"], lot.game_id)
-    signature = lr_semantics(lot, resolve_lr_scheme(lot.geometry, settings["scheme"]), settings["hit_target"], layout=layout)
-    if result.get("semantics") != signature:
-        return "Raport istoric. Regulile sau schema diferă. Rulează din nou Re-Bench pentru a folosi decizia."
     if source_for is not None:
         current = _forecast_engine(lot, source_for(lot.game_id), 0)
         if result.get("history_hash") != current.audit["hash"]:
             return "Raport istoric. Extragerile disponibile s-au schimbat. Rulează din nou Re-Bench pentru istoricul actual."
+    layout = None
+    if settings.get("budget_lei") is not None:
+        if settings.get("budget_mode") != SINGLE_SCHEME_MODE:
+            return "Raport istoric cu plafon de cost. Reia Re-Bench pentru recomandarea cu un singur cod."
+        layout, = recommend_games(settings["budget_lei"], settings["objective"], lot.game_id, single_scheme=True)
+    signature = lr_semantics(lot, resolve_lr_scheme(lot.geometry, settings["scheme"]), settings["hit_target"], layout=layout)
+    if result.get("semantics") != signature:
+        return "Raport istoric. Regulile sau schema diferă. Rulează din nou Re-Bench pentru a folosi decizia."
     return ""
 
 

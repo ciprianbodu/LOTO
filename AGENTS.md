@@ -2096,12 +2096,7 @@ din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
 jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
 Obiectivul recomandărilor noi este minimum patru numere principale pe aceeași variantă plătită. La 6/49 o variantă poate avea 4, 5 sau 6 potriviri, iar la 5/40 și Joker poate avea 4 sau 5. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
-analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică. Bugetul, jocul și obiectivul aleg codurile oficiale și
-actualizează dimensiunile folosite la generare și la următorul Re-Bench. La o
-singură zonă se folosește exact codul recomandat. Pentru mai multe zone se alege
-cea mai mică dimensiune oficială care cuprinde pozițiile necesare, până la
-maximul catalogului. Fiecare zonă de pe bilet păstrează o schemă redusă
-oficială, iar costul total include taxa de bilet.
+analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică. Suma introdusă este orientativă. Pentru fiecare joc, recomandarea alege o singură zonă cu acel cod LR al cărui cost total (variantele și taxa unui bilet) este cel mai apropiat de sumă. Dacă două costuri sunt la aceeași distanță, se alege costul mai mic. Re-Bench, validarea walk-forward și generarea folosesc aceeași schemă integrală. La 5/40, pentru 500 lei se alege codul 26, cu 12 numere și 113 variante, la 565,50 lei cu taxă. Comparațiile istorice ale portofoliilor cu plafon strict își păstrează regula de cost.
 
 „Metoda inversă” pornește de la pool-ul normal pentru același joc, cod,
 istoric și aceeași bază de selecție. Cu intervalul 5–40 activ, calculează
@@ -2129,7 +2124,7 @@ Pentru jocurile românești, butonul „RE-BENCH” evaluează metoda normală s
 inversă cu schema din recomandarea LR, pe istoricul încărcat la lansare.
 Cu Auto oprit, utilizatorul stabilește separat metoda inversă, intervalul 5–40
 și Fixed Share. Bifele manuale se păstrează când se revine din Auto. Cu Auto pornit,
-aplicația compară cele opt combinații pentru fiecare joc în bugetul cerut, pe cel mult
+aplicația compară cele opt combinații pentru fiecare joc pe schema aleasă la suma introdusă, pe cel mult
 12 zile complete anterioare validării finale. Numără extragerile cu cel puțin o
 variantă de 4+, păstrează explicația cazurilor imposibile și, la egalitate, preferă
 în ordine metoda normală, baza completă și selecția standard. Rezultatul arată cele

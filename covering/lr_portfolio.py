@@ -92,10 +92,7 @@ def _best_at_budget(constructions, budget):
 
 def _catalog_data(game):
     lot = require_lottery(game, country="RO")
-    schemes = sorted(catalog.lr_schemes(game), key=lambda s: s.code)
-    manifest = {(code, n) for g, code, n in catalog._manifest(str(catalog.LR_DIR)) if g == game}
-    if not manifest or manifest != {(s.code, s.n) for s in schemes}:
-        raise ValueError(f"Catalogul de scheme LR este incomplet pentru {game}.")
+    schemes = catalog.complete_lr_schemes(game)
     exact = {s.code: catalog.scheme_numerators(s) for s in schemes}
     return lot, schemes, exact
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS
+from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS, single_scheme_mode
 from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from loto_enterprise.core.lr_budget_forecast import recommend_playable_games
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def prepare_inverse_mail_pools(
     record, source, *, budget_lei=DEFAULT_BUDGET_LEI, objective=FOUR_PLUS,
-    dynamic=True, lookback=100, joker_size=1, hit_target=4,
+    dynamic=True, lookback=100, joker_size=1, hit_target=4, budget_mode=None,
 ):
     """Read detached job settings and exclude exactly the original pool shown in its email."""
     lot, data, filename = record["spec"], record["data"], record["fname"]
@@ -25,7 +25,10 @@ def prepare_inverse_mail_pools(
     audit = data.get("audit") or {}
     budget_lei = data.get("lr_budget_lei", budget_lei)
     objective = data.get("lr_budget_objective", objective)
+    budget_mode = data.get("lr_budget_mode", budget_mode)
     alternative = {"budget_lei": budget_lei, "objective": objective, "number_range": LR_RESTRICTED_RANGE}
+    if budget_mode is not None:
+        alternative["budget_mode"] = budget_mode
     # A canonical file can replace a missing detached frame only if its full
     # content hash matches the generating job. The budget forecaster verifies it.
     if source is None and not (filename == Path(lot.csv).name and audit.get("hash")):
@@ -49,9 +52,10 @@ def prepare_inverse_mail_pools(
             generated={lot.game_id: (filename, data)}, pool_codes={}, dynamic=dynamic, lookback=lookback,
             joker_size=len(bonus) or joker_size, hit_target=data.get("bench_hit_target", hit_target),
             inverse=True, number_range=LR_RESTRICTED_RANGE, exclude_generated_pool=True,
+            single_scheme=single_scheme_mode(budget_mode),
         )
         if not plans:
-            raise ValueError("Nicio schemă oficială nu încape în buget.")
+            raise ValueError("Nu există o schemă oficială disponibilă pentru cererea din job.")
         plan = plans[0]
         if not plan["tickets"] or plan.get("forecast_error"):
             raise ValueError(plan.get("forecast_error") or "Pool-ul invers 5–40 nu poate fi completat.")

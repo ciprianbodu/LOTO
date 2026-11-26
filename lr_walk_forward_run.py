@@ -121,6 +121,7 @@ def _validated_games(finished):
             continue
         if (entry.get("error") or result.get("error") or refinement.get("complete") is not True
                 or result.get("game") != game or result.get("scheme_code") != settings.get("scheme")
+                or result.get("budget_mode") != settings.get("budget_mode")
                 or result.get("objective") != settings.get("objective") or not result.get("history_hash")):
             continue
         training_rows = summary.get("training_rows")
@@ -133,6 +134,7 @@ def _validated_games(finished):
         validated[game] = {
             "game": game, "source": entry["source"], "settings": settings, "scheme_code": result["scheme_code"],
             "history_hash": result["history_hash"], "finished_at": finished["finished_at"], "summary": summary,
+            "price_bani": result.get("price_bani"), "variants": result.get("variants"),
         }
     return validated
 

@@ -8,7 +8,9 @@ import threading
 from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
-from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS
+from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS, budget_in_lei
+from covering.lr_portfolio import cost_bani
+from loto_enterprise.core.ro_text import lei_text
 from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.hit_target import (
     BENCH_TARGET_REVISION, DEFAULT_BENCH_HIT_TARGET, clamp_bench_hit_target,
@@ -268,9 +270,11 @@ def _lr_guarantees_text(guarantees: dict) -> str:
 def _lr_selection_lines(game) -> tuple[str, str]:
     lot = _game_spec_for(game)
     scheme = _lr_scheme_for(game)
-    price = float(lot.price)
+    unit = round(lot.price * 100)
+    total = cost_bani(scheme.size, 1, unit, lot.per_ticket)
     summary = (f"Cod {scheme.code} · {scheme.n} numere · {scheme.size} variante · "
-               f"{scheme.size * price:g} lei în variante; 0,50 lei/bilet, tarif standard.")
+               f"{lei_text(budget_in_lei(scheme.size * unit))} în variante · "
+               f"{lei_text(budget_in_lei(total))} cu taxa pe bilet")
     return summary, "Garanții condiționate: " + _lr_guarantee_text(scheme)
 
 

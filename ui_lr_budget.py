@@ -1,4 +1,4 @@
-"""Compare Romanian reduced-scheme tickets within the selected budget."""
+"""Generate and validate the official LR code nearest to the requested total price."""
 
 import asyncio
 import logging
@@ -11,7 +11,7 @@ from math import comb, isfinite
 from nicegui import run, ui
 
 from covering.lr_budget import (
-    ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, budget_in_bani, budget_in_lei,
+    ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, SINGLE_SCHEME_MODE, budget_in_bani, budget_in_lei,
     maximum_scheme_budget_bani, recommend_games,
 )
 from covering.lr_pool_budget import positional_recipe
@@ -63,6 +63,14 @@ def _ticket_validation(plan, result, *, auto_job=None):
     if not summary.get("objective_evaluated") or not summary.get("evaluated"):
         raise ValueError(f"Validarea pentru {game} nu conține extrageri evaluabile.")
     settings = result["settings"]
+    if settings.get("budget_mode") != plan.get("budget_mode"):
+        raise ValueError(f"Regula de alegere a codului pentru {game} diferă între validare și bilet.")
+    if plan.get("budget_mode") == SINGLE_SCHEME_MODE:
+        codes = [[area["code"] for area in ticket] for ticket in plan["tickets"]]
+        if (codes != [[result.get("scheme_code")]] or result["scheme_code"] != settings.get("scheme")
+                or plan["budget_bani"] != budget_in_bani(settings["budget_lei"])
+                or plan["price_bani"] != result.get("price_bani") or plan["variants"] != result.get("variants")):
+            raise ValueError(f"Codul, costul sau numărul de variante pentru {game} diferă între validare și bilet.")
     uses_range = auto_job is not None or ("restricted" in settings and settings["restricted"] is not False)
     bounds = report_restricted_range(settings, result)
     actual_bounds = plan["forecast"].get("number_range")
@@ -70,9 +78,11 @@ def _ticket_validation(plan, result, *, auto_job=None):
             or (settings.get("restricted") and actual_bounds not in (LR_RESTRICTED_RANGE, list(LR_RESTRICTED_RANGE)))):
         raise ValueError(f"Intervalul validării pentru {game} diferă de intervalul biletului solicitat.")
     evidence = {key: result[key] for key in ("game", "source", "settings", "scheme_code", "history_hash", "summary")}
+    if plan.get("budget_mode") == SINGLE_SCHEME_MODE:
+        evidence.update(price_bani=result["price_bani"], variants=result["variants"])
     if auto_job is not None:
         compared = auto_job["auto_options_result"]
-        matched = ("scheme", "budget_lei", "objective", "lookback", "dynamic", "hit_target", "joker_size",
+        matched = ("scheme", "budget_lei", "budget_mode", "objective", "lookback", "dynamic", "hit_target", "joker_size",
                    "inverse", "restricted", "selection_policy")
         if (report_restricted_range(settings, compared) != LR_RESTRICTED_RANGE
                 or any(settings.get(key) != auto_job.get(key) for key in matched)
@@ -145,7 +155,8 @@ def _ticket_details(plan, *, expanded=False):
                 ui.label("Scheme adaptate la pool-urile disponibile.").classes("text-caption")
         if forecast := plan.get("forecast"):
             pool = forecast["pool"]
-            excluded = forecast.get("excluded_pool")
+            excluded = forecast.get("excluded_pool") or []
+            inverse = forecast.get("inverse", bool(excluded))
             origin = "Pool din generare" if forecast["generated"] else "Pool calculat cu setările generatorului"
             if "expanded_from" in forecast:
                 origin = "Pool LR maxim pentru buget" if forecast["expanded_to_max"] else "Pool pentru codul recomandat"
@@ -158,7 +169,7 @@ def _ticket_details(plan, *, expanded=False):
                 prefix = "Cod" if same_code else "Cod de evaluare"
                 code = f" · {prefix} {forecast['code']}"
             limits = forecast.get("number_range") or forecast.get("inverse_range")
-            if excluded is not None:
+            if inverse:
                 ui.label("Pool normal exclus").classes("text-weight-bold")
                 ui.label(", ".join(map(str, excluded))).classes("text-body2")
                 eligible = count(forecast["eligible_count"], "numere eligibile", "număr eligibil")
@@ -222,7 +233,7 @@ def _ticket_details(plan, *, expanded=False):
                         )
                     if selection.get("reason") not in (None, "winner"):
                         evidence += " · metodă de rezervă"
-                method_label = "Metoda pool-ului invers" if excluded is not None else "Metoda pool-ului"
+                method_label = "Metoda pool-ului invers" if inverse else "Metoda pool-ului"
                 ui.label(f"{method_label} · {evidence}").classes("text-caption")
                 if selection.get("source") not in ("lr_rebench", "lr_rebench_reference", ONLINE_TICKET_EXPERTS, "paid_budget"):
                     ui.label("Bilet calculat fără un rezultat Re-Bench LR pentru această selecție și acest istoric.").classes("text-caption")
@@ -248,6 +259,14 @@ def _recommended_codes(tickets):
     return " + ".join(labels)
 
 
+def _budget_difference(plan):
+    difference = plan["price_bani"] - plan["budget_bani"]
+    if not difference:
+        return "exact la suma aleasă"
+    side = "peste" if difference > 0 else "sub"
+    return f"{_price(abs(difference))} {side} suma aleasă"
+
+
 def _render_recommendations(records, budget_lei, objective):
     if not records or not records[0]["tickets"]:
         ui.label("Scheme LR indisponibile pentru pool-urile și bugetul ales.").classes("text-warning")
@@ -255,6 +274,7 @@ def _render_recommendations(records, budget_lei, objective):
             _ticket_details(plan, expanded=True)
         return
     first = records[0]
+    single = first.get("budget_mode") == SINGLE_SCHEME_MODE
     with ui.card().props("flat bordered").classes("w-full border-l-4 border-positive gap-1"):
         ui.label(f"Sugestie pentru {lei_text(budget_lei)} · {first['game_name']}").classes("text-h6 text-weight-bold")
         ui.label(_recommended_codes(first["tickets"])).classes("text-subtitle2 text-weight-bold")
@@ -263,6 +283,8 @@ def _render_recommendations(records, budget_lei, objective):
             f"{count(len(first['tickets']), 'bilete', 'bilet')} · "
             f"{count(first['variants'], 'variante', 'variantă')}"
         ).classes("text-body2")
+        if single:
+            ui.label(_budget_difference(first)).classes("text-body2 text-weight-bold")
         ui.label(
             f"Șansă teoretică la o extragere uniformă · {_OBJECTIVES[objective]} · "
             f"{_percent(first['attained'], first['denominator'])}"
@@ -289,13 +311,17 @@ def _render_recommendations(records, budget_lei, objective):
         ("game", "Joc"), ("codes", "Cod LR și pool"), ("tickets", "Bilete"),
         ("variants", "Variante"),
         ("price", "Total cu taxă"), ("chance", "Șansă teoretică"),
-        ("bound", "Limită superioară"),
     ]
+    if single:
+        fields.append(("difference", "Diferență față de suma aleasă"))
+    else:
+        fields.append(("bound", "Limită superioară"))
     rows = []
     for plan in records:
         upper = plan["upper"]
         playable = bool(plan["tickets"])
         rows.append({
+            "difference": _budget_difference(plan) if single and playable else "—",
             "game": plan["game_name"],
             "codes": _recommended_codes(plan["tickets"]) if playable else "—",
             "tickets": len(plan["tickets"]),
@@ -307,8 +333,8 @@ def _render_recommendations(records, budget_lei, objective):
             ),
         })
     if len(records) > 1:
-        _responsive_table(fields, rows, row_key="game", label="Compararea jocurilor în buget")
-    elif rows[0]["bound"] != "—":
+        _responsive_table(fields, rows, row_key="game", label="Compararea jocurilor pentru suma aleasă")
+    elif not single and rows[0]["bound"] != "—":
         ui.label(f"Demonstrația pentru acest buget · {rows[0]['bound']}").classes("text-caption")
 
 
@@ -455,7 +481,8 @@ def _compare_games(amount, goal, games, inputs, inverse):
     recipes = inputs.pop("paid_recipes", {})
     for game in games:
         try:
-            reports.append(compare_budget_ranges(amount, goal, game, inverse=inverse, recipe=recipes.get(game), **inputs))
+            reports.append(compare_budget_ranges(amount, goal, game, inverse=inverse, recipe=recipes.get(game),
+                                                 budget_mode=SINGLE_SCHEME_MODE, **inputs))
         except (OSError, ValueError) as exc:
             report = {"game": game, "ranges": [], "reason": f"Comparație indisponibilă. {exc}"}
             if isinstance(exc, OSError):
@@ -485,7 +512,7 @@ def _budget_input_snapshot(forecast_inputs, game, budget_settings=None):
     digest.update(json.dumps(settings, sort_keys=True, default=str).encode())
     if budget_settings is not None:
         recipes = {}
-        for plan in recommend_games(*budget_settings):
+        for plan in recommend_games(*budget_settings, single_scheme=True):
             gid = plan["game"]
             slots = inputs.get("joker_size", 5) if gid == "joker" else 0
             if not plan["tickets"] or (gid == "joker" and (type(slots) is not int or not 1 <= slots <= 20)):
@@ -497,13 +524,14 @@ def _budget_input_snapshot(forecast_inputs, game, budget_settings=None):
     return digest.hexdigest(), inputs
 
 
-def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_policy=None, decisions=None):
+def _generate_selection(amount, goal, selections, inputs, inverse, *, selection_policy=None, decisions=None,
+                        single_scheme=True):
     if decisions is None:
         decisions = lr_rebench_decisions()
     plans = []
     for game, limits in selections.items():
         plans.extend(recommend_playable_games(
-            amount, goal, game, inverse=inverse, number_range=limits,
+            amount, goal, game, inverse=inverse, number_range=limits, single_scheme=single_scheme,
             lr_rebench_entries=decisions.get(game, ()), **inputs,
             **({"selection_policy": selection_policy} if selection_policy else {}),
         ))
@@ -521,6 +549,7 @@ def _generate_rebench_tickets(jobs, profiles):
     for game, source, config in jobs:
         profile, = profiles[game]
         if (source is None or any(config[key] != options[key] for key in shared)
+                or config.get("budget_mode") != options.get("budget_mode")
                 or (config.get("auto_options_result") is not None) != auto
                 or (not auto and (config["inverse"] != options["inverse"]
                                   or config.get("selection_policy") != options.get("selection_policy")))):
@@ -529,6 +558,7 @@ def _generate_rebench_tickets(jobs, profiles):
         bounds = report_restricted_range(settings, profile["result"])
         uses_range = settings["restricted"] is not False or auto or config.get("auto_budget")
         if (profile["source"] != source[0] or settings["scheme"] != config["scheme"]
+                or settings.get("budget_mode") != config.get("budget_mode")
                 or any(settings[key] != config[key] for key in (*shared, "inverse"))
                 or bounds is None or (uses_range and bounds != LR_RESTRICTED_RANGE)
                 or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])
@@ -545,7 +575,8 @@ def _generate_rebench_tickets(jobs, profiles):
         limits = LR_RESTRICTED_RANGE if profile["settings"]["restricted"] else None
         policy = config.get("selection_policy")
         plan, = _generate_selection(config["budget_lei"], config["objective"], {game: limits}, inputs,
-                                    config["inverse"], selection_policy=policy, decisions=profiles)
+                                    config["inverse"], selection_policy=policy, decisions=profiles,
+                                    single_scheme=config.get("budget_mode") == SINGLE_SCHEME_MODE)
         if plan.get("tickets") and not plan.get("forecast_error"):
             forecast = plan["forecast"]
             urns = ("selection", "joker_selection") if game == "joker" else ("selection",)
@@ -685,6 +716,8 @@ def lr_budget_panel(
         initial_game = "all"
     with ui.card().props("flat bordered").classes("lr-recommendation-form w-full min-w-0 gap-3"):
         ui.label("Recomandare de bilete LR").classes("text-h6 text-weight-bold")
+        ui.label("Pentru fiecare joc se alege un singur cod LR, cu prețul total cel mai apropiat de suma introdusă. "
+                 "Prețul poate depăși suma. La distanțe egale se alege codul mai ieftin.").classes("text-caption")
         with ui.row().classes("w-full items-end gap-x-6 gap-y-2"):
             game = ui.select(game_options, value=initial_game, label="Joc").props(
                 'outlined dense aria-label="Joc pentru bilete LR"'
@@ -915,7 +948,7 @@ def lr_budget_panel(
 
                     try:
                         if on_budget_plan is not None and applied_budget != budget_settings:
-                            templates = await run.io_bound(recommend_games, *budget_settings)
+                            templates = await run.io_bound(recommend_games, *budget_settings, single_scheme=True)
                             if obsolete():
                                 continue
                             if templates is None:

@@ -663,14 +663,15 @@ def recommend_playable_games(
     budget_lei, objective, game_id=None, histories=None, *,
     pool_codes, generated=None, lookback=100, dynamic=True, joker_size=5, inverse=False, hit_target=None,
     inverse_range=None, number_range=None, exclude_generated_pool=False, lr_rebench_entries=(),
-    selection_policy=None, paid_snapshot=None, paid_recipes=None,
+    selection_policy=None, paid_snapshot=None, paid_recipes=None, single_scheme=False,
 ):
     """Build a budget plan under the chosen pool or paid-portfolio policy."""
     if selection_policy not in (None, ONLINE_TICKET_EXPERTS):
         raise ValueError(f"Politică de selecție LR necunoscută: {selection_policy!r}.")
     limits = number_range if number_range is not None or not inverse else inverse_range
     lr_rebench_entries = tuple(lr_rebench_entries or ())
-    plans = recommend_games(budget_lei, objective, game_id)
+    plan_options = {"single_scheme": True} if single_scheme else {}
+    plans = recommend_games(budget_lei, objective, game_id, **plan_options)
     for plan in plans:
         lot = require_lottery(plan["game"], "RO")
         result = (generated or {}).get(lot.game_id)

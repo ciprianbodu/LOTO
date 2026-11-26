@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from covering.lr_budget import budget_in_bani
+from covering.lr_budget import SINGLE_SCHEME_MODE, budget_in_bani, nearest_single_scheme, single_scheme_mode
 from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
 from loto_enterprise.benchmark.lr_budget_scoring import MIN_PORTFOLIO_DAYS
 from loto_enterprise.benchmark.lr_hypotheses import _cancellation
@@ -47,11 +47,13 @@ def _selection_history(game, history, depth):
     return (source[0], frame.iloc[:stop]), inner_depth, labels, dates.iloc[stop].date().isoformat()
 
 
-def _paid_result(report, labels, budget_bani):
+def _paid_result(report, labels, budget_bani, expected=None):
     if report.get("profile_reference_mismatch"):
         raise ValueError("Referința inversă validată diferă de referința folosită la selecție.")
     if (report.get("portfolio_refinement") or {}).get("complete") is not True:
         raise ValueError("Portofoliul de bilete a rămas provizoriu.")
+    if expected is not None and report.get("budget_mode") != SINGLE_SCHEME_MODE:
+        raise ValueError("Validarea nu aparține regulii de alegere a codului unic.")
     draws = report["draws"]
     if [draw["date"] for draw in draws] != labels:
         raise ValueError("Zilele sau extragerile comparate diferă.")
@@ -60,7 +62,13 @@ def _paid_result(report, labels, budget_bani):
             raise ValueError(draw["error"])
         if type(draw.get("objective_hit")) is not bool or not draw.get("paid_variants"):
             raise ValueError("Obiectivul nu poate fi evaluat pe toate biletele.")
-        if not 0 < draw["price_bani"] <= budget_bani:
+        if expected is not None:
+            scheme, price = expected
+            tickets = draw["tickets"]
+            if (draw["price_bani"] != price or draw["paid_variants"] != scheme.size or len(tickets) != 1
+                    or len(tickets[0]) != 1 or tickets[0][0]["code"] != scheme.code):
+                raise ValueError("Biletul evaluat diferă de codul unic ales pentru suma orientativă.")
+        elif not 0 < draw["price_bani"] <= budget_bani:
             raise ValueError("Costul biletului este incompatibil cu bugetul.")
     return sum(draw["objective_hit"] for draw in draws)
 
@@ -73,7 +81,11 @@ def select_lr_auto_choices(game_id, history, options, *, depth, replay_policy="f
     source, inner_depth, labels, validation_start = _selection_history(game_id, history, float(depth))
     shared = {k: options[k] for k in ("budget_lei", "objective", "scheme", "dynamic",
                                       "lookback", "hit_target", "joker_size")}
-    cap = budget_in_bani(shared["budget_lei"])
+    amount_bani = budget_in_bani(shared["budget_lei"])
+    expected = None
+    if single_scheme_mode(options.get("budget_mode")):
+        shared["budget_mode"] = options["budget_mode"]
+        expected = nearest_single_scheme(require_lottery(game_id, "RO"), amount_bani)
     candidates = []
     winner = None
     if progress_cb:
@@ -87,7 +99,7 @@ def select_lr_auto_choices(game_id, history, options, *, depth, replay_policy="f
                 selection_policy=ONLINE_TICKET_EXPERTS if fixed_share else None,
                 replay_policy=replay_policy, cancel_path=cancel_path,
             )
-            hits = _paid_result(report, labels, cap)
+            hits = _paid_result(report, labels, amount_bani, expected)
             candidate.update(hits=hits, evaluated=len(labels))
             if winner is None or hits > winner["hits"]:
                 winner = candidate

@@ -100,7 +100,7 @@ from ui_history_upload import (
 from ui_job_status import JobStatusProbe
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
-from covering.lr_budget import FOUR_PLUS, budget_in_lei
+from covering.lr_budget import FOUR_PLUS, SINGLE_SCHEME_MODE, budget_in_lei
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE
 from ui_lr_budget import (
     LR_RESTRICTED_BASE, LR_RESTRICTED_LABEL, initial_budget_amount, lr_base_choice, lr_budget_panel,
@@ -226,8 +226,10 @@ def _build_config_json(sim_depth_per_game: dict | None = None) -> str:
         if _spec.is_romanian:
             amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
             objective = _budget_objective()
-            dataset["lr_mail_settings"] = {"lr_budget_lei": amount, "lr_budget_objective": objective}
-            h.update(f"|lr_budget={amount}:{objective}|".encode("ascii"))
+            dataset["lr_mail_settings"] = {
+                "lr_budget_lei": amount, "lr_budget_objective": objective, "lr_budget_mode": SINGLE_SCHEME_MODE,
+            }
+            h.update(f"|lr_budget={amount}:{objective}:{SINGLE_SCHEME_MODE}|".encode("ascii"))
         datasets_cfg.append(dataset)
         h.update(fname.encode("utf-8"))
         h.update(hashlib.sha256(df_json.encode("utf-8")).hexdigest().encode("ascii"))
@@ -1940,13 +1942,13 @@ def _result_sources_from_job(job: dict) -> dict | None:
                     task = dataset["tasks"][0]
                     frame.attrs["lr_mail_settings"] = {
                         key: task[key] for key in (
-                            "lr_budget_lei", "lr_budget_objective", "bench_hit_target",
+                            "lr_budget_lei", "lr_budget_objective", "lr_budget_mode", "bench_hit_target",
                             "lookback", "dynamic_method", "joker_pool_size",
                         ) if key in task
                     }
                     mail = dataset.get("lr_mail_settings", {})
                     frame.attrs["lr_mail_settings"].update(
-                        {key: mail[key] for key in ("lr_budget_lei", "lr_budget_objective") if key in mail}
+                        {key: mail[key] for key in ("lr_budget_lei", "lr_budget_objective", "lr_budget_mode") if key in mail}
                     )
             sources[fname] = frame
     except (TypeError, ValueError, KeyError, AttributeError) as exc:
@@ -3443,6 +3445,7 @@ def _mail_snapshot_inputs(results=None, result_sources=None) -> dict:
                 record["lr_mail_settings"] = {
                     "budget_lei": initial_budget_amount(job.get("lr_budget_lei", SETTINGS.get("lr_budget_lei"))),
                     "objective": job.get("lr_budget_objective", _budget_objective()),
+                    **({"budget_mode": job["lr_budget_mode"]} if "lr_budget_mode" in job else {}),
                     "hit_target": job.get("bench_hit_target", _clamped_bench_target()),
                     "dynamic": job.get("dynamic_method", data.get("dynamic_method", False)),
                     "lookback": job.get("lookback", data.get("lookback", 0)),
@@ -4296,7 +4299,7 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
 
     selected = choices["lr_budget_game"]
-    plans = recommend_games(amount, FOUR_PLUS, None if selected == "all" else selected)
+    plans = recommend_games(amount, FOUR_PLUS, None if selected == "all" else selected, single_scheme=True)
     if sync_pool:
         # The budget preview may still be running when the user clicks Re-Bench.
         _apply_budget_plan(plans)
@@ -4315,7 +4318,7 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
             base = lr_base_choice(individual_bases, game, inverse, choices["lr_restricted_val"])
             options = {
                 "scheme": budget_plan_scheme(plan).code,
-                "budget_lei": amount, "objective": FOUR_PLUS,
+                "budget_lei": amount, "objective": FOUR_PLUS, "budget_mode": plan["budget_mode"],
                 "inverse": inverse, "restricted": base == LR_RESTRICTED_BASE,
                 "dynamic": bool(SETTINGS["dynamic_method_enabled_val"]),
                 "lookback": _effective_lookback_pct(), "hit_target": 4,
@@ -4648,7 +4651,7 @@ def main_page() -> None:
             budget_objective = _budget_objective()
             budget_game = lr_choices["lr_budget_game"]
             _apply_budget_plan(recommend_games(budget_slider.value, budget_objective,
-                                              None if budget_game == "all" else budget_game))
+                                              None if budget_game == "all" else budget_game, single_scheme=True))
             def return_to_recommendation():
                 drawer.hide()
                 focus_control(budget_access)
@@ -4862,7 +4865,7 @@ def main_page() -> None:
             ui.label(
                 "Glisoarele de cod LR aleg scheme oficiale complete. Codurile cu "
                 "același număr de numere au poziții distincte, în ordinea costului. "
-                "Glisorul de buget actualizează automat codul și pool-ul pentru jocurile comparate. "
+                "Suma orientativă selectează pentru fiecare joc codul LR cel mai apropiat ca preț total, inclusiv taxa. "
                 "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
@@ -5130,7 +5133,7 @@ def main_page() -> None:
 
             budget_access = ui.button(icon="tune", on_click=show_budget).props("outline no-caps color=positive")
             budget_access.bind_text_from(
-                budget_slider, "value", lambda amount: f"Buget · {lei_text(amount)}"
+                budget_slider, "value", lambda amount: f"Buget orientativ · {lei_text(amount)}"
             )
             STATE.setdefault("_lr_ticket_flow_status", "")
             ui.label().props('role="status" aria-live="polite"').classes("text-body2").bind_text_from(

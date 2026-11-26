@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from covering.lr_budget import ANY_PRIZE, recommend_games
+from covering.lr_budget import ANY_PRIZE, recommend_games, single_scheme_mode
 from covering.lr_pool_budget import positional_recipe, restrict_to_pool
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity, rank_lr_pool
 from covering.lr_refinement_status import merge_refinements, refinement_complete
@@ -167,6 +167,7 @@ def _summary(draws, days, start):
 def validate_lr_walk_forward(
     game_id, history, *, budget_lei, objective, scheme, inverse, restricted, dynamic, lookback,
     hit_target, joker_size, depth, cancel_path=None, progress_cb=None, replay_policy="fixed", selection_policy=None,
+    budget_mode=None,
 ):
     """Fit on the first chronological segment, then rerank on each prior-date prefix."""
     check = _cancellation(cancel_path)
@@ -181,7 +182,8 @@ def validate_lr_walk_forward(
         raise ValueError("Protocolul walk-forward trebuie să fie fixed sau daily.")
     daily = replay_policy == "daily" or selection_policy == "online_ticket_experts"
     lot = require_lottery(game_id, "RO")
-    plan, = recommend_games(budget_lei, objective, game_id)
+    single = single_scheme_mode(budget_mode)
+    plan, = recommend_games(budget_lei, objective, game_id, single_scheme=single)
     scheme = resolve_lr_scheme(lot.geometry, getattr(scheme, "code", scheme))
     if budget_plan_scheme(plan).code != scheme.code:
         raise ValueError("Codul LR nu corespunde planului pentru buget și obiectiv.")
@@ -208,7 +210,7 @@ def validate_lr_walk_forward(
     if restricted is None:
         comparison = compare_budget_ranges(
             budget_lei, objective, game_id, {game_id: training}, dynamic=dynamic, inverse=inverse,
-            lookback=lookback, hit_target=hit_target, joker_size=joker_size, recipe=recipe,
+            lookback=lookback, hit_target=hit_target, joker_size=joker_size, recipe=recipe, budget_mode=budget_mode,
             **({"selection_policy": selection_policy} if selection_policy else {}),
         )
         restricted = comparison["recommended_range"] == LR_RESTRICTED_RANGE
@@ -253,7 +255,7 @@ def validate_lr_walk_forward(
     options = {
         "scheme": scheme.code, "restricted": bool(restricted), "dynamic": dynamic,
         "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
-        "budget_lei": budget_lei, "objective": objective, "recipe": recipe,
+        "budget_lei": budget_lei, "objective": objective, "recipe": recipe, "budget_mode": budget_mode,
     }
     fit_evidence = {"portfolio_refinement": merge_refinements(comparison, layout)}
     methods = {}
@@ -310,7 +312,7 @@ def validate_lr_walk_forward(
                 if requested_restricted is None:
                     range_report = compare_budget_ranges(budget_lei, objective, game_id, prefix, dynamic=dynamic,
                                                    inverse=inverse, lookback=lookback, hit_target=hit_target,
-                                                   joker_size=joker_size, recipe=recipe,
+                                                   joker_size=joker_size, recipe=recipe, budget_mode=budget_mode,
                                                    **({"selection_policy": selection_policy} if selection_policy else {}))
                     daily_restricted = range_report["recommended_range"] == LR_RESTRICTED_RANGE
                 if selection_policy == "online_ticket_experts":
@@ -326,7 +328,7 @@ def validate_lr_walk_forward(
                         budget_lei, objective, game_id, prefix, pool_codes={game_id: scheme.code},
                         lookback=lookback, dynamic=dynamic, joker_size=joker_size, inverse=inverse,
                         hit_target=hit_target, number_range=LR_RESTRICTED_RANGE if daily_restricted else None,
-                        paid_recipes={game_id: recipe}, **options)
+                        paid_recipes={game_id: recipe}, single_scheme=single, **options)
                 forecast = daily_plan.get("forecast")
                 if not forecast or not daily_plan["tickets"]:
                     raise ValueError(daily_plan.get("forecast_error", "Bugetul nu produce bilete LR."))
@@ -412,6 +414,7 @@ def validate_lr_walk_forward(
         "inverse": bool(inverse), "restricted": bool(restricted), "requested_restricted": requested_restricted,
         "max_consecutive_run": LR_MAX_CONSECUTIVE_RUN, "restricted_range": list(LR_RESTRICTED_RANGE),
         "dynamic": bool(dynamic), "lookback": lookback, "hit_target": hit_target, "joker_size": joker_size,
+        **({"budget_mode": budget_mode} if budget_mode else {}),
         "selection_policy": selection_policy, "budget_lei": budget_lei, "objective": objective, "price_bani": layout["price_bani"], "variants": layout["variants"],
         "auto_reason": auto_reason, "summary": _summary(draws, len(days), start), "draws": draws,
         "portfolio_refinement": merge_refinements(fit_evidence, *draws),

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from covering.lr_budget import ANY_PRIZE, recommend_games
+from covering.lr_budget import ANY_PRIZE, recommend_games, single_scheme_mode
 from covering.lr_catalog_cache import catalog_cache
 from covering.lr_pool_budget import positional_recipe, restrict_to_pool
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN, LR_RESTRICTED_RANGE, lr_pool_capacity
@@ -246,13 +246,13 @@ def _decision(rows):
 def compare_budget_ranges(
     budget_lei, objective, game_id, histories=None, *, lookback=100, dynamic=True, inverse=False,
     hit_target=4, joker_size=5, pool_codes=None, generated=None, selection_policy=None, recipe=None,
-    return_recipe=False,
+    return_recipe=False, budget_mode=None,
 ):
     """Compare official main-number tickets before using a range for the next draw."""
     lot = require_lottery(game_id, "RO")
     if selection_policy not in (None, ONLINE_TICKET_EXPERTS):
         raise ValueError(f"Politică de selecție LR necunoscută: {selection_policy!r}.")
-    plans = recommend_games(budget_lei, objective, game_id)
+    plans = recommend_games(budget_lei, objective, game_id, single_scheme=single_scheme_mode(budget_mode))
     if not plans or not plans[0]["tickets"]:
         raise ValueError("Bugetul nu produce bilete LR pentru comparația bazelor.")
     plan, = plans
@@ -340,6 +340,7 @@ def compare_budget_ranges(
             dates.iloc[start].date().isoformat() if dates is not None and len(matrix) > start else None
         ), "as_of": dates.iloc[-1].date().isoformat() if dates is not None and len(matrix) else None,
         "metric": metric, "ranges": rows, **evidence,
+        **({"budget_mode": budget_mode} if budget_mode else {}),
         **({"paid_recipe": recipe} if return_recipe else {}),
         "recommended_range": recommendation, "reason": reason,
         "protocol": protocol,

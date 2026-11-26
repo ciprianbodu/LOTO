@@ -361,7 +361,8 @@ def test_new_formula_same_history_and_settings_preserves_previous_weights():
 @pytest.mark.parametrize("chosen", [None, (5, 40)])
 def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_choice(monkeypatch, chosen):
     frame = pd.DataFrame({"n1": [6]})
-    settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+")}
+    settings = {**_settings(24), "restricted": False, "auto_budget": (200, "4+"),
+                "budget_mode": panel.SINGLE_SCHEME_MODE}
     recipe = object()
     calls = []
 
@@ -373,18 +374,21 @@ def test_automatic_scope_uses_captured_budget_and_persists_only_the_effective_ch
             pd.testing.assert_frame_equal(args[3]["joker"][1], frame)
             assert args[3]["joker"][1] is not frame
             assert kwargs == dict(inverse=True, dynamic=True, lookback=80, hit_target=4,
-                                  joker_size=2, pool_codes={"joker": 24}, return_recipe=True)
+                                  joker_size=2, pool_codes={"joker": 24}, return_recipe=True,
+                                  budget_mode=panel.SINGLE_SCHEME_MODE)
             return {"recommended_range": chosen, "paid_recipe": recipe}
         assert function is panel.benchmark_lr_hypotheses
+        assert kwargs["budget_mode"] == panel.SINGLE_SCHEME_MODE
         assert kwargs["recipe"] is recipe
         assert kwargs["restricted"] is (chosen is not None)
         assert "auto_budget" not in kwargs
-        return _profile_result("joker", 24, "a" * 16)
+        return {**_profile_result("joker", 24, "a" * 16), "budget_mode": kwargs["budget_mode"]}
 
     monkeypatch.setattr(panel.run, "io_bound", execute)
     assert asyncio.run(panel.run_lr_rebench([("joker", ("input.csv", frame), settings)]))
     assert calls == [panel.compare_budget_ranges, panel.benchmark_lr_hypotheses]
     saved, = panel.lr_rebench_decisions()["joker"]
+    assert saved["settings"]["budget_mode"] == saved["result"]["budget_mode"] == panel.SINGLE_SCHEME_MODE
     assert saved["settings"]["restricted"] is (chosen is not None)
     assert "auto_budget" not in saved["settings"]
     assert settings["restricted"] is False

@@ -349,6 +349,7 @@ def _snapshot(plan, settings, captured, known_days, build, target_day=None, sche
             **settings,
             "objective": plan["objective"],
             "budget_bani": plan["budget_bani"],
+            **({"budget_mode": plan["budget_mode"]} if "budget_mode" in plan else {}),
             "main_scheme": forecast.get("code"),
             "inverse": forecast.get("inverse"),
             "dynamic": forecast.get("dynamic"),

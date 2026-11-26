@@ -108,7 +108,10 @@ def main(project, runtime):
         forecast_options = {"pool_codes": {}, "dynamic": True, "lookback": 100, "joker_size": 5, "hit_target": 4}
         inputs = {**forecast_options, "histories": {game: (name, small)}}
         async def build_ui():
-            return await run.io_bound(ui_lr_budget._generate_selection, 300, FOUR_PLUS, {game: None}, inputs, False)
+            # Replay the original multi-zone, hard-cap coverage experiment.
+            return await run.io_bound(
+                ui_lr_budget._generate_selection, 300, FOUR_PLUS, {game: None}, inputs, False, single_scheme=False,
+            )
         ui_plan, = asyncio.run(build_ui())
         assert ui_plan["tickets"] and captured and not ui_plan.get("forecast_error"), ui_plan
         assert captured[-1]["expanded_certificate"]["applied"] and ui_plan["attained"] >= 383414

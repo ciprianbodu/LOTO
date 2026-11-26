@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from math import isfinite
+from math import comb, isfinite
 
 from covering.lr_any_prize_649 import recommend_649
 from covering.lr_any_prize_joker import recommend_joker_any_prize
@@ -14,6 +14,42 @@ MIN_BUDGET_LEI = 100
 DEFAULT_BUDGET_LEI = 200
 FOUR_PLUS = "four_plus"
 ANY_PRIZE = "any_prize"
+SINGLE_SCHEME_MODE = "nearest_single_scheme"
+
+
+def single_scheme_mode(mode):
+    if mode is None:
+        return False
+    if mode != SINGLE_SCHEME_MODE:
+        raise ValueError(f"Mod de buget LR necunoscut: {mode!r}.")
+    return True
+
+
+def nearest_single_scheme(lot, target_bani):
+    """Choose by distance to the full price, then lower cost and official code."""
+    from covering.lr_schemes import complete_lr_schemes
+
+    unit = round(lot.price * 100)
+    priced = ((scheme, cost_bani(scheme.size, 1, unit, lot.per_ticket))
+              for scheme in complete_lr_schemes(lot.game_id))
+    return min(priced, key=lambda pair: (abs(pair[1] - target_bani), pair[1], pair[0].code))
+
+
+def _single_scheme_plan(lot, target_bani, objective):
+    from covering.lr_schemes import _joker_prize_counts, scheme_numerators
+
+    scheme, price = nearest_single_scheme(lot, target_bani)
+    if objective == ANY_PRIZE and lot.geo.second:
+        denominator, attained, _ = _joker_prize_counts(scheme)
+    else:
+        threshold = 3 if objective == ANY_PRIZE and lot.game_id == "6/49" else 4
+        attained = scheme_numerators(scheme)[threshold]
+        denominator = comb(lot.max_n, lot.draw_n)
+    return {
+        "codes": [scheme.code], "example_pools": [list(range(1, scheme.n + 1))],
+        "price_bani": price, "variants": scheme.size, "attained": attained,
+        "denominator": denominator, "upper": None, "optimal": False, "anchor_size": 0,
+    }
 
 
 def maximum_scheme_budget_bani() -> int:
@@ -43,7 +79,9 @@ def budget_in_lei(bani: int) -> int | float:
     return bani // 100 if bani % 100 == 0 else bani / 100
 
 
-def recommend_games(budget_lei: int | float, objective: str, game_id: str | None = None) -> list[dict]:
+def recommend_games(
+    budget_lei: int | float, objective: str, game_id: str | None = None, *, single_scheme=False,
+) -> list[dict]:
     """Rank playable Romanian LR plans by their exact per-draw probability."""
     from covering import lr_schemes
     from covering.lr_catalog_cache import refresh_catalog
@@ -62,7 +100,9 @@ def recommend_games(budget_lei: int | float, objective: str, game_id: str | None
 
     results = []
     for lot in games:
-        if objective == ANY_PRIZE and lot.game_id == "6/49":
+        if single_scheme:
+            plan = _single_scheme_plan(lot, budget_bani, objective)
+        elif objective == ANY_PRIZE and lot.game_id == "6/49":
             plan = recommend_649(budget_bani)
         elif objective == ANY_PRIZE and lot.game_id == "joker":
             plan = recommend_joker_any_prize(budget_bani)
@@ -84,6 +124,7 @@ def recommend_games(budget_lei: int | float, objective: str, game_id: str | None
             "game_name": lot.name,
             "objective": objective,
             "budget_bani": budget_bani,
+            **({"budget_mode": SINGLE_SCHEME_MODE} if single_scheme else {}),
             "price_bani": plan["price_bani"],
             "variants": plan["variants"],
             "attained": plan["attained"],

@@ -42,7 +42,7 @@ def test_budget_changes_update_the_next_lottery_job(monkeypatch):
     saves = []
     monkeypatch.setattr(app, "_save_settings", lambda: saves.append(app.SETTINGS["lr_budget_lei"]))
     for amount, code, width in ((200, 57, 12), (100, 48, 9), (200, 57, 12)):
-        plans = recommend_games(amount, FOUR_PLUS, "6/49")
+        plans = recommend_games(amount, FOUR_PLUS, "6/49", single_scheme=True)
         app._apply_budget_plan(plans)
         app._apply_budget_plan(plans)
         config = json.loads(app._build_config_json())
@@ -74,7 +74,7 @@ def test_rebench_click_uses_selected_game_budget_and_both_switches(monkeypatch, 
     shown, (game, (name, history), settings) = calls
     assert (shown, game, name) == ("scoped", "6/49", "loto_6_49.csv")
     assert settings["inverse"] is inverse and settings["restricted"] is restricted
-    assert settings["scheme"] == 49
+    assert settings["scheme"] == 57  # 176.50 lei is the closest single scheme to 171 lei.
     dates.loc[0, "n1"] = 44
     assert history.loc[0, "n1"] == 1
 
@@ -116,7 +116,7 @@ def test_walk_forward_captures_selected_lr_settings(monkeypatch, inverse, force_
     assert settings["inverse"] is inverse and settings["restricted"] is expected
     assert "auto_budget" not in settings
     assert (settings["scheme"], settings["budget_lei"], settings["objective"], settings["depth"]) == (
-        49, 171, FOUR_PLUS, 70,
+        57, 171, FOUR_PLUS, 70,
     )
     history.loc[0, "n1"] = 44
     assert captured_history.loc[0, "n1"] == 1

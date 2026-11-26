@@ -5,7 +5,7 @@ from datetime import date, datetime
 from nicegui import ui
 
 from loto_enterprise.core.ro_text import lei_text
-from covering.lr_budget import ANY_PRIZE
+from covering.lr_budget import ANY_PRIZE, SINGLE_SCHEME_MODE
 from covering.lr_refinement_status import refinement_complete
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
@@ -33,7 +33,10 @@ def _choices(settings, result=None):
     mode = "Metoda inversă" if settings.get("inverse") else "Metoda normală"
     goal = "orice premiu" if settings.get("objective") == ANY_PRIZE else "4+ pe o variantă"
     policy = " · Fixed Share pe bilete" if settings.get("selection_policy") == ONLINE_TICKET_EXPERTS else ""
-    return (f"{mode} · {_range_text(settings.get('restricted'), bounds)} · {lei_text(settings['budget_lei'])} · "
+    amount = lei_text(settings["budget_lei"])
+    if settings.get("budget_mode") == SINGLE_SCHEME_MODE:
+        amount = f"sumă orientativă {amount}"
+    return (f"{mode} · {_range_text(settings.get('restricted'), bounds)} · {amount} · "
             f"{goal} · fereastră de test {settings['depth']:g}%{policy}")
 
 

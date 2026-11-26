@@ -1,13 +1,15 @@
 import json
 
 import pandas as pd
+import pytest
 
 import app_nicegui as app
-from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, recommend_games
+from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, SINGLE_SCHEME_MODE, recommend_games
 from loto_enterprise.core import lr_mail_forecast
 
 
-def test_result_email_uses_the_committed_job_budget_history_and_original_pool(monkeypatch):
+@pytest.mark.parametrize("legacy", [True, False])
+def test_result_email_uses_the_committed_job_budget_history_and_original_pool(monkeypatch, legacy):
     frame = pd.DataFrame({"date": ["19-11-2026"], **{f"n{i}": [i] for i in range(1, 7)}})
     fname = "loto_6_49.csv"
     monkeypatch.setitem(app.STATE, "datasets", [(fname, frame)])
@@ -18,13 +20,17 @@ def test_result_email_uses_the_committed_job_budget_history_and_original_pool(mo
         monkeypatch.setitem(app.SETTINGS, key, value)
     config = app._build_config_json()
     dataset, = json.loads(config)["datasets"]
-    assert dataset["lr_mail_settings"] == {"lr_budget_lei": 200, "lr_budget_objective": FOUR_PLUS}
-    # Preserve the captured terms of a historical job after the UI target changes.
-    old_job = json.loads(config)
-    old_job["datasets"][0]["lr_mail_settings"]["lr_budget_objective"] = ANY_PRIZE
-    config = json.dumps(old_job)
+    assert dataset["lr_mail_settings"] == {
+        "lr_budget_lei": 200, "lr_budget_objective": FOUR_PLUS, "lr_budget_mode": SINGLE_SCHEME_MODE,
+    }
+    if legacy:
+        old_job = json.loads(config)
+        captured = old_job["datasets"][0]["lr_mail_settings"]
+        captured.pop("lr_budget_mode")
+        captured["lr_budget_objective"] = ANY_PRIZE
+        config = json.dumps(old_job)
     task, = dataset["tasks"]
-    assert "lr_budget_lei" not in task and "lr_budget_objective" not in task
+    assert {"lr_budget_lei", "lr_budget_objective", "lr_budget_mode"}.isdisjoint(task)
     sources = app._result_sources_from_job({"config_json": config})
     monkeypatch.setitem(app.SETTINGS, "lr_budget_lei", 100)
     monkeypatch.setitem(app.SETTINGS, "lr_budget_objective", FOUR_PLUS)
@@ -47,7 +53,9 @@ def test_result_email_uses_the_committed_job_budget_history_and_original_pool(mo
     assert app._build_mail_body(snapshot) == delivery[0]
     assert len(calls) == 1
     options, first, original = calls[0]
-    assert (options["budget_lei"], options["objective"], options["hit_target"]) == (200, ANY_PRIZE, 4)
+    assert (options["budget_lei"], options["hit_target"]) == (200, 4)
+    assert options["objective"] == (ANY_PRIZE if legacy else FOUR_PLUS)
+    assert options.get("budget_mode") == (None if legacy else SINGLE_SCHEME_MODE)
     assert first == 1 and original == pool
 
 

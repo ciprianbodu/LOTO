@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 
+from covering.lr_budget import nearest_single_scheme, single_scheme_mode
 from covering.lr_portfolio import FEE_BANI
 from covering.lr_schemes import scheme_tickets
 from covering.lr_selection import resolve_lr_scheme
@@ -18,6 +19,8 @@ CONTRACT_VERSION = 2
 
 def layout_identity(plan):
     fields = {key: plan.get(key) for key in ("game", "objective", "budget_bani", "price_bani")}
+    if mode := plan.get("budget_mode"):
+        fields["budget_mode"] = mode
     fields["tickets"] = [[(z["code"], list(z["numbers"]), z.get("joker")) for z in ticket]
                          for ticket in plan["tickets"]]
     return sha256(json.dumps([LAYOUT_VERSION, fields], sort_keys=True,
@@ -34,6 +37,7 @@ def evaluation_contract(plan, *, history_hash, inverse, number_range, dynamic, l
         "draw_n": lot.draw_n, "pick_n": lot.pick_n,
         "second_urn": lot.geo.second.max_n if lot.geo.second else None,
         "objective": plan["objective"], "pool_hit_target": hit_target, "budget_bani": plan["budget_bani"],
+        **({"budget_mode": plan["budget_mode"]} if "budget_mode" in plan else {}),
         "price_bani": portfolio.price_bani, "paid_variants": portfolio.paid,
         "distinct_variants": len(portfolio.variants), "duplicates": portfolio.paid - len(portfolio.variants),
         "layout": layout_identity(plan), "tickets": plan["tickets"], "pool": sorted(portfolio.pool),
@@ -77,7 +81,15 @@ def expand_plan(plan):
         raise ValueError("Portofoliul nu conține variante jucabile.")
     paid = variants.total()
     price = paid * round(lot.price * 100) + len(plan["tickets"]) * FEE_BANI
-    if plan.get("price_bani", price) != price or price > plan.get("budget_bani", price):
+    if single_scheme_mode(plan.get("budget_mode")):
+        expected, expected_price = nearest_single_scheme(lot, plan["budget_bani"])
+        tickets = plan["tickets"]
+        if (len(tickets) != 1 or len(tickets[0]) != 1 or tickets[0][0]["code"] != expected.code
+                or price != expected_price):
+            raise ValueError("Biletul trebuie să conțină numai codul LR cel mai apropiat de suma orientativă.")
+    elif price > plan.get("budget_bani", price):
+        raise ValueError("Costul variantelor și al biletelor nu corespunde planului LR.")
+    if plan.get("price_bani", price) != price:
         raise ValueError("Costul variantelor și al biletelor nu corespunde planului LR.")
     forecast = (plan.get("forecast") or {}).get("pool", plan.get("forecast_pool", pool))
     if not pool.issubset(forecast):
