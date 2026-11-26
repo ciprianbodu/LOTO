@@ -9,20 +9,22 @@ from math import comb
 
 from nicegui import run, ui
 
-from covering.lr_budget import ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, recommend_games
+from covering.lr_budget import (
+    ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, budget_in_bani, budget_in_lei,
+    maximum_scheme_budget_bani, recommend_games,
+)
 from covering.lr_pool_budget import positional_recipe
 from covering.lr_refinement_status import merge_refinements, refinement_complete
 from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme, playable_plan_order, recommend_playable_games
 from loto_enterprise.core.lr_range_analysis import RANGES, compare_budget_ranges
 from loto_enterprise.core.lotteries import games_for_country
 from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
-from loto_enterprise.core.ro_text import count
+from loto_enterprise.core.ro_text import count, lei_text
 from ui_lr_portfolio import _percent, _price
 from ui_lr_rebench import lr_rebench_decisions
 
 
 _OBJECTIVES = {FOUR_PLUS: "4+ pe o variantă", ANY_PRIZE: "Orice premiu"}
-_MAX_SLIDER_BUDGET_LEI = 400
 _INVERSE_RANGE = (10, 40)
 
 
@@ -193,7 +195,7 @@ def _render_recommendations(records, budget_lei, objective):
         return
     first = records[0]
     with ui.card().props("flat bordered").classes("w-full border-l-4 border-positive gap-1"):
-        ui.label(f"Sugestie pentru {budget_lei} lei · {first['game_name']}").classes("text-h6 text-weight-bold")
+        ui.label(f"Sugestie pentru {lei_text(budget_lei)} · {first['game_name']}").classes("text-h6 text-weight-bold")
         ui.label(_recommended_codes(first["tickets"])).classes("text-subtitle2 text-weight-bold")
         ui.label(
             f"{_price(first['price_bani'])} cu taxă · "
@@ -457,24 +459,40 @@ def lr_base_choice(manual_choices, game, inverse, restricted):
     return manual_choices.get((game, inverse), _range_label(None))
 
 
-def initial_budget_amount(value):
-    value = value if type(value) is int else DEFAULT_BUDGET_LEI
-    return max(MIN_BUDGET_LEI, min(_MAX_SLIDER_BUDGET_LEI, value))
+def initial_budget_amount(value, *, maximum_bani=None):
+    try:
+        amount = budget_in_bani(value)
+    except ValueError:
+        amount = DEFAULT_BUDGET_LEI * 100
+    if maximum_bani is None:
+        maximum_bani = maximum_scheme_budget_bani()
+    return budget_in_lei(max(MIN_BUDGET_LEI * 100, min(maximum_bani, amount)))
 
 
 def lr_budget_slider(value=DEFAULT_BUDGET_LEI):
-    value = initial_budget_amount(value)
-    budget_label = ui.label().classes("text-bold text-positive mt-2")
+    maximum_bani = max(MIN_BUDGET_LEI * 100, maximum_scheme_budget_bani())
+    maximum = budget_in_lei(maximum_bani)
+    value = initial_budget_amount(value, maximum_bani=maximum_bani)
+    entry = ui.number("Buget bilete LR", min=MIN_BUDGET_LEI, max=maximum, step=0.01,
+                      precision=2, value=value, suffix="lei").props("outlined dense").classes("w-full mt-2")
     slider = ui.slider(
-        min=MIN_BUDGET_LEI, max=_MAX_SLIDER_BUDGET_LEI, step=1, value=value,
+        min=MIN_BUDGET_LEI, max=maximum, step=0.01, value=value,
     ).props('aria-label="Buget pentru bilete LR" label color=positive').classes("w-full")
-    budget_label.bind_text_from(
-        slider, "value", lambda value: f"Buget bilete LR · {int(value)} lei"
-    )
+
+    def apply_entry():
+        entry.sanitize()
+        if entry.value is None:
+            entry.set_value(slider.value)
+        else:
+            slider.set_value(entry.value)
+
+    entry.on("blur", apply_entry)
+    entry.on("keydown.enter", apply_entry)
+    slider.on_value_change(lambda event: entry.set_value(event.value))
 
     with ui.row().classes("w-full justify-between text-caption"):
         ui.label(f"{MIN_BUDGET_LEI} lei")
-        ui.label(f"{_MAX_SLIDER_BUDGET_LEI} lei")
+        ui.label(lei_text(maximum))
     return slider
 
 
@@ -576,7 +594,7 @@ def lr_budget_panel(
         registration = None
 
         def selected_budget():
-            return int(slider.value), objective.value, None if game.value == "all" else game.value
+            return slider.value, objective.value, None if game.value == "all" else game.value
 
         def selected_method():
             return bool(inverse.value), bool(range_filter.value)
@@ -624,7 +642,7 @@ def lr_budget_panel(
                 generate.props("aria-busy=false", remove="loading")
                 return
             generate.props("loading aria-busy=true")
-            show_status(f"Se pregătește recomandarea pentru {int(slider.value)} lei…")
+            show_status(f"Se pregătește recomandarea pentru {lei_text(slider.value)}…")
             if running:
                 return
             running = True
@@ -658,7 +676,7 @@ def lr_budget_panel(
                         if cached_analysis is None or cached_analysis[0] != analysis_key:
                             comparison.clear()
                             games = [game_id] if game_id else [key for key in game_options if key != "all"]
-                            show_status(f"Se compară bazele de selecție pentru {amount} lei…")
+                            show_status(f"Se compară bazele de selecție pentru {lei_text(amount)}…")
                             analysis_inputs = {**inputs, "selection_policy": ONLINE_TICKET_EXPERTS} if fixed_share else inputs
                             reports = await run.io_bound(_compare_games, amount, goal, games, analysis_inputs, inverse_mode)
                             if obsolete():
@@ -693,7 +711,7 @@ def lr_budget_panel(
                             else:
                                 limits = None
                             selections[gid] = limits
-                        show_status(f"Se generează biletele pentru {amount} lei…")
+                        show_status(f"Se generează biletele pentru {lei_text(amount)}…")
                         options = {"selection_policy": ONLINE_TICKET_EXPERTS} if fixed_share else {}
                         plans = await run.io_bound(_generate_selection, amount, goal, selections, inputs, inverse_mode, **options)
                         if plans is None:

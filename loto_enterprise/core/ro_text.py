@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 
+def lei_text(amount: int | float) -> str:
+    return f"{amount:.2f}".removesuffix(".00").replace(".", ",") + " lei"
+
+
 def count(n: int, noun: str, singular: str | None = None) -> str:
     """„de” apare după numeralele terminate în 00 sau 20-99 (20, 101 fără, 120 cu);
     la 1 se folosește forma de singular, când e dată."""

@@ -2091,8 +2091,9 @@ Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de ext
 
 În ecranul României, butonul „Buget” de lângă formular deschide glisorul verde
 din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
-„Înapoi la recomandare” închide bara. Bugetul inițial este 200 lei, se reglează
-între 100 și 400 lei în pași de 1 leu și se păstrează la redeschidere.
+„Înapoi la recomandare” închide bara. Bugetul inițial este 200 lei. Glisorul și câmpul numeric acceptă sume de la
+100 lei până la costul celei mai scumpe scheme oficiale din catalogul celor trei
+jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
 Jocul, obiectivul și metoda se pot alege înainte de prima generare. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
 analiză”. Numerele de jucat apar înaintea comparațiilor istorice. Bugetul, jocul și obiectivul aleg codurile oficiale și

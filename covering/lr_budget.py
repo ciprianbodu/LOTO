@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from math import isfinite
 
 from covering.lr_any_prize_649 import recommend_649
 from covering.lr_any_prize_joker import recommend_joker_any_prize
-from covering.lr_portfolio import recommend_main_hits
+from covering.lr_portfolio import cost_bani, recommend_main_hits
 from loto_enterprise.core.lotteries import games_for_country
 
 MIN_BUDGET_LEI = 100
@@ -15,13 +16,41 @@ FOUR_PLUS = "four_plus"
 ANY_PRIZE = "any_prize"
 
 
-def recommend_games(budget_lei: int, objective: str, game_id: str | None = None) -> list[dict]:
+def maximum_scheme_budget_bani() -> int:
+    """Price of the most expensive single official zone, including its physical ticket."""
+    from covering import lr_schemes
+    from covering.lr_catalog_cache import refresh_catalog
+
+    refresh_catalog(lr_schemes.LR_DIR)
+    return max((
+        cost_bani(scheme.size, 1, round(lot.price * 100), lot.per_ticket)
+        for lot in games_for_country("RO")
+        for scheme in lr_schemes.lr_schemes(lot.game_id)
+    ), default=MIN_BUDGET_LEI * 100)
+
+
+def budget_in_bani(lei: int | float) -> int:
+    if type(lei) is int:
+        return lei * 100
+    if type(lei) is float and isfinite(lei):
+        bani = Fraction(str(lei)) * 100
+        if bani.denominator == 1:
+            return bani.numerator
+    raise ValueError("Bugetul trebuie exprimat în lei, cu cel mult două zecimale.")
+
+
+def budget_in_lei(bani: int) -> int | float:
+    return bani // 100 if bani % 100 == 0 else bani / 100
+
+
+def recommend_games(budget_lei: int | float, objective: str, game_id: str | None = None) -> list[dict]:
     """Rank playable Romanian LR plans by their exact per-draw probability."""
     from covering import lr_schemes
     from covering.lr_catalog_cache import refresh_catalog
     refresh_catalog(lr_schemes.LR_DIR)
-    if type(budget_lei) is not int or budget_lei < MIN_BUDGET_LEI:
-        raise ValueError(f"Bugetul trebuie să fie de cel puțin {MIN_BUDGET_LEI} lei întregi.")
+    budget_bani = budget_in_bani(budget_lei)
+    if budget_bani < MIN_BUDGET_LEI * 100:
+        raise ValueError(f"Bugetul trebuie să fie de cel puțin {MIN_BUDGET_LEI} lei.")
     if objective not in (FOUR_PLUS, ANY_PRIZE):
         raise ValueError(f"Obiectiv necunoscut: {objective!r}")
 
@@ -31,7 +60,6 @@ def recommend_games(budget_lei: int, objective: str, game_id: str | None = None)
         if not games:
             raise ValueError(f"Joc necunoscut din catalogul românesc: {game_id!r}")
 
-    budget_bani = budget_lei * 100
     results = []
     for lot in games:
         if objective == ANY_PRIZE and lot.game_id == "6/49":

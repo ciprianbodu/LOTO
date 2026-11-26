@@ -100,7 +100,7 @@ from ui_history_upload import (
 from ui_job_status import JobStatusProbe
 from ui_history_windows import history_windows_panel
 from ui_nested_wfv import nested_wfv_panel
-from covering.lr_budget import ANY_PRIZE, FOUR_PLUS
+from covering.lr_budget import ANY_PRIZE, FOUR_PLUS, budget_in_lei
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from ui_lr_budget import initial_budget_amount, lr_base_choice, lr_budget_panel, lr_budget_slider
 from ui_lr_rebench import cancel_lr_rebench, lr_rebench_panel, lr_rebench_running, run_lr_rebench
@@ -109,7 +109,7 @@ from ui_lr_walk_forward import lr_walk_forward_panel
 from ui_lr_portfolio import lr_portfolio_panel
 from loto_enterprise.benchmark.chronological_validation import PROGRESS_MARKER, VALIDATION_CODES_ENV
 from loto_enterprise.core import lotteries as _LOT
-from loto_enterprise.core.ro_text import count
+from loto_enterprise.core.ro_text import count, lei_text
 
 
 def _get_build_timestamp() -> str:
@@ -4212,7 +4212,7 @@ def _apply_budget_plan(plans):
     from loto_enterprise.core.lr_budget_forecast import budget_plan_scheme
 
     updated = {
-        "lr_budget_lei": plans[0]["budget_bani"] // 100,
+        "lr_budget_lei": budget_in_lei(plans[0]["budget_bani"]),
         "lr_budget_objective": plans[0].get("objective", FOUR_PLUS),
     } if plans else {}
     for plan in plans:
@@ -4446,10 +4446,9 @@ def main_page() -> None:
         if _cc == _LOT.RO:
             from covering.lr_budget import recommend_games
 
-            budget_amount = initial_budget_amount(SETTINGS.get("lr_budget_lei"))
+            budget_slider = lr_budget_slider(SETTINGS.get("lr_budget_lei"))
             budget_objective = _budget_objective()
-            _apply_budget_plan(recommend_games(budget_amount, budget_objective))
-            budget_slider = lr_budget_slider(budget_amount)
+            _apply_budget_plan(recommend_games(budget_slider.value, budget_objective))
             def return_to_recommendation():
                 drawer.hide()
                 focus_control(budget_access)
@@ -4806,7 +4805,7 @@ def main_page() -> None:
                 drawer.hide()
                 focus_control(lr_report_anchor)
 
-            await _run_selected_rebench(lr_choices, int(budget_slider.value) if budget_slider else 0, show_scoped)
+            await _run_selected_rebench(lr_choices, budget_slider.value if budget_slider else 0, show_scoped)
 
         ui.button("🔬 RE-BENCH", on_click=start_selected_rebench).props(
             "color=orange no-caps"
@@ -4910,7 +4909,7 @@ def main_page() -> None:
 
             budget_access = ui.button(icon="tune", on_click=show_budget).props("outline no-caps color=positive")
             budget_access.bind_text_from(
-                budget_slider, "value", lambda amount: f"Buget · {int(amount)} lei"
+                budget_slider, "value", lambda amount: f"Buget · {lei_text(amount)}"
             )
             refresh_budget = lr_budget_panel(
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, bench_target_input, *_pool_inputs,
@@ -4928,9 +4927,9 @@ def main_page() -> None:
             )
             lr_report_anchor = lr_rebench_panel(lambda game: budget_forecast_inputs(game)["histories"].get(game))
             lr_walk_forward_panel(
-                lambda: f"{_lr_scope_text(lr_choices)} · {int(budget_slider.value)} lei"
+                lambda: f"{_lr_scope_text(lr_choices)} · {lei_text(budget_slider.value)}"
                 + (" · Fixed Share pe bilete" if lr_choices["lr_fixed_share_val"] else ""),
-                lambda: _run_selected_lr_walk_forward(lr_choices, int(budget_slider.value)),
+                lambda: _run_selected_lr_walk_forward(lr_choices, budget_slider.value),
                 on_replay_change=lambda value: lr_choices.update(replay_policy=value),
                 depth_control=lambda: _walk_forward_depth_selector("Istoric pentru validarea walk-forward LR"),
             )

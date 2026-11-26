@@ -18,6 +18,7 @@ from nicegui import run, ui
 
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from covering.lr_refinement_status import merge_refinements, refinement_complete
+from loto_enterprise.core.ro_text import lei_text
 from covering.lr_budget import recommend_games
 from covering.lr_selection import resolve_lr_scheme
 from loto_enterprise.benchmark.lr_hypotheses import benchmark_lr_hypotheses
@@ -568,7 +569,7 @@ def _historical_decision(summary):
             ui.label("Decizie istorică fără semnătura regulilor.").classes("text-warning")
         if settings.get("budget_lei") is not None:
             goal = "Orice premiu" if settings.get("objective") == "any_prize" else "4+ pe o variantă"
-            ui.label(f"{settings['budget_lei']} lei · {goal}").classes("text-caption")
+            ui.label(f"{lei_text(settings['budget_lei'])} · {goal}").classes("text-caption")
         for urn in summary["urns"]:
             details = ", ".join(f"{m['method']} ({100 * m['weight']:.1f}%)" for m in urn.get("members") or ())
             sample = f" · {urn['evaluated']} extrageri evaluate" if urn.get("evaluated") else ""
