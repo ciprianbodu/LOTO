@@ -119,14 +119,8 @@ def _show_ticket_validation(evidence):
         ui.label(f"Extrageri fără rezultat evaluabil pentru obiectiv · {missing}.").classes("text-caption")
 
 
-def _ticket_details(plan, *, expanded=False):
-    fields = [
-        ("ticket", "Bilet"), ("zone", "Zonă"), ("code", "Cod LR"),
-        ("pool", "Pool"), ("numbers", "Numere de jucat"),
-    ]
-    if plan["game"] == "joker":
-        fields.append(("joker", "Bila Joker"))
-    rows = [
+def _ticket_rows(plan):
+    return [
         {
             "id": f"{ticket_number}-{zone}",
             "ticket": ticket_number,
@@ -139,20 +133,36 @@ def _ticket_details(plan, *, expanded=False):
         for ticket_number, ticket in enumerate(plan["tickets"], start=1)
         for zone, area in enumerate(ticket)
     ]
+
+
+def _show_ticket_numbers(plan, rows):
+    ui.label("Pool recomandat").props('role="heading" aria-level="3"').classes("lr-pool-heading text-subtitle2 text-weight-bold")
+    fields = [
+        ("ticket", "Bilet"), ("zone", "Zonă"), ("code", "Cod LR"),
+        ("pool", "Pool"), ("numbers", "Numere de jucat"),
+    ]
+    if plan["game"] == "joker":
+        fields.append(("joker", "Bila Joker"))
+    _responsive_table(
+        fields, rows, row_key="id", page_size=12,
+        label=f"Numere de jucat · {plan['game_name']}",
+    ).classes("lr-ticket-table")
+
+
+def _ticket_details(plan, *, expanded=False, displayed_rows=None):
+    rows = _ticket_rows(plan) if displayed_rows is None else displayed_rows
     with ui.expansion(f"Bilete · {plan['game_name']}", value=expanded).classes("w-full min-w-0"):
-        if evidence := plan.get("walk_forward"):
-            _show_ticket_validation(evidence)
         if not refinement_complete(plan):
             ui.label("Selecție provizorie. Calculul a folosit bilete de rezervă. La următoarea generare se reia rafinarea.").classes("text-warning")
         if error := plan.get("forecast_error"):
             ui.label(error).props('role="alert"').classes("text-warning")
         if rows:
-            _responsive_table(
-                fields, rows, row_key="id", page_size=12,
-                label=f"Numere de jucat · {plan['game_name']}",
-            ).classes("lr-ticket-table")
+            if displayed_rows is None:
+                _show_ticket_numbers(plan, rows)
             if plan.get("template_adjusted"):
                 ui.label("Scheme adaptate la pool-urile disponibile.").classes("text-caption")
+        if evidence := plan.get("walk_forward"):
+            _show_ticket_validation(evidence)
         if forecast := plan.get("forecast"):
             pool = forecast["pool"]
             excluded = forecast.get("excluded_pool") or []
@@ -274,10 +284,12 @@ def _render_recommendations(records, budget_lei, objective):
             _ticket_details(plan, expanded=True)
         return
     first = records[0]
+    rows = _ticket_rows(first)
     single = first.get("budget_mode") == SINGLE_SCHEME_MODE
     with ui.card().props("flat bordered").classes("w-full border-l-4 border-positive gap-1"):
         ui.label(f"Sugestie pentru {lei_text(budget_lei)} · {first['game_name']}").classes("text-h6 text-weight-bold")
         ui.label(_recommended_codes(first["tickets"])).classes("text-subtitle2 text-weight-bold")
+        _show_ticket_numbers(first, rows)
         ui.label(
             f"{_price(first['price_bani'])} cu taxă · "
             f"{count(len(first['tickets']), 'bilete', 'bilet')} · "
@@ -289,7 +301,7 @@ def _render_recommendations(records, budget_lei, objective):
             f"Șansă teoretică la o extragere uniformă · {_OBJECTIVES[objective]} · "
             f"{_percent(first['attained'], first['denominator'])}"
         ).classes("text-caption")
-    _ticket_details(first, expanded=True)
+    _ticket_details(first, expanded=True, displayed_rows=rows)
     for plan in records[1:]:
         _ticket_details(plan, expanded=bool(plan.get("forecast_error")))
 
@@ -746,6 +758,8 @@ def lr_budget_panel(
 ):
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
+        .lr-pool-heading { color: #166534; }
+        body.body--dark .lr-pool-heading { color: #86efac; }
         .lr-ticket-table .lr-ticket-numbers { font-weight: 650; font-variant-numeric: tabular-nums; }
         .lr-recommendation-form .q-toggle.disabled { filter: grayscale(1); }
         @media (max-width: 599.98px) {
