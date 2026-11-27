@@ -107,7 +107,8 @@ from ui_lr_budget import (
     lr_budget_slider, lr_recommendation_progress, on_budget_click,
 )
 from ui_lr_rebench import (
-    cancel_lr_rebench, lr_rebench_notice, lr_rebench_panel, lr_rebench_progress, lr_rebench_running, run_lr_rebench,
+    cancel_lr_rebench, lr_rebench_notice, lr_rebench_panel, lr_rebench_progress, lr_rebench_running,
+    reusable_lr_profiles, run_lr_rebench,
 )
 from lr_walk_forward_run import (
     cancel_lr_walk_forward, lr_walk_forward_notice, lr_walk_forward_progress, lr_walk_forward_running, run_lr_walk_forward,
@@ -4338,12 +4339,14 @@ def _lr_rebench_jobs(choices, amount, *, sync_pool=False):
                 if choices.get("lr_fixed_share_val"):
                     from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
                     options["auto_range_policy"] = ONLINE_TICKET_EXPERTS
+            if choices.get("lr_auto_options_val") is False:
+                options["manual_fixed_share"] = bool(choices.get("lr_fixed_share_val"))
             jobs.append((game, (source[0], source[1].copy(deep=True)) if source else None, options))
     return jobs
 
 
 async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=None,
-                                selection_current=None, general=False):
+                                selection_current=None, general=False, reuse_saved=False):
     if _selected_country() != _LOT.RO:
         run_rebench()
         return
@@ -4360,6 +4363,7 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
         on_scoped()
         return await run_lr_rebench(jobs)
 
+    import asyncio
     from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 
     depth = _int_setting("wf_depth_pct")
@@ -4387,13 +4391,29 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
                 return
 
         STATE["_lr_ticket_flow_stage"] = "rebench"
-        STATE["_lr_ticket_flow_status"] = "Se evaluează metodele pentru biletul ales."
         profiles = {}
-        saved = await run_lr_rebench(jobs, require_decisions=True, completed_profiles=profiles, allow_partial=True)
+        pending = jobs
+        if reuse_saved and not general:
+            STATE["_lr_ticket_flow_status"] = "Se verifică ultimul Re-Bench salvat."
+            profiles = await asyncio.to_thread(reusable_lr_profiles, jobs)
+            if not current():
+                stopped()
+                return
+            pending = [job for job in jobs if job[0] not in profiles]
+        reused = ", ".join(profiles)
+        if pending:
+            STATE["_lr_ticket_flow_status"] = "Se evaluează metodele pentru biletul ales."
+            fresh = {}
+            saved = await run_lr_rebench(pending, require_decisions=True, completed_profiles=fresh, allow_partial=True)
+            if saved:
+                profiles.update(fresh)
+            elif lr_rebench_notice() or lr_rebench_running():
+                STATE["_lr_ticket_flow_status"] = lr_rebench_notice() or "Un alt Re-Bench a început. Reia recomandarea."
+                return
         if not current():
             stopped()
             return
-        if not saved:
+        if not profiles:
             STATE["_lr_ticket_flow_status"] = lr_rebench_notice() or (
                 "Re-Bench nu a salvat o decizie completă pentru selecție. Verifică raportul."
             )
@@ -4414,7 +4434,8 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
             jobs_with_decision.append((game, history, options))
         validation_results = {}
         STATE["_lr_ticket_flow_stage"] = "validation"
-        STATE["_lr_ticket_flow_status"] = "Re-Bench finalizat. Se testează biletele istorice prin walk-forward."
+        reuse_notice = f" Re-Bench salvat reutilizat pentru {reused}." if reused else ""
+        STATE["_lr_ticket_flow_status"] = "Se testează biletele istorice prin walk-forward." + reuse_notice
         validated = await _run_selected_lr_walk_forward(
             selection, amount, jobs=jobs_with_decision, depth=depth, completed_results=validation_results,
         )
@@ -4448,7 +4469,7 @@ async def _run_selected_rebench(choices, amount, on_scoped, *, generate_ticket=N
             STATE["_lr_ticket_flow_status"] = "Recomandarea nu a fost înregistrată integral. Verifică rezultatul biletelor." + detail
             return
         STATE["_lr_ticket_flow_stage"] = "done"
-        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Rezultatul walk-forward apare lângă bilet." + detail
+        STATE["_lr_ticket_flow_status"] = "Recomandarea este înregistrată. Rezultatul walk-forward apare lângă bilet." + reuse_notice + detail
     except ValueError as exc:
         STATE["_lr_ticket_flow_status"] = f"Secvența s-a oprit. {exc}"
     except Exception:
@@ -4471,6 +4492,7 @@ async def _run_selected_lr_walk_forward(choices, amount, *, jobs=None, depth=Non
     validation = []
     for game, history, captured in jobs:
         options = {**captured, "depth": depth}
+        options.pop("manual_fixed_share", None)
         options.pop("auto_range_policy", None)
         options.pop("auto_options_result", None)
         if choices.get("lr_fixed_share_val") and not choices.get("lr_auto_options_val"):
@@ -5014,7 +5036,7 @@ def main_page() -> None:
         ui.separator()
         ui.label("Re-Bench și întreținere").classes("text-bold")
 
-        async def start_selected_rebench(*, general=False):
+        async def start_selected_rebench(*, general=False, reuse_saved=False):
             nonlocal active_recommendation
             if budget_slider is None:
                 run_rebench()
@@ -5038,7 +5060,7 @@ def main_page() -> None:
                 await _run_selected_rebench(
                     lr_choices, budget_slider.value, show_scoped, generate_ticket=generate_budget_ticket,
                     selection_current=lambda: budget_slider.is_deleted or (_selected_country() == _LOT.RO and scope() == original),
-                    general=general,
+                    general=general, reuse_saved=reuse_saved,
                 )
             finally:
                 if active_recommendation is request:
@@ -5155,7 +5177,7 @@ def main_page() -> None:
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
                 on_generation_ready=register_budget_generator, budget_entry=budget_entry,
-                on_request_recommendation=start_selected_rebench,
+                on_request_recommendation=lambda: start_selected_rebench(reuse_saved=True),
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
                 initial_fixed_share=lr_choices["lr_fixed_share_val"],

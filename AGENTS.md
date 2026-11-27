@@ -2140,9 +2140,11 @@ Joker verifică ambele urne. Pe bilet apare sursa metodei folosite. O modificare
 a istoricului cere o nouă evaluare pentru a aplica decizia Re-Bench acelui istoric.
 Panoul „Rezultate Re-Bench pe baza aleasă” păstrează ultimul raport și deciziile
 pentru fiecare ipoteză în `.nicegui/lr_rebench_latest.json` din directorul de
-rulare. În România, „RE-BENCH” și „Generează recomandarea” pornesc aceeași secvență.
-Re-Bench alege metoda pentru selecția curentă. Validarea walk-forward măsoară pe
-extrageri ulterioare antrenării rezultatul biletelor istorice la pragul 4+.
+rulare. În România, „RE-BENCH” recalculează selecția la cerere. „Generează
+recomandarea” reutilizează decizia salvată pentru fiecare joc cu același istoric,
+aceleași opțiuni, reguli și bilete evaluate. Auto verifică și adâncimea și protocolul
+comparației. Jocurile fără o decizie compatibilă trec mai întâi prin Re-Bench.
+Validarea walk-forward măsoară pe extrageri ulterioare antrenării rezultatul biletelor istorice la pragul 4+.
 Aplicația generează și înregistrează apoi biletul pentru tragerea viitoare,
 împreună cu rezultatul istoric al acelei validări. Sunt necesare extrageri
 evaluabile. Dacă niciuna dintre acestea nu atinge obiectivul, raportul și biletul

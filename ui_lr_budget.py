@@ -571,7 +571,8 @@ def _generate_rebench_tickets(jobs, profiles):
         uses_range = settings["restricted"] is not False or auto or config.get("auto_budget")
         if (profile["source"] != source[0] or settings["scheme"] != config["scheme"]
                 or settings.get("budget_mode") != config.get("budget_mode")
-                or any(settings[key] != config[key] for key in (*shared, "inverse"))
+                or any(settings[key] != config[key] for key in (*shared, "inverse")
+                       if key != "joker_size" or game == "joker")
                 or bounds is None or (uses_range and bounds != LR_RESTRICTED_RANGE)
                 or (not config.get("auto_budget") and settings["restricted"] != config["restricted"])
                 or (auto and (settings.get("selection_policy") != config.get("selection_policy")

@@ -148,6 +148,10 @@ def _compact_profile(entry, finished_at):
             or type(settings["lookback"]) not in (int, float)
             or type(settings["hit_target"]) is not int or type(settings["joker_size"]) is not int):
         return None
+    if "auto_options" in settings and not isinstance(settings["auto_options"], dict):
+        return None
+    if "manual_fixed_share" in settings and type(settings["manual_fixed_share"]) is not bool:
+        return None
     history_hash = result.get("history_hash")
     history_rows = result.get("history_rows")
     scheme = result.get("scheme_code")
@@ -180,7 +184,8 @@ def _compact_profile(entry, finished_at):
             return None
         urns.append({field: urn[field] for field in fields})
     captured_settings = {key: settings[key] for key in _PROFILE_SETTINGS}
-    for key in ("budget_lei", "budget_mode", "objective", "auto_range_policy", "selection_policy", "auto_options_result", "restricted_range"):
+    for key in ("budget_lei", "budget_mode", "objective", "auto_range_policy", "selection_policy", "auto_options",
+                "auto_protocol", "auto_options_result", "manual_fixed_share", "restricted_range"):
         if key in settings:
             captured_settings[key] = settings[key]
     bounds = report_restricted_range(settings, result)
@@ -208,7 +213,8 @@ def _profile_key(entry):
         entry["source"], settings["scheme"], settings["inverse"], settings["restricted"], settings["dynamic"],
         settings["lookback"] or 100, settings["hit_target"], settings["joker_size"] if entry["game"] == "joker" else None,
         settings.get("budget_lei"), settings.get("budget_mode"), settings.get("objective"), settings.get("selection_policy"),
-        "auto_options_result" in settings,
+        settings.get("manual_fixed_share"), "auto_options_result" in settings,
+        (settings.get("auto_options") or {}).get("depth"), (settings.get("auto_options") or {}).get("replay_policy"),
         report_restricted_range(settings, entry["result"]) if settings["restricted"] or "auto_options_result" in settings else None,
     )
 
@@ -235,10 +241,157 @@ def _restore_profiles(raw):
     return profiles
 
 
+def _saved_profiles(report):
+    profiles = _restore_profiles(report.get("decision_profiles"))
+    for entry in report.get("entries", ()):
+        # Earlier compact profiles dropped the Auto comparison depth and protocol.
+        # Recover them only from the full entry of that same persisted run.
+        if not isinstance(entry, dict):
+            continue
+        settings = entry.get("settings")
+        if not isinstance(settings, dict) or not isinstance(settings.get("auto_options"), dict):
+            continue
+        for stored in profiles.get(entry.get("game"), ()):
+            if ("auto_options" not in stored["settings"] and stored["finished_at"] == report.get("finished_at")
+                    and stored["source"] == entry.get("source")
+                    and stored["settings"].get("auto_options_result") == settings.get("auto_options_result")):
+                stored["settings"]["auto_options"] = settings["auto_options"]
+                if "auto_protocol" in settings:
+                    stored["settings"]["auto_protocol"] = settings["auto_protocol"]
+    return profiles
+
+
 def lr_rebench_decisions():
     """Întoarce deciziile complete păstrate pe joc și configurație, de la cele mai noi."""
     _restore_report()
     return deepcopy((_last or {}).get("decision_profiles", {}))
+
+
+# Full single-scheme reports predating the protocol field recorded the comparison
+# depth and replay policy. Their protocol is the one shipped with that report format.
+_LEGACY_AUTO_PROTOCOL = "a7dc20c17dedba206fed6f62fffaed41dfeeac85409f0216f62361a345e80132"
+
+
+def _auto_protocol():
+    from loto_enterprise.benchmark.lr_provenance import _digest, _module_rules
+    from loto_enterprise.core import draw_validation, history, lr_auto_choices, lr_walk_forward
+
+    return _digest(_module_rules((lr_auto_choices, lr_walk_forward, history, draw_validation)))
+
+
+def _valid_auto_receipt(chosen, training_rows, labels, validation_start):
+    """Check the comparison on its actual historical days, including supplementary draws."""
+    switches = ("inverse", "restricted", "fixed_share")
+    counts = {"evaluated": len(labels), "days": len(set(labels)), "training_rows": training_rows}
+    if any(type(chosen.get(key)) is not int or chosen[key] != value for key, value in counts.items()):
+        return False
+    if (not labels or chosen.get("first_date") != labels[0] or chosen.get("last_date") != labels[-1]
+            or chosen.get("validation_start") != validation_start or labels[-1] >= validation_start):
+        return False
+    candidates = chosen.get("candidates")
+    if (not isinstance(candidates, list) or len(candidates) != 8
+            or any(type(chosen.get(key)) is not bool for key in switches)
+            or type(chosen.get("hits")) is not int or "error" in chosen):
+        return False
+    seen = set()
+    scores = {}
+    for row in candidates:
+        if not isinstance(row, dict) or any(type(row.get(key)) is not bool for key in switches):
+            return False
+        flags = tuple(row[key] for key in switches)
+        if flags in seen:
+            return False
+        seen.add(flags)
+        if "error" in row:
+            if not isinstance(row["error"], str) or not row["error"].strip() or "hits" in row or "evaluated" in row:
+                return False
+            continue
+        if (type(row.get("evaluated")) is not int or row["evaluated"] != len(labels)
+                or type(row.get("hits")) is not int or not 0 <= row["hits"] <= len(labels)):
+            return False
+        scores[flags] = row["hits"]
+    if not scores:
+        return False
+    # Equal hit counts prefer direct, full pool, then standard selection, in that order.
+    winner = min(scores, key=lambda flags: (-scores[flags], flags))
+    return winner == tuple(chosen[key] for key in switches) and chosen["hits"] == scores[winner]
+
+
+def _matches_request(profile, options):
+    from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
+
+    settings = profile["settings"]
+    shared = ("scheme", "budget_lei", "budget_mode", "objective", "lookback", "dynamic", "hit_target")
+    if profile["game"] == "joker" and settings["joker_size"] != options["joker_size"]:
+        return False
+    if any(settings.get(key) != options[key] for key in shared):
+        return False
+    chosen = settings.get("auto_options_result")
+    if "auto_options" not in options:
+        return (chosen is None and "auto_options" not in settings
+                and settings.get("manual_fixed_share") == options.get("manual_fixed_share")
+                and settings["inverse"] == options["inverse"] and settings["restricted"] == options["restricted"]
+                and (not options["restricted"] or report_restricted_range(settings, profile["result"]) == LR_RESTRICTED_RANGE))
+    if (not isinstance(chosen, dict) or settings.get("auto_options") != options["auto_options"]
+            or settings.get("auto_protocol", _LEGACY_AUTO_PROTOCOL) != _auto_protocol()
+            or report_restricted_range(settings, chosen) != LR_RESTRICTED_RANGE
+            or report_restricted_range(settings, profile["result"]) != LR_RESTRICTED_RANGE):
+        return False
+    if any(type(chosen.get(key)) is not bool for key in ("inverse", "restricted", "fixed_share")):
+        return False
+    return (chosen["inverse"] == settings["inverse"] and chosen["restricted"] == settings["restricted"]
+            and settings.get("selection_policy") == (ONLINE_TICKET_EXPERTS if chosen["fixed_share"] else None))
+
+
+def reusable_lr_profiles(jobs):
+    """Read durable decisions off the UI thread and check the generator's actual paid recipe and full history."""
+    from covering.lr_pool_budget import positional_recipe
+    from loto_enterprise.core.lr_budget_forecast import _forecast_engine, _rebench_candidates
+
+    try:
+        report = _read_report()
+        if len(report["entries"]) != report["total"]:
+            return {}
+        saved = _saved_profiles(report)
+        for entry in report["entries"]:
+            game = entry["game"]
+            if _compact_profile(entry, report["finished_at"]) not in saved.get(game, ()):
+                saved.pop(game, None)
+    except (OSError, TypeError, KeyError, ValueError):
+        return {}
+
+    reusable = {}
+    for game, source, options in jobs:
+        if source is None or options.get("auto_budget") or options.get("budget_mode") != SINGLE_SCHEME_MODE:
+            continue
+        try:
+            matches = [p for p in saved.get(game, ()) if p["source"] == source[0] and _matches_request(p, options)]
+            if not matches:
+                continue
+            lot = require_lottery(game, "RO")
+            history_hash = _forecast_engine(lot, source, 0).audit["hash"]
+            matches = [profile for profile in matches if profile["result"]["history_hash"] == history_hash]
+            if matches and "auto_options" in options:
+                from loto_enterprise.core.lr_auto_choices import _selection_history
+
+                training, _, labels, validation_start = _selection_history(game, source, options["auto_options"]["depth"])
+                matches = [profile for profile in matches if _valid_auto_receipt(
+                    profile["settings"]["auto_options_result"], len(training[1]), labels, validation_start)]
+            if not matches:
+                continue
+            scheme = resolve_lr_scheme(lot.geometry, options["scheme"])
+            layout, = recommend_games(options["budget_lei"], options["objective"], game, single_scheme=True)
+            recipe = positional_recipe(layout, scheme.n, options["joker_size"] if lot.geo.second else 0)
+            for profile in matches:
+                settings = profile["settings"]
+                if _rebench_candidates([profile], lot, scheme, LR_RESTRICTED_RANGE if settings["restricted"] else None,
+                                       options["dynamic"], options["lookback"], options["hit_target"], options["joker_size"],
+                                       layout, lambda width, slots: recipe):
+                    reusable[game] = [profile]
+                    break
+        except (KeyError, OSError, TypeError, ValueError):
+            logger.info("[Re-Bench LR] Profilul salvat pentru %s nu poate fi reutilizat.", game, exc_info=True)
+    return reusable
 
 
 def _decision_summary(entry, finished_at):
@@ -323,7 +476,7 @@ def _prior_history(latest, *earlier):
 
 
 def _remember_profiles(finished, previous):
-    profiles = _restore_profiles(previous.get("decision_profiles"))
+    profiles = _saved_profiles(previous)
     for entry in finished["entries"]:
         profile = _compact_profile(entry, finished["finished_at"])
         if profile is None:
@@ -412,6 +565,7 @@ async def _run_games(jobs, report):
             outcome = {**entry, "settings": {**entry["settings"], "restricted_range": list(LR_RESTRICTED_RANGE)}}
             options = dict(entry["settings"])
             options.pop("auto_options", None)
+            options.pop("manual_fixed_share", None)
             range_policy = options.pop("auto_range_policy", None)
             if history is None:
                 outcome["error"] = "Istoricul jocului este indisponibil."
@@ -428,6 +582,7 @@ async def _run_games(jobs, report):
                         def draw_step(done, total, game_index=index):
                             loop.call_soon_threadsafe(progress, game_index, "auto_draw_progress", done, total)
 
+                        outcome["settings"]["auto_protocol"] = await asyncio.to_thread(_auto_protocol)
                         chosen = await run.io_bound(
                             select_lr_auto_choices, game, history, options, **auto_options,
                             cancel_path=cancel_path, progress_cb=step, draw_progress_cb=draw_step,
