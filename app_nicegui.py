@@ -5036,7 +5036,7 @@ def main_page() -> None:
         ui.separator()
         ui.label("Re-Bench și întreținere").classes("text-bold")
 
-        async def start_selected_rebench(*, general=False, reuse_saved=False):
+        async def start_selected_rebench(*, general=False, force=False):
             nonlocal active_recommendation
             if budget_slider is None:
                 run_rebench()
@@ -5060,14 +5060,14 @@ def main_page() -> None:
                 await _run_selected_rebench(
                     lr_choices, budget_slider.value, show_scoped, generate_ticket=generate_budget_ticket,
                     selection_current=lambda: budget_slider.is_deleted or (_selected_country() == _LOT.RO and scope() == original),
-                    general=general, reuse_saved=reuse_saved,
+                    general=general, reuse_saved=not (force or general),
                 )
             finally:
                 if active_recommendation is request:
                     active_recommendation = None
 
         bench_button = ui.button("🔬 RE-BENCH").props("color=orange no-caps").classes(_BTN).style(_BTN_STYLE)
-        on_budget_click(bench_button, start_selected_rebench, budget_slider, budget_entry)
+        on_budget_click(bench_button, lambda: start_selected_rebench(force=True), budget_slider, budget_entry)
         if _cc == _LOT.RO:
             scope_label = ui.label().classes("text-caption text-info")
 
@@ -5177,7 +5177,7 @@ def main_page() -> None:
                 budget_slider, budget_forecast_inputs, dynamic_input, lookback_input, *_pool_inputs,
                 on_budget_plan=_apply_budget_plan, initial_objective=budget_objective,
                 on_generation_ready=register_budget_generator, budget_entry=budget_entry,
-                on_request_recommendation=lambda: start_selected_rebench(reuse_saved=True),
+                on_request_recommendation=start_selected_rebench,
                 initial_inverse=lr_choices["lr_inverse_val"], initial_restricted=lr_choices["lr_restricted_val"],
                 initial_game=lr_choices["lr_budget_game"],
                 initial_fixed_share=lr_choices["lr_fixed_share_val"],
