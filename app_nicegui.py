@@ -130,6 +130,7 @@ def _get_build_timestamp() -> str:
         res = subprocess.run(
             ["git", "log", "-1", "--format=%ct"],
             cwd=str(PROJECT_ROOT),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             capture_output=True,
             text=True,
             timeout=2,
@@ -625,7 +626,7 @@ def _launch_bench(args: list[str], label: str, *, lr_workflow=False) -> subproce
         return
     py = sys.executable
     cmd = [py, "bench_all_methods.py"] + args
-    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     # Bench exclusiv CPU (GPU eliminat complet din aplicație).
     env = dict(os.environ)
     env["LOTO_BENCH_TARGET"] = str(_clamped_bench_target())
