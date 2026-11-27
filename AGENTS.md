@@ -2096,7 +2096,9 @@ din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
 jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
 Obiectivul recomandărilor noi este minimum patru numere principale pe aceeași variantă plătită. La 6/49 o variantă poate avea 4, 5 sau 6 potriviri, iar la 5/40 și Joker poate avea 4 sau 5. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
-analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică. Suma introdusă este orientativă. Pentru fiecare joc, recomandarea alege o singură zonă cu acel cod LR al cărui cost total (variantele și taxa unui bilet) este cel mai apropiat de sumă. Dacă două costuri sunt la aceeași distanță, se alege costul mai mic. Re-Bench, validarea walk-forward și generarea folosesc aceeași schemă integrală. La 5/40, pentru 500 lei se alege codul 26, cu 12 numere și 113 variante, la 565,50 lei cu taxă. Comparațiile istorice ale portofoliilor cu plafon strict își păstrează regula de cost.
+analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică.
+Ultima recomandare generată rămâne vizibilă când se schimbă Auto sau bifele. Biletul afișat se înlocuiește
+după validarea și înregistrarea noii recomandări. Suma introdusă este orientativă. Pentru fiecare joc, recomandarea alege o singură zonă cu acel cod LR al cărui cost total (variantele și taxa unui bilet) este cel mai apropiat de sumă. Dacă două costuri sunt la aceeași distanță, se alege costul mai mic. Re-Bench, validarea walk-forward și generarea folosesc aceeași schemă integrală. La 5/40, pentru 500 lei se alege codul 26, cu 12 numere și 113 variante, la 565,50 lei cu taxă. Comparațiile istorice ale portofoliilor cu plafon strict își păstrează regula de cost.
 
 „Metoda inversă” pornește de la pool-ul normal pentru același joc, cod,
 istoric și aceeași bază de selecție. Cu intervalul 5–40 activ, calculează

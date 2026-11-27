@@ -854,7 +854,8 @@ def lr_budget_panel(
         ).props("no-caps aria-busy=false").classes("w-full sm:w-auto sm:ml-auto")
 
     with ui.expansion("Bilete și analiză", value=False).classes("w-full min-w-0") as panel:
-        output = ui.column().classes("w-full min-w-0 gap-2")
+        output = ui.column().classes("w-full min-w-0 gap-2 empty:hidden")
+        last_ticket = ui.column().classes("w-full min-w-0 gap-2 empty:hidden")
         comparison = ui.column().classes("w-full min-w-0 gap-2")
         revision = 0
         running = False
@@ -951,9 +952,13 @@ def lr_budget_panel(
             with output:
                 ui.label(message).props('role="status"').classes("text-caption")
 
-        def display(plans, amount, goal, registered, registration_errors):
+        def display(plans, amount, goal, registered, registration_errors, *, confirmed=False):
             output.clear()
             with output:
+                ticket = ui.column().classes("w-full min-w-0 gap-2")
+            with ticket:
+                if confirmed:
+                    ui.label("Ultima recomandare generată").classes("text-subtitle2 text-weight-bold")
                 for entry in registered:
                     created = datetime.fromisoformat(entry["captured_at"]).strftime("%d.%m.%Y %H:%M %z")
                     target = date.fromisoformat(entry["target_day"]).strftime("%d.%m.%Y")
@@ -969,6 +974,10 @@ def lr_budget_panel(
                     ).classes("text-warning")
                 else:
                     _render_recommendations(plans, amount, goal)
+            if confirmed:
+                # Keep the previous ticket in place until its entire replacement has rendered.
+                last_ticket.clear()
+                ticket.move(last_ticket)
 
         async def calculate():
             nonlocal revision, running, applied_budget, cached_analysis, displayed, waiting_for_choice
@@ -993,8 +1002,6 @@ def lr_budget_panel(
                         if same and last_selection == registration_settings() and current():
                             return
                 validated_settings = None
-                if not output.is_deleted:
-                    output.clear()
             clear_auto_results()
             waiting_for_choice = False
             clear_confirmation()
@@ -1198,18 +1205,23 @@ def lr_budget_panel(
                     registered, errors = await run.io_bound(_register_live_plans, plans, inputs)
                 if not still_current():
                     return False
+                confirmed = ready and not errors and {entry["game"] for entry in registered} == set(profiles)
                 if not output.is_deleted:
                     settings = jobs[0][2]
-                    if ready or on_request_recommendation is None:
-                        display(plans, settings["budget_lei"], settings["objective"], registered, errors)
-                        if ready:
+                    if confirmed or on_request_recommendation is None:
+                        display(plans, settings["budget_lei"], settings["objective"], registered, errors,
+                                confirmed=confirmed and on_request_recommendation is not None)
+                        if confirmed:
                             display_auto_results(jobs)
-                        if ready and on_request_recommendation is not None:
-                            validated_settings = registration_settings(), still_current, inputs["histories"]
+                            if on_request_recommendation is not None:
+                                validated_settings = registration_settings(), still_current, inputs["histories"]
+                    elif ready:
+                        reasons = [f"{game_options.get(key, 'Registru prospectiv')} · {error}" for key, error in errors.items()]
+                        show_status(" ".join(reasons) or "Înregistrarea noii recomandări nu a fost confirmată integral.")
                     else:
                         reasons = [plan.get("forecast_error") for plan in plans if plan.get("forecast_error")]
                         show_status(" ".join(reasons) or "Biletul nu a putut fi generat pentru selecția validată.")
-                return ready and not errors and {entry["game"] for entry in registered} == set(profiles)
+                return confirmed
             except Exception as exc:
                 if not output.is_deleted and still_current():
                     show_status(f"Recomandarea după Re-Bench s-a oprit. {exc}")
