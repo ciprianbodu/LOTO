@@ -74,7 +74,7 @@ def _paid_result(report, labels, budget_bani, expected=None):
 
 
 def select_lr_auto_choices(game_id, history, options, *, depth, replay_policy="fixed", cancel_path=None,
-                           progress_cb=None):
+                           progress_cb=None, draw_progress_cb=None):
     """Compare on common earlier draws; ties prefer direct, unrestricted, standard selection."""
     check = _cancellation(cancel_path)
     check(force=True)
@@ -97,7 +97,7 @@ def select_lr_auto_choices(game_id, history, options, *, depth, replay_policy="f
             report = validate_lr_walk_forward(
                 game_id, source, **shared, inverse=inverse, restricted=restricted, depth=inner_depth,
                 selection_policy=ONLINE_TICKET_EXPERTS if fixed_share else None,
-                replay_policy=replay_policy, cancel_path=cancel_path,
+                replay_policy=replay_policy, cancel_path=cancel_path, progress_cb=draw_progress_cb,
             )
             hits = _paid_result(report, labels, amount_bani, expected)
             candidate.update(hits=hits, evaluated=len(labels))

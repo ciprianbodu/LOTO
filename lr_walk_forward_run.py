@@ -78,6 +78,33 @@ def lr_walk_forward_snapshot(since=None, *, include_active_entries=True, include
     return _state.revision, deepcopy(active), deepcopy(latest), _state.notice
 
 
+def lr_walk_forward_notice() -> str:
+    return _state.notice
+
+
+def lr_walk_forward_progress(active=None) -> tuple[str, float | None] | None:
+    """Starea în memorie și fracția extragerilor parcurse pentru jocul curent."""
+    report = _state.active if active is None else active
+    if report is None:
+        return None
+    if report["cancelled"]:
+        if report.get("cancel_after_game"):
+            return "Validarea se va opri după jocul curent.", None
+        return "Se oprește validarea.", None
+    if report.get("saving"):
+        return "Se salvează raportul de validare.", None
+    if not report["current"]:
+        return "Se pregătește validarea.", None
+    index, name = report["current"]
+    text = f"Se validează {name} · jocul {index} din {report['total']}"
+    progress = report["progress"]
+    if not progress or not progress["total"]:
+        return text + ".", None
+    done, total = progress["done"], progress["total"]
+    units = "extragere" if total == 1 else "extrageri"
+    return f"{text} · {done} din {total} {units}.", done / total
+
+
 def lr_walk_forward_running() -> bool:
     return _state.task is not None and not _state.task.done()
 
@@ -187,13 +214,18 @@ async def _run_games(jobs, report, cancel_path):
         finished = {key: report[key] for key in ("schema", "entries", "total", "started_at")}
         finished["finished_at"] = datetime.now(_BUCHAREST).isoformat(timespec="seconds")
         _state.latest = finished
+        report["saving"] = True
+        _state.revision += 1
         try:
             await asyncio.to_thread(atomic_write_json, _RESULT_PATH, finished)
         except (OSError, ValueError, TypeError) as exc:
             logger.warning("[WF LR] Raportul local nu poate fi salvat: %s", exc)
             _state.notice = "Raportul este disponibil în această sesiune. Salvarea locală a eșuat."
             return {}
-        return {} if report["cancelled"] else _validated_games(finished)
+        if report["cancelled"]:
+            _state.notice = "Validarea walk-forward LR a fost anulată."
+            return {}
+        return _validated_games(finished)
     finally:
         try:
             cancel_path.unlink(missing_ok=True)

@@ -49,6 +49,39 @@ def lr_rebench_running() -> bool:
     return _task is not None and not _task.done()
 
 
+def lr_rebench_notice() -> str:
+    return _notice
+
+
+def lr_rebench_progress() -> tuple[str, float | None] | None:
+    """Instantaneu pentru interfață. Fracția privește numai operația descrisă."""
+    report = _active
+    if report is None:
+        return None
+    if report["cancelled"]:
+        if report.get("comparing"):
+            return "Rularea se va opri după analiza bazei jocului curent.", None
+        if report.get("cancel_after_game"):
+            return "Rularea se va opri după jocul curent.", None
+        return "Se oprește rularea.", None
+    if len(report["entries"]) == report["total"]:
+        return "Se salvează rezultatele Re-Bench.", None
+    if not (current := report["current"]):
+        return "Se pregătește rularea.", None
+    index, game = current
+    if report.get("auto_progress") is not None:
+        done, total = report["auto_progress"]
+        if done == total:
+            return f"Auto · {game} · {done}/{total} combinații evaluate.", 1.0
+        status = f"Auto · {game} · se evaluează combinația {done + 1} din {total}"
+        if draws := report.get("auto_draw_progress"):
+            processed, count = draws
+            return f"{status} · {processed}/{count} extrageri.", (done + processed / count) / total
+        return f"{status} · {done}/{total} combinații evaluate.", done / total
+    operation = "Se compară bazele pentru" if report.get("comparing") else "Se evaluează metodele pentru"
+    return f"{operation} {game} · jocul {index} din {report['total']}.", None
+
+
 def _file_stamp():
     stat = _RESULT_PATH.stat()
     return _RESULT_PATH, stat.st_mtime_ns, stat.st_size, stat.st_ino
@@ -359,10 +392,12 @@ async def _run_games(jobs, report):
     loop = asyncio.get_running_loop()
     decisions_saved = {}
 
-    def progress(game_index, done, total):
-        if report is _active and report.get("auto_progress") is not None and report["current"][0] == game_index:
-            report["auto_progress"] = (done, total)
-            _changed()
+    def progress(game_index, field, done, total):
+        if (report is _active and not report["cancelled"] and report.get("auto_progress") is not None
+                and report["current"][0] == game_index and total > 0):
+            report[field] = (done, total)
+            if field == "auto_progress":
+                report["auto_draw_progress"] = None
 
     try:
         for index, (entry, history, auto_budget) in enumerate(jobs, start=1):
@@ -370,7 +405,8 @@ async def _run_games(jobs, report):
                 break
             report["current"] = (index, entry["name"])
             auto_options = entry["settings"].get("auto_options")
-            report["auto_progress"] = (0, 8) if auto_options and history is not None else None
+            report["auto_progress"] = (0, 8) if auto_options is not None and history is not None else None
+            report["auto_draw_progress"] = None
             report["comparing"] = bool(auto_budget and history is not None)
             _changed()
             outcome = {**entry, "settings": {**entry["settings"], "restricted_range": list(LR_RESTRICTED_RANGE)}}
@@ -387,11 +423,14 @@ async def _run_games(jobs, report):
                         from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
 
                         def step(done, total, game_index=index):
-                            loop.call_soon_threadsafe(progress, game_index, done, total)
+                            loop.call_soon_threadsafe(progress, game_index, "auto_progress", done, total)
+
+                        def draw_step(done, total, game_index=index):
+                            loop.call_soon_threadsafe(progress, game_index, "auto_draw_progress", done, total)
 
                         chosen = await run.io_bound(
                             select_lr_auto_choices, game, history, options, **auto_options,
-                            cancel_path=cancel_path, progress_cb=step,
+                            cancel_path=cancel_path, progress_cb=step, draw_progress_cb=draw_step,
                         )
                         if report["cancelled"]:
                             break
@@ -466,7 +505,10 @@ async def _run_games(jobs, report):
             logger.warning("[Re-Bench LR] Marcajul de oprire nu poate fi șters: %s", exc)
         _active = None
         _changed()
-    return {} if report["cancelled"] else decisions_saved
+    if report["cancelled"]:
+        _notice = "Rularea Re-Bench pe baza aleasă a fost anulată."
+        return {}
+    return decisions_saved
 
 
 async def run_lr_rebench(jobs, *, require_decisions=False, completed_profiles=None, allow_partial=False) -> bool:
@@ -669,37 +711,30 @@ def lr_rebench_panel(source_for=None):
     """Redă progresul și ultimul raport, independent de rezultatele Re-Bench obișnuite."""
     panel = ui.column().classes("w-full min-w-0 gap-2").props('tabindex="-1"')
     seen = -1
+    status_label = None
 
     def refresh():
-        nonlocal seen
-        if panel.is_deleted or seen == _revision:
+        nonlocal seen, status_label
+        if panel.is_deleted:
             return
+        progress = lr_rebench_progress()
+        if seen == _revision:
+            if progress and status_label is not None and status_label.text != progress[0]:
+                status_label.set_text(progress[0])
+            return
+        status_label = None
         seen = _revision
         panel.clear()
         report = _active or _last
         with panel:
             if report:
                 ui.label("Rezultate Re-Bench pe baza aleasă").classes("text-h6 text-weight-bold")
-                if _active and report["cancelled"]:
-                    if report.get("comparing"):
-                        status = "Rularea se va opri după analiza bazei jocului curent."
-                    else:
-                        status = (
-                            "Rularea se va opri după jocul curent."
-                            if report.get("cancel_after_game") else "Se oprește rularea."
-                        )
-                elif _active and report.get("auto_progress") is not None:
-                    done, total = report["auto_progress"]
-                    status = f"Auto compară cele trei opțiuni pentru {report['current'][1]} · {done}/{total} combinații."
-                elif _active and (current := report["current"]):
-                    operation = "Se compară bazele pentru" if report.get("comparing") else "Se evaluează"
-                    status = f"{operation} {current[1]} · jocul {current[0]} din {report['total']}."
-                elif _active:
-                    status = "Se pregătește rularea."
+                if progress:
+                    status = progress[0]
                 else:
                     finished = datetime.fromisoformat(report["finished_at"]).strftime("%d.%m.%Y, %H:%M")
                     status = f"Rulare încheiată la {finished} · Jocuri procesate {len(report['entries'])} din {report['total']}."
-                ui.label(status).classes("text-body2").props('role="status" aria-live="polite"')
+                status_label = ui.label(status).classes("text-body2").props('role="status" aria-live="polite"')
                 if _active and not report["cancelled"]:
                     ui.button("Anulează Re-Bench pe baza aleasă", on_click=cancel_lr_rebench).props(
                         "outline no-caps color=warning"

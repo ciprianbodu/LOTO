@@ -10,7 +10,7 @@ from covering.lr_refinement_status import refinement_complete
 from covering.lr_pool_ranking import LR_MAX_CONSECUTIVE_RUN
 from loto_enterprise.core.lotteries import require_lottery
 from loto_enterprise.core.lr_ticket_experts import ONLINE_TICKET_EXPERTS
-from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_snapshot
+from lr_walk_forward_run import cancel_lr_walk_forward, lr_walk_forward_progress, lr_walk_forward_snapshot
 from ui_shared import report_restricted_range
 
 logger = logging.getLogger(__name__)
@@ -245,18 +245,9 @@ def lr_walk_forward_panel(scope_text, start=None, *, depth_control=None, on_repl
         cancel.set_visibility(bool(active and not active["cancelled"]))
         text = "După Re-Bench, validarea pornește automat. Recomandarea folosește rezultatele validării încheiate."
         if active:
-            if active["cancelled"]:
-                text = ("Validarea se va opri după jocul curent." if active.get("cancel_after_game")
-                        else "Se oprește validarea.")
-            elif current := active.get("current"):
-                text = f"Se validează {current[1]} · jocul {current[0]} din {active['total']}."
-                if captured := active.get("current_settings"):
-                    text += " " + _choices(captured)
-                progress = active.get("progress") or {}
-                if progress.get("total"):
-                    text += f" Progres · {progress['done']} din {progress['total']}."
-            else:
-                text = "Se pregătește validarea."
+            text, _ = lr_walk_forward_progress(active)
+            if not active["cancelled"] and (captured := active.get("current_settings")):
+                text += " " + _choices(captured)
         elif notice:
             text = notice
         status.set_text(text)

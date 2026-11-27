@@ -677,6 +677,64 @@ def on_budget_click(button, handler, slider, entry):
     ))
 
 
+def lr_recommendation_progress(state, rebench_progress, walk_forward_progress):
+    """Display only the current stage and counters reported by this run."""
+    stages = {
+        "general": "Pregătire · Re-Bench general",
+        "rebench": "Etapa 1 din 3 · Re-Bench",
+        "validation": "Etapa 2 din 3 · Validare walk-forward",
+        "ticket": "Etapa 3 din 3 · Generare bilet",
+    }
+    with ui.column().classes("w-full gap-1").props('id="lr-recommendation-progress"') as panel:
+        with ui.row().classes("w-full items-baseline justify-between"):
+            title = ui.label().classes("text-subtitle2").props('role="status" aria-live="polite"')
+            percent = ui.label().classes("text-body2 tabular-nums")
+        bar = ui.linear_progress(size="10px", show_value=False).classes("w-full").props(
+            'rounded aria-label="Progresul recomandării" aria-describedby="lr-progress-detail"'
+        )
+        detail = ui.label().classes("text-body2").props('id="lr-progress-detail"')
+    previous = None
+
+    def refresh():
+        nonlocal previous
+        if panel.is_deleted:
+            return
+        active = bool(state.get("_lr_ticket_flow_active"))
+        stage = state.get("_lr_ticket_flow_stage")
+        message = state.get("_lr_ticket_flow_status", "")
+        fraction = None
+        if active and stage in ("rebench", "validation"):
+            snapshot = rebench_progress() if stage == "rebench" else walk_forward_progress()
+            if snapshot is not None:
+                message, fraction = snapshot
+        complete = not active and stage == "done"
+        if complete:
+            fraction = 1.0
+        updated = active, stage, message, fraction
+        if previous == updated:
+            return
+        previous = updated
+        panel.set_visibility(active or bool(message))
+        heading = stages.get(stage, "Pregătire") if active else ("Ultima recomandare" if complete else "")
+        title.set_text(heading)
+        title.set_visibility(bool(heading))
+        detail.set_text(message)
+        bar.set_visibility(active or complete)
+        percent.set_visibility(fraction is not None)
+        # A moving indicator also makes the very first evaluation visible at 0/N.
+        if active and (fraction is None or fraction == 0):
+            bar.props("indeterminate")
+        else:
+            bar.props(remove="indeterminate")
+        if fraction is not None:
+            bar.set_value(fraction)
+            unit = {"rebench": " din comparația Auto", "validation": " din extragerile jocului"}.get(stage, "")
+            percent.set_text(f"{int(fraction * 100)}%{unit}")
+
+    refresh()
+    ui.timer(0.4, refresh)
+
+
 def lr_budget_panel(
     slider, forecast_inputs, *scoring_controls,
     on_budget_plan=None, initial_objective=FOUR_PLUS, on_objective_change=None,
