@@ -747,6 +747,7 @@ def lr_budget_panel(
     ui.add_css("""
         .lr-range-table .q-table th { white-space: normal; }
         .lr-ticket-table .lr-ticket-numbers { font-weight: 650; font-variant-numeric: tabular-nums; }
+        .lr-recommendation-form .q-toggle.disabled { filter: grayscale(1); }
         @media (max-width: 599.98px) {
             .lr-range-table .q-table, .lr-range-table .q-table tbody,
             .lr-range-table .q-table tbody tr { display: block; width: 100%; height: auto; }
@@ -805,10 +806,15 @@ def lr_budget_panel(
             )
         auto_controls = None
         if auto_options is not None:
-            manual_controls.bind_visibility_from(auto_options, "value", backward=lambda value: not value)
+            with manual_controls:
+                ui.label("Până la rezultatul Auto, bifele arată setările manuale.").classes(
+                    "w-full text-caption"
+                ).bind_visibility_from(auto_options, "value")
             for switch in (inverse, range_filter, selection_policy):
                 switch.bind_enabled_from(auto_options, "value", backward=lambda value: not value)
-            auto_controls = ui.column().classes("w-full gap-1").bind_visibility_from(auto_options, "value")
+            auto_controls = ui.column().classes("w-full gap-1")
+            auto_controls.set_visibility(False)
+            manual_controls.bind_visibility_from(auto_controls, "visible", backward=lambda showing: not showing)
         ui.label("Pool-ul principal permite perechi consecutive. Dacă un număr ar forma o serie de trei, "
                  "generatorul trece la următorul din clasament.").classes("text-caption")
 
@@ -863,6 +869,7 @@ def lr_budget_panel(
 
         def clear_auto_results():
             if auto_controls is not None and not auto_controls.is_deleted:
+                auto_controls.set_visibility(False)
                 auto_controls.clear()
 
         def display_auto_results(jobs):
@@ -884,6 +891,8 @@ def lr_budget_panel(
                         f"Alegerea opțiunilor · {_date_label(choice['first_date'])} – {_date_label(choice['last_date'])}"
                         f" · {_rate_label(choice['hits'], choice['evaluated'])} extrageri cu obiectiv atins."
                     ).classes("text-caption")
+
+            auto_controls.set_visibility(bool(jobs))
 
         def clear_confirmation():
             nonlocal confirm_button
@@ -1201,6 +1210,7 @@ def lr_budget_panel(
             return recalculate()
 
         def change_selection(callback, control):
+            clear_auto_results()
             if callback is not None:
                 callback(control.value)
             return refresh()
