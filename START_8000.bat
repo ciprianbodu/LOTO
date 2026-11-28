@@ -77,7 +77,7 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
     type "%LOGFILE%.update.tmp" >> "%LOGFILE%"
     findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp" >nul 2>&1 && (
         echo [WARN] Verificarea istoricului a raportat probleme:
-        findstr /C:"EROARE" /C:"NEACTUALIZATE" "%LOGFILE%.update.tmp"
+        powershell -NoProfile -Command "Select-String -LiteralPath ($env:LOGFILE + '.update.tmp') -Encoding UTF8 -SimpleMatch -Pattern 'EROARE','NEACTUALIZATE' | ForEach-Object { Write-Host $_.Line }"
     )
     del "%LOGFILE%.update.tmp" >nul 2>&1
 )

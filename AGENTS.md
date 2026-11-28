@@ -2079,6 +2079,8 @@ După publicarea deciziei, Re-Bench din interfață rulează automat comparația
 
 Arhiva folosită de actualizator se oprea la 15 noiembrie, în timp ce Loteria Română publicase extragerea din 19 noiembrie. Rândul verificat, în ordinea extragerii, este 37, 9, 19, 20, 33, 17. Când arhiva 5/40 rămâne în urma unei date deja înregistrate în CSV sau la un alt joc românesc, actualizatorul verifică și arhiva oficială. Adăugarea este condiționată de concordanța între surse și de regulile obișnuite de validare a istoricului. [Rezultatul oficial](https://www.loto.ro/loto-new/newLotoSiteNexioFinalVersion/web/app2.php/jocuri/540_si_super_noroc/rezultate_extrageri.html)
 
+Dacă loto49.ro publică un rând invalid în ultimele 60 de zile verificate sau după ultima extragere salvată, importul 5/40 și Joker confruntă ziua cu arhiva lunară loto.ro chiar dacă sursa secundară a publicat deja extrageri ulterioare. La 5/40 verifică distinct a șasea bilă. Fiecare rând invalid cere o extragere oficială distinctă de cele secundare valide din acea zi. Dacă sursele valide se contrazic sau confirmarea oficială lipsește, CSV-ul rămâne intact. Pe 22.11.2026, loto49.ro repeta bila 9 în locul bilei 6. [Revista oficială](https://www.loto.ro/storage/2026/11/2026_47.pdf) · [Omologarea extragerii din 26.11.2026](https://www.loto.ro/storage/2026/11/Loto-540-5-1.pdf)
+
 ### Selecția dinamică a metodei pentru scheme LR — 2026-11-19
 
 În setările algoritmului pentru România, „Alege dinamic metoda pentru schema LR” este activată implicit la o generare nouă. La debifare se aplică metoda fixată prin Re-Bench. Un rezultat sau un job salvat își păstrează modul de selecție. La Joker selecția dinamică se aplică celor cinci numere principale, iar urna a doua își folosește propria decizie.

@@ -1,11 +1,11 @@
 """update_csv.py — Detectează și adaugă extrageri noi în CSV-urile din _ISTORIC/.
 
 Verifică arhiva recentă a fiecărui joc. Dacă arhiva 5/40 sau Joker a rămas în urma
-datelor publicate pentru jocurile românești, verifică și lunile oficiale loto.ro.
+datelor publicate sau conține rânduri recente invalide, confruntă rezultatele cu loto.ro.
 Adaugă la final rândurile care lipsesc, prin scriere atomică.
 Nu scrie nimic pentru un joc (EROARE în ieșire) când pagina nu are extrageri,
-are un rând invalid la/după ultima extragere stocată, diferă de CSV în ultimele
-CHECK_DAYS zile sau aduce un rând care copiază numerele rândului anterior.
+are un rând recent invalid fără confirmare oficială sau diferă de CSV în ultimele
+CHECK_DAYS zile. Reimportul aceleiași extrageri este idempotent.
 
 Rulare:
     python update_csv.py               # verifică toate jocurile
@@ -494,35 +494,35 @@ def _merge_rows(csv_path, new_rows, has_joker, num_main, expected, source_rows):
     return len(to_add)
 
 
+def _recent_invalid_days(rejected, last, today):
+    start = last - timedelta(days=CHECK_DAYS) if last is not None else date.min
+    return {row["date"] for row in rejected if row["date"] is not None and start <= row["date"] <= today}
+
+
 def _complete_official_archive(game_key, primary, stored, last, rejected, published, today):
-    """Extinde doar capătul arhivei cu extragerile validate din lunile oficiale."""
+    """Confruntă suprapunerea recentă și completează extragerile din arhiva oficială."""
     from loto_enterprise.core.official_prizes import _fetch_month_html, parse_month_html
 
     cfg = GAME_CONFIGS[game_key]
     has_joker = cfg["has_joker"]
     tip = primary[-1]["date"]
-    # Datele invalide din porțiunea înlocuită trebuie confirmate la loto.ro.
-    # Păstrăm verificarea strictă a rândurilor până la capătul valid, a
-    # celor fără dată lizibilă și a celor datate în viitor.
-    checked, deferred = [], []
-    for row in rejected:
-        day = row["date"]
-        if day is not None and tip < day <= today:
-            deferred.append(row)
-        else:
-            checked.append(row)
-    overlap_end = min(last, tip) if last is not None else None
-    reason = _site_refusal(stored, primary, checked, [], overlap_end, has_joker, game_key == "loto_5_40")
-    if reason:
-        raise ValueError(f"arhiva secundară loto49.ro: {reason}")
-    months = (published.year - tip.year) * 12 + published.month - tip.month + 1
+    repair_days = _recent_invalid_days(rejected, last, today)
+    checked = [row for row in rejected if row["date"] not in repair_days]
+    for row in checked:
+        if row["date"] is None or row["date"] > today:
+            raise ValueError(f"arhiva secundară loto49.ro: rândul „{row['text']}” e invalid ({row['reason']})")
+    # The existing two-month limit concerns missing history after the secondary tip.
+    # An invalid date already in the checked overlap may lie in an earlier month.
+    start = min({tip, *repair_days})
+    new_history_start = start if last is None else max(start, min(last, tip))
+    months = (published.year - new_history_start.year) * 12 + published.month - new_history_start.month + 1
     if months > MAX_OFFICIAL_MONTHS:
         raise ValueError(
-            f"între {tip:%d-%m-%Y} și {published:%d-%m-%Y} sunt {months} luni "
+            f"între {new_history_start:%d-%m-%Y} și {published:%d-%m-%Y} sunt {months} luni "
             f"calendaristice; actualizarea la pornire verifică cel mult "
             f"{MAX_OFFICIAL_MONTHS}. Verifică istoricul oficial pentru intervalul lipsă"
         )
-    month = tip.replace(day=1)
+    month = start.replace(day=1)
     official = []
     while month <= published:
         html = _fetch_month_html(
@@ -548,13 +548,29 @@ def _complete_official_archive(game_key, primary, stored, last, rejected, publis
         )
     if official[0]["date"] > tip:
         raise ValueError("arhiva oficială nu acoperă ultima extragere din arhiva secundară")
-    official_days = {row["date"] for row in official}
-    for row in deferred:
-        if row["date"] not in official_days:
-            raise ValueError(
-                f"rândul din arhiva secundară „{row['text']}” e invalid ({row['reason']}) "
-                f"și loto.ro nu confirmă o extragere din {row['date']:%d-%m-%Y}"
-            )
+    if repair_days:
+        def draw_identity(row):
+            return _row_identity(_site_row(row, has_joker), has_joker, game_key == "loto_5_40")
+
+        for day in sorted(repair_days):
+            valid = {draw_identity(row) for row in primary if row["date"] == day}
+            confirmed = {draw_identity(row) for row in official if row["date"] == day}
+            invalid = {row["text"] for row in rejected if row["date"] == day}
+            if not valid <= confirmed or len(confirmed - valid) < len(invalid):
+                raise ValueError(
+                    f"arhiva secundară loto49.ro: loto.ro nu confirmă o extragere din {day:%d-%m-%Y} "
+                    "pentru fiecare rând invalid, separat de cele valide"
+                )
+        # Retain published ordering and roles, including main/supplementary pairs.
+        primary = sorted(
+            [row for row in primary if row["date"] not in repair_days]
+            + [row for row in official if row["date"] in repair_days and row["date"] <= tip],
+            key=lambda row: row["date"],
+        )
+    overlap_end = min(last, tip) if last is not None else None
+    reason = _site_refusal(stored, primary, checked, [], overlap_end, has_joker, game_key == "loto_5_40")
+    if reason:
+        raise ValueError(f"arhiva secundară loto49.ro: {reason}")
     # Nicio dată sau extragere divergentă în intersecția celor două surse.
     overlap_start = max(primary[0]["date"], official[0]["date"])
     primary_rows = [
@@ -648,15 +664,16 @@ def update_all() -> int:
             # a zilei poate apărea pe site după ce prima a fost salvată. Cele
             # deja stocate cad la comparația pe (dată, numere).
             stored = _stored_rows(csv_path)
+            repair_days = _recent_invalid_days(rejected, last, today)
             if (
                 game_key in {"loto_5_40", "joker"}
                 and site_last
-                and (last is None or all_draws[0]["date"] <= last)
+                and (last is None or min({all_draws[0]["date"], *repair_days}) <= last)
             ):
                 # Un joc publicat pentru o dată mai nouă declanșează verificarea
                 # la loto.ro; numai extragerile oficiale completează arhiva secundară.
                 dates = [
-                    last,
+                    last, site_last, *repair_days,
                     *(
                         _last_date_in_csv(istoric_dir / other["csv_name"])
                         for key, other in GAME_CONFIGS.items() if key != game_key
@@ -665,7 +682,7 @@ def update_all() -> int:
                 published = max(
                     (d for d in dates if d and d <= today), default=site_last
                 )
-                if site_last < published:
+                if site_last < published or repair_days:
                     try:
                         all_draws, rejected = _complete_official_archive(
                             game_key, all_draws, stored, last, rejected, published, today
@@ -677,6 +694,10 @@ def update_all() -> int:
                         )
                         not_updated.append(cfg["display_name"])
                         continue
+                    if repair_days:
+                        days = ", ".join(f"{day:%d-%m-%Y}" for day in sorted(repair_days))
+                        print(f"  {cfg['display_name']:<12}: rânduri invalide pe loto49.ro din {days}; "
+                              "extrageri confirmate din arhiva oficială.")
                     print(
                         f"  {cfg['display_name']:<12}: arhivă secundară până la {site_last:%d-%m-%Y}; "
                         f"loto.ro confirmă până la {all_draws[-1]['date']:%d-%m-%Y}."
