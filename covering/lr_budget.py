@@ -7,8 +7,10 @@ from math import comb, isfinite
 
 from covering.lr_any_prize_649 import recommend_649
 from covering.lr_any_prize_joker import recommend_joker_any_prize
+from covering.lr_catalog_cache import catalog_cache, refresh_catalog
 from covering.lr_portfolio import cost_bani, recommend_main_hits
 from loto_enterprise.core.lotteries import games_for_country
+from loto_enterprise.core.ro_text import lei_text
 
 MIN_BUDGET_LEI = 100
 DEFAULT_BUDGET_LEI = 200
@@ -25,13 +27,16 @@ def single_scheme_mode(mode):
     return True
 
 
+def scheme_price_bani(lot, scheme) -> int:
+    """Cost of every variant in one official zone, including its physical ticket fee."""
+    return cost_bani(scheme.size, 1, round(lot.price * 100), lot.per_ticket)
+
+
 def nearest_single_scheme(lot, target_bani):
     """Choose by distance to the full price, then lower cost and official code."""
     from covering.lr_schemes import complete_lr_schemes
 
-    unit = round(lot.price * 100)
-    priced = ((scheme, cost_bani(scheme.size, 1, unit, lot.per_ticket))
-              for scheme in complete_lr_schemes(lot.game_id))
+    priced = ((scheme, scheme_price_bani(lot, scheme)) for scheme in complete_lr_schemes(lot.game_id))
     return min(priced, key=lambda pair: (abs(pair[1] - target_bani), pair[1], pair[0].code))
 
 
@@ -52,17 +57,27 @@ def _single_scheme_plan(lot, target_bani, objective):
     }
 
 
-def maximum_scheme_budget_bani() -> int:
-    """Price of the most expensive single official zone, including its physical ticket."""
+@catalog_cache(maxsize=4)
+def _catalog_price_bounds() -> tuple[int, int]:
+    """The caller refreshes the catalogue revision, which also covers prices and fees."""
     from covering import lr_schemes
-    from covering.lr_catalog_cache import refresh_catalog
 
+    prices = [
+        scheme_price_bani(lot, scheme)
+        for lot in games_for_country("RO") for scheme in lr_schemes.lr_schemes(lot.game_id)
+    ]
+    return min(prices, default=MIN_BUDGET_LEI * 100), max(prices, default=MIN_BUDGET_LEI * 100)
+
+
+def scheme_budget_bounds_bani() -> tuple[int, int]:
+    """Prices of the cheapest and most expensive official zones in the active RO catalogue."""
+    from covering import lr_schemes
     refresh_catalog(lr_schemes.LR_DIR)
-    return max((
-        cost_bani(scheme.size, 1, round(lot.price * 100), lot.per_ticket)
-        for lot in games_for_country("RO")
-        for scheme in lr_schemes.lr_schemes(lot.game_id)
-    ), default=MIN_BUDGET_LEI * 100)
+    return _catalog_price_bounds()
+
+
+def maximum_scheme_budget_bani() -> int:
+    return scheme_budget_bounds_bani()[1]
 
 
 def budget_in_bani(lei: int | float) -> int:
@@ -84,11 +99,11 @@ def recommend_games(
 ) -> list[dict]:
     """Rank playable Romanian LR plans by their exact per-draw probability."""
     from covering import lr_schemes
-    from covering.lr_catalog_cache import refresh_catalog
     refresh_catalog(lr_schemes.LR_DIR)
     budget_bani = budget_in_bani(budget_lei)
-    if budget_bani < MIN_BUDGET_LEI * 100:
-        raise ValueError(f"Bugetul trebuie să fie de cel puțin {MIN_BUDGET_LEI} lei.")
+    minimum = _catalog_price_bounds()[0] if single_scheme else MIN_BUDGET_LEI * 100
+    if budget_bani < minimum:
+        raise ValueError(f"Bugetul trebuie să fie de cel puțin {lei_text(budget_in_lei(minimum))}.")
     if objective not in (FOUR_PLUS, ANY_PRIZE):
         raise ValueError(f"Obiectiv necunoscut: {objective!r}")
 

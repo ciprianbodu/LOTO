@@ -8,8 +8,7 @@ import threading
 from pathlib import Path
 
 from ui_shared import PROJECT_ROOT, atomic_write_json
-from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS, budget_in_lei
-from covering.lr_portfolio import cost_bani
+from covering.lr_budget import DEFAULT_BUDGET_LEI, FOUR_PLUS, budget_in_lei, scheme_price_bani
 from loto_enterprise.core.ro_text import lei_text
 from loto_enterprise.benchmark import DEFAULT_REPLAY_PERCENT, VALIDATION_PERCENTILES
 from loto_enterprise.benchmark.hit_target import (
@@ -271,7 +270,7 @@ def _lr_selection_lines(game) -> tuple[str, str]:
     lot = _game_spec_for(game)
     scheme = _lr_scheme_for(game)
     unit = round(lot.price * 100)
-    total = cost_bani(scheme.size, 1, unit, lot.per_ticket)
+    total = scheme_price_bani(lot, scheme)
     summary = (f"Cod {scheme.code} · {scheme.n} numere · {scheme.size} variante · "
                f"{lei_text(budget_in_lei(scheme.size * unit))} în variante · "
                f"{lei_text(budget_in_lei(total))} cu taxa pe bilet")

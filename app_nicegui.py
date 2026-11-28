@@ -4240,7 +4240,7 @@ def _refresh_status() -> None:
 # --------------------------------------------------------------------------- #
 # Pagina principală
 # --------------------------------------------------------------------------- #
-def _render_lr_pool_input(game: str, title: str):
+def _render_lr_pool_input(game: str, title: str, *, budget_entry=None, on_manual_budget=None):
     """One stop per official code, including codes sharing a pool size."""
     from covering.lr_schemes import lr_schemes
 
@@ -4278,6 +4278,27 @@ def _render_lr_pool_input(game: str, title: str):
         _save_settings()
 
     control.on_value_change(changed)
+    if on_manual_budget is not None:
+        from covering.lr_budget import scheme_price_bani
+
+        lot = _game_spec_for(game)
+        prices = [scheme_price_bani(lot, scheme) for scheme in schemes]
+
+        def commit_budget(event):
+            index = event.args
+            if type(index) is int and 0 <= index < len(prices):
+                control.set_value(index)
+                on_manual_budget(budget_in_lei(prices[index]))
+
+        # Quasar emits change on a user commit, not when a budget updates the bound slider.
+        # Update the input in that gesture too: a rapid Generate click reads its DOM value.
+        control.on("change", commit_budget, js_handler=f"""index => {{
+            const bani = {json.dumps(prices)}[index];
+            if (!Number.isInteger(bani)) return;
+            const input = document.querySelector('input[id="{budget_entry.html_id}"]');
+            if (input) input.value = (bani / 100).toFixed(2);
+            emit(index);
+        }}""")
     return control
 
 
@@ -4685,6 +4706,19 @@ def main_page() -> None:
             from covering.lr_budget import recommend_games
 
             budget_slider, budget_entry = lr_budget_slider(SETTINGS.get("lr_budget_lei"), with_entry=True)
+            def use_scheme_budget(amount):
+                nonlocal selection_revision
+                if budget_slider.value != amount:
+                    selection_revision += 1
+                    if active_recommendation is not None:
+                        cancel_lr_rebench()
+                        cancel_lr_walk_forward()
+                budget_entry.set_value(amount)
+                budget_slider.set_value(amount)
+                if SETTINGS.get("lr_budget_lei") != amount:
+                    SETTINGS["lr_budget_lei"] = amount
+                    _save_settings()
+
             budget_objective = _budget_objective()
             budget_game = lr_choices["lr_budget_game"]
             _apply_budget_plan(recommend_games(budget_slider.value, budget_objective,
@@ -4887,7 +4921,9 @@ def main_page() -> None:
                 ("5/40", "Pool Loto 5/40"),
                 ("joker", "Pool Joker (Urna 1)"),
             ):
-                _pool_inputs.append(_render_lr_pool_input(_plabel, _ptitle))
+                _pool_inputs.append(_render_lr_pool_input(
+                    _plabel, _ptitle, budget_entry=budget_entry, on_manual_budget=use_scheme_budget,
+                ))
             joker_pool_key = "joker_pool_size_val"
             SETTINGS[joker_pool_key] = min(20, max(1, _int_setting(joker_pool_key)))
             ui.label("Pool Joker (Urna 2)").classes("text-bold mt-2")
@@ -4903,7 +4939,7 @@ def main_page() -> None:
                 "Glisoarele de cod LR aleg scheme oficiale complete. Codurile cu "
                 "același număr de numere au poziții distincte, în ordinea costului. "
                 "Suma orientativă selectează pentru fiecare joc codul LR cel mai apropiat ca preț total, inclusiv taxa. "
-                "Costul și garanțiile de lângă slider aparțin exact codului selectat. "
+                "Când alegi manual un cod LR, bugetul preia prețul acestuia cu taxa inclusă. "
                 "Un cod mai scump sau un pool mai mare nu garantează șanse mai mari la toate pragurile."
             ).classes("text-caption text-grey")
         else:

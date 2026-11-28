@@ -2092,11 +2092,13 @@ Studiul din 19 noiembrie măsoară regula dinamică anterioară. Pe 1.775 de ext
 În ecranul României, butonul „Buget” de lângă formular deschide glisorul verde
 din partea de sus a barei laterale, înainte de schemele reduse. Pe telefon,
 „Înapoi la recomandare” închide bara. Bugetul inițial este 200 lei. Glisorul și câmpul numeric acceptă sume de la
-100 lei până la costul celei mai scumpe scheme oficiale din catalogul celor trei
-jocuri, inclusiv taxa unui bilet. Suma se păstrează la redeschidere, cu precizie de un ban.
+costul celei mai ieftine scheme oficiale până la cel al celei mai scumpe din catalogul celor trei
+jocuri, inclusiv taxa unui bilet (în catalogul actual, de la 35,50 la 4.650,50 lei). Suma se păstrează la redeschidere, cu precizie de un ban.
 Obiectivul recomandărilor noi este minimum patru numere principale pe aceeași variantă plătită. La 6/49 o variantă poate avea 4, 5 sau 6 potriviri, iar la 5/40 și Joker poate avea 4 sau 5. Glisorul
 de buget și butonul verde „Generează recomandarea” deschid panoul „Bilete și
-analiză”. Schimbarea bugetului actualizează glisoarele. Numerele de jucat apar după validarea istorică.
+analiză”. Schimbarea bugetului actualizează glisoarele. Alegerea manuală a unui cod LR actualizează imediat
+câmpul și glisorul de buget la costul complet al acelui cod. La Joker, codul 34 are nouă variante
+și costă 63,50 lei cu taxa inclusă. Dimensiunea urnei a doua nu schimbă bugetul. Numerele de jucat apar după validarea istorică.
 Ultima recomandare generată rămâne vizibilă când se schimbă Auto sau bifele. Biletul afișat se înlocuiește
 după validarea și înregistrarea noii recomandări. Suma introdusă este orientativă. Pentru fiecare joc, recomandarea alege o singură zonă cu acel cod LR al cărui cost total (variantele și taxa unui bilet) este cel mai apropiat de sumă. Dacă două costuri sunt la aceeași distanță, se alege costul mai mic. Re-Bench, validarea walk-forward și generarea folosesc aceeași schemă integrală. La 5/40, pentru 500 lei se alege codul 26, cu 12 numere și 113 variante, la 565,50 lei cu taxă. Comparațiile istorice ale portofoliilor cu plafon strict își păstrează regula de cost.
 

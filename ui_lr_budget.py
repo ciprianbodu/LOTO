@@ -11,8 +11,8 @@ from math import comb, isfinite
 from nicegui import run, ui
 
 from covering.lr_budget import (
-    ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, MIN_BUDGET_LEI, SINGLE_SCHEME_MODE, budget_in_bani, budget_in_lei,
-    maximum_scheme_budget_bani, recommend_games,
+    ANY_PRIZE, DEFAULT_BUDGET_LEI, FOUR_PLUS, SINGLE_SCHEME_MODE, budget_in_bani, budget_in_lei,
+    recommend_games, scheme_budget_bounds_bani,
 )
 from covering.lr_pool_budget import positional_recipe
 from covering.lr_pool_ranking import LR_RESTRICTED_RANGE
@@ -632,24 +632,28 @@ def lr_base_choice(manual_choices, game, inverse, restricted):
     return LR_RESTRICTED_BASE if choice == "10–40" else choice
 
 
-def initial_budget_amount(value, *, maximum_bani=None):
+def initial_budget_amount(value, *, minimum_bani=None, maximum_bani=None):
     try:
         amount = budget_in_bani(value)
     except ValueError:
         amount = DEFAULT_BUDGET_LEI * 100
-    if maximum_bani is None:
-        maximum_bani = maximum_scheme_budget_bani()
-    return budget_in_lei(max(MIN_BUDGET_LEI * 100, min(maximum_bani, amount)))
+    if minimum_bani is None or maximum_bani is None:
+        catalog_minimum, catalog_maximum = scheme_budget_bounds_bani()
+        if minimum_bani is None:
+            minimum_bani = catalog_minimum
+        if maximum_bani is None:
+            maximum_bani = catalog_maximum
+    return budget_in_lei(max(minimum_bani, min(maximum_bani, amount)))
 
 
 def lr_budget_slider(value=DEFAULT_BUDGET_LEI, *, with_entry=False):
-    maximum_bani = max(MIN_BUDGET_LEI * 100, maximum_scheme_budget_bani())
-    maximum = budget_in_lei(maximum_bani)
-    value = initial_budget_amount(value, maximum_bani=maximum_bani)
-    entry = ui.number("Buget bilete LR", min=MIN_BUDGET_LEI, max=maximum, step=0.01,
+    minimum_bani, maximum_bani = scheme_budget_bounds_bani()
+    minimum, maximum = budget_in_lei(minimum_bani), budget_in_lei(maximum_bani)
+    value = initial_budget_amount(value, minimum_bani=minimum_bani, maximum_bani=maximum_bani)
+    entry = ui.number("Buget bilete LR", min=minimum, max=maximum, step=0.01,
                       precision=2, value=value, suffix="lei").props("outlined dense").classes("w-full mt-2")
     slider = ui.slider(
-        min=MIN_BUDGET_LEI, max=maximum, step=0.01, value=value,
+        min=minimum, max=maximum, step=0.01, value=value,
     ).props('aria-label="Buget pentru bilete LR" label color=positive').classes("w-full")
 
     def apply_entry():
@@ -664,7 +668,7 @@ def lr_budget_slider(value=DEFAULT_BUDGET_LEI, *, with_entry=False):
     slider.on_value_change(lambda event: entry.set_value(event.value))
 
     with ui.row().classes("w-full justify-between text-caption"):
-        ui.label(f"{MIN_BUDGET_LEI} lei")
+        ui.label(lei_text(minimum))
         ui.label(lei_text(maximum))
     return (slider, entry) if with_entry else slider
 
